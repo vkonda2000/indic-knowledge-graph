@@ -15,6 +15,8 @@ lose:
 3. **Which text, which speaker.** Answers keep views from different works and speakers separate
    instead of blending them.
 
+Specification, architecture, design, data model, interfaces and roadmap are in [`docs/`](docs/README.md).
+
 ## Corpus
 
 | Work | Edition | Passages |
