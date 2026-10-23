@@ -57,123 +57,131 @@ by starting at a minimum of 10 shared passages (the API default is 5).
 | L17 | Scanned PDFs (no text layer) are rejected | Some scholarship can't be contributed | `screen.py`, `read_source` |
 | L18 | Gutenberg texts added by an admin are not screened | Depends on admin judgement | `/admin/gutenberg` |
 
-## 3. Phased plan
+## 3. Phased plan toward the target
 
-The phases are ordered by dependency. Phase 0 makes later improvements measurable, so it
-comes first.
+The phases are ordered by dependency and aimed at the target system
+([01 §0](01-specification.md#0-target-system-and-this-prototype)). [07](07-target-alignment.md)
+maps each target capability (T1–T15) to the phase that delivers it. Phase 0 makes every later
+change measurable, so it comes first.
 
 ```mermaid
 flowchart LR
-    P0[Phase 0<br/>Measure and harden] --> P1[Phase 1<br/>Corpus expansion]
-    P0 --> P2[Phase 2<br/>Knowledge enrichment]
-    P0 --> P3[Phase 3<br/>Retrieval and QA]
-    P2 --> P3
-    P1 --> P4[Phase 4<br/>Platform and scale]
-    P3 --> P4
+    P0[Phase 0<br/>Measure and harden] --> P1[Phase 1<br/>Repository ingestion]
+    P0 --> P2[Phase 2<br/>SOT ontology and<br/>knowledge enrichment]
+    P1 --> P2
+    P2 --> P3[Phase 3<br/>GraphRAG, semantic retrieval,<br/>reliability loop]
+    P1 --> P3
+    P3 --> P4[Phase 4<br/>Platform and governance]
+    P1 --> P4
 ```
 
-### Phase 0: Measure and harden
+### Phase 0: Measure and harden (T10)
 
-**Goal:** every later change can be judged by numbers, and the basics are automated.
+**Goal:** every later change can be judged by numbers, including the target's metrics.
 
 | Deliverable | Addresses | Extension point |
 |---|---|---|
-| Grow the eval set to about 150 questions: about 30 phrased in Sanskrit where the translation uses renderings, about 20 speaker-specific, about 20 cross-work, about 20 adversarial, and items for any added works | L1 | `eval/questions.jsonl` |
+| Grow the eval set to about 150 items: about 30 phrased in Sanskrit where the translation uses renderings, about 20 speaker-specific, about 20 cross-work, about 20 adversarial (false premises, misattributions, out-of-corpus) | L1, T10 | `eval/questions.jsonl` |
+| **Multi-turn eval items**: conversations whose follow-ups depend on earlier turns ("and how does Shankara read that verse?") | T10 | new `type: multiturn` in `evaluate.py` |
+| **SOT-fidelity eval items** and the four rates from [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) (attribution, separation, own terms, debate position), using a rubric-guided LLM judge checked against SME labels | T7, T10 | `evaluate.py` |
 | Record the first `ikg eval --llm` baseline and commit the summary | §1 | `eval/results/` (commit summaries only) |
-| GitHub Actions: `pytest` on push and PR (Windows + Linux) | L15 | `.github/workflows/` |
+| GitHub Actions: `pytest` plus an offline eval regression gate on every PR | L15, T10 | `.github/workflows/` |
 | Tests for `to_rdf`, `analysis.write_report`, CLI `search`/`stats` | L15 | `tests/` |
-| Reject duplicate surface forms across entities in `Gazetteer.from_yaml`, unless they are scoped to different works | L5 | `entities.py` |
-| Measure rendering precision on a sample of 100 mentions per ambiguous rendering, and drop or scope the noisy ones | L6 | `gazetteer.yaml`, `analysis.py` |
-| Choose a permanent namespace (for example a `w3id.org` redirect) | L13 | `graph.IKG`, `graph.DATA`, ontology |
-| Allow `Rendering` for SchoolOfThought (widen the range to `ikg:Entity`) or remove those renderings | L14 | ontology |
+| Reject duplicate surface forms across entities in the gazetteer validator | L5 | `entities.py` |
+| Measure rendering precision on a sample of 100 mentions per ambiguous rendering; scope or drop noisy ones | L6 | `gazetteer.yaml`, `analysis.py` |
+| Choose a permanent namespace; widen the `renders` range | L13, L14 | `graph.py`, ontology |
 | Dockerfile (app + optional Ollama sidecar) | Deployment | repo root |
 
-**Exit criteria:** CI is green, an eval baseline with LLM metrics is committed, and the
-expansion ablation runs on the new set.
+**Exit criteria:** CI is green; baselines for retrieval, citations, abstention and SOT fidelity
+are committed.
 
-### Phase 1: Corpus expansion
+### Phase 1: Repository ingestion (T3, T5, T15)
 
-**Goal:** more works and more editions of the same work, keeping the corpus public-domain.
-
-| Deliverable | Notes | Extension point |
-|---|---|---|
-| More Puranas | Candidates already noted in `sources.yaml`: Bhagavata Purana (M. N. Dutt, 1895), Markandeya Purana (F. E. Pargiter, 1904), Garuda Purana (Wood & Subrahmanyam, 1911). Verify the source and licence of each | `sources.yaml` + a parser, or `generic` |
-| More Upanishads and a standalone Bhagavad Gita | For example Max Müller's *Sacred Books of the East* Upanishads and Edwin Arnold's *The Song Celestial*. Check availability on Gutenberg or another public-domain source | same |
-| **Parallel translations** of the same work | Enables comparing how translators render *dharma*, *atman* and other terms. This is the system's distinctive strength (D2). Needs an `edition` concept separate from `work` in passages | `Passage` (+ `edition`), `Work`, RDF `Edition` already modelled |
-| Vedas (e.g. Griffith's Rig Veda hymns) | New structure: mandala / sukta / verse | new parser |
-| Sanskrit originals with verse-level alignment to translations | Sources such as GRETIL have varied licences, so check each. Enables "show the Sanskrit" and checking renderings against the original | new `language` field, alignment table, Devanagari/IAST handling in `normalize.py` |
-| Mixed-kind uploads | Mark commentary inside an upload, e.g. `> ` blocks or a `[commentary]` heading | `parse_generic` (L16) |
-| OCR for scanned PDFs | Optional local OCR (Tesseract) before screening | `read_source`, `screen.extract_text` (L17) |
-
-**How to add a work today:** add an entry to `src/ikg/data/sources.yaml`. If the layout is
-irregular, add `parse_<name>` to `segment.PARSERS`, using a stable, hierarchical ID prefix. Add
-a `WORK_LABELS` entry and fixture-based parser tests in `tests/test_segment.py`. Then run
-`ikg fetch && ikg build && ikg eval`. For one-off texts, use the admin UI with the `generic`
-parser.
-
-### Phase 2: Knowledge enrichment
-
-**Goal:** turn the co-occurrence graph into a graph of typed, evidenced relations.
+**Goal:** ingest a scholarly repository like the target's (books, papers, lectures, videos)
+with precise citations, classification, and links to the primary texts.
 
 | Deliverable | Approach | Extension point |
 |---|---|---|
-| **Speaker attribution** (Mahabharata first) | Deterministic. Ganguli marks speakers as `"X said,"`: 3,599 markers in 2,904 of 12,561 passages (23%). Carry the last speaker forward within a section to cover the rest, then add `speaker` and `addressee` to `Passage` | `segment.py`, `Passage`, retrieval filter `speaker=` |
-| Speaker-aware retrieval | Detect "according to X" or "what does X say" and boost passages where X speaks. Target: fix `con-02` and the new speaker questions | `retrieve.search` |
-| Gazetteer growth with review | Mine candidate names (frequent capitalised n-grams not in the gazetteer), have the local model suggest type and aliases, and queue them for admin approval like uploads | new `ikg suggest-entities`, admin queue |
-| Epithets and patronymics | Add common epithets (Partha, Kaunteya, Dhananjaya, Vasudeva...) with per-work scoping | `gazetteer.yaml` |
-| Better edge weights | Use sentence- or paragraph-window co-occurrence, and weight by PMI or another association score instead of raw counts. Target: graph density well below 0.69 | `build_cooccurrence` |
-| Typed relations | Kinship (fixed, curated YAML), plus relations extracted from text (`teaches`, `fights`, `marries`) proposed by a model and accepted by a reviewer, each grounded in a passage ID | new `relations.yaml`, RDF properties, ontology |
-| Populate `ikg:Claim` | Curated propositions with `statedBy`, `about`, `groundedIn`, and optionally `heldBy` (school). Shown on entity pages and used as QA context | ontology (exists), new `claims.yaml`, `to_rdf` |
+| Book ingestion with **page-level citations** | PDF (keeping page numbers), EPUB and DOCX. Chapter/section detection. A `page` field on passages, cited as *title, ch. 3, p. 112* | `read_source`, new parsers, `Passage` (+ `page`) |
+| **Lecture and video ingestion** | Local Whisper transcription with timestamps; passages are transcript windows cited as *title @ 12:34*, with a link to the moment | new `transcribe.py`, `Passage` (+ `start_time`, `end_time`) |
+| Research papers | PDF with section structure, abstract and references | `parse_generic`, metadata |
+| **Metadata catalogue** | Author, year, type, ISBN/DOI, rights, collection. Stored as a registry, later in the database | `Work` dataclass, `works.yaml` |
+| **Classification** | A local model labels each source and section with topics, schools of thought and primary works discussed. Labels are reviewed by SMEs and stored as data | `screen.py` pattern, new review queue |
+| **Linking scholarship to primary texts** | Detect verse references (*Katha 1.2.18*, *BG 2.47*, *MBh 12.59*) and quoted passages. Resolve them to passage IDs as `citesPassage` edges | new `links.py`, RDF |
+| Access control for copyrighted material | Repository text shown only to authorised users, in cited excerpts | `web/app.py`; Phase 4 auth |
+| Public-domain expansion (secondary) | More Puranas, Upanishads and Gita editions. **Parallel translations**, including editions that follow Indic traditions of interpretation alongside the 19th-century European translations, to compare renderings | `sources.yaml`, parsers, `Passage` (+ `edition`) |
+| Mixed-kind uploads and OCR | Mark commentary inside uploads; optional local OCR for scanned PDFs | `parse_generic`, `read_source` (L16, L17) |
 
-**Principle carried forward:** model output never goes into the graph without a reviewer and
-a supporting passage ID. This keeps the traceability guarantee (NFR-1) and reproducible builds
-(NFR-2): accepted facts are stored as data and replayed during the build.
+### Phase 2: SOT ontology and knowledge enrichment (T1, T2, T7, T11)
 
-### Phase 3: Retrieval and QA
-
-**Goal:** better ranking and richer questions, every change justified by the Phase 0 eval.
+**Goal:** a graph of schools of thought, thinkers, frameworks and claims with typed,
+evidence-backed relations, built together with SMEs.
 
 | Deliverable | Approach | Extension point |
 |---|---|---|
-| Hybrid retrieval | Add a dense index from a local embedding model (`nomic-embed-text` is already in Ollama on the dev machine), combined with BM25 by reciprocal rank fusion. Keep BM25-only as a fallback | `retrieve.py`, `build()` |
-| Re-ranking | Re-rank the top 50 with a cross-encoder or a small local model, then pass the top `k` to Claude | `retrieve.search` / `qa.ask` |
-| Compare-translations mode | "How do Ganguli and another translator render X?", using parallel editions (Phase 1) | `qa.py` (new prompt), UI |
-| Speaker- and school-aware answers | Pass `speaker` and `heldBy` into the document `context`, and require the model to name speakers | `qa._documents`, prompt |
-| Multi-turn conversation | Keep the conversation in the browser; retrieve per turn using the rewritten question | `/api/ask`, UI |
-| Sanskrit input | Accept IAST or Devanagari queries, transliterate, then match aliases | `normalize.py` |
-| Provider abstraction | Keep Claude as the default, behind a small interface so evaluation can compare providers | `qa.ask` |
+| **Ontology extensions** | Thinker, Framework, populated Claims, `critiques`/`respondsTo`/`interprets`, debate roles, `citesPassage`, page/time segments, provenance ([07 §3](07-target-alignment.md#3-ontology-extensions-the-target-needs)) | `ontology/ikg.ttl`, `to_rdf` |
+| **SME curation workflow** | Review queues for proposed entities, relations, claims and classifications, with approve/edit/reject and provenance (who proposed, who approved). Ontology change proposals | `web/app.py`, new `curation.py`, data files replayed in the build |
+| Claim extraction | A model proposes claims ("X holds that Y", grounded in passage P, attributed to thinker or SOT S); SMEs approve | new `claims.py`, `claims.yaml` |
+| **Speaker attribution** (Mahabharata first) | Deterministic. Ganguli marks speakers as `"X said,"`: 3,599 markers in 2,904 of 12,561 passages (23%). Carry the last speaker forward within a section | `segment.py`, `Passage` (+ `speaker`, `addressee`) |
+| **Debate-role tagging** | Mark *pūrvapakṣa* vs. *siddhānta* in commentarial and scholarly texts (model proposes, SME approves) | `Passage` or `Claim` attribute |
+| Gazetteer growth with review | Mine candidate names; a local model suggests type and aliases; queue for approval. Add epithets and patronymics (Partha, Kaunteya, Vasudeva...) | `ikg suggest-entities`, admin queue |
+| Better edge weights | Sentence-window co-occurrence with PMI weighting. Target: density well below 0.69 | `build_cooccurrence` |
+| Kinship and other fixed relations | Curated YAML with passage evidence | `relations.yaml`, RDF |
 
-**Acceptance:** each change must improve hit@1 or citation precision on the Phase 0 set without
-raising `false_abstain_rate`, and the ablation results go in the PR.
+**Principle:** model output never goes into the graph without SME approval and a supporting
+passage ID. Approved facts are stored as data and replayed during the build. This keeps
+traceability (NFR-1) and reproducibility (NFR-2).
 
-### Phase 4: Platform and scale
+### Phase 3: GraphRAG, semantic retrieval and the reliability loop (T4, T6, T8, T9, T14)
 
-**Goal:** a multi-curator public service.
+**Goal:** better retrieval, multi-turn SOT-aware answers, and fewer hallucinations, with gaps
+recorded for researchers.
+
+| Deliverable | Approach | Extension point |
+|---|---|---|
+| **Hybrid retrieval** | Dense embeddings in a vector store (pgvector or Qdrant; the local `nomic-embed-text` model to start), combined with BM25 by reciprocal rank fusion | `retrieve.py`, `build()` |
+| **Graph retrieval (GraphRAG)** | Expand from the question's entities and SOTs to their claims and evidence passages, plus communities of related concepts; add those passages to the candidate set | `retrieve.py`, `graph.py` |
+| Re-ranking | Cross-encoder or a small local model over the top 50 | `retrieve.search` |
+| **Speaker- and SOT-aware answering** | Pass speaker, SOT, thinker and debate role in each document's context; the prompt requires per-SOT attribution and separation | `qa._documents`, `SYSTEM_PROMPT` |
+| **Multi-turn** | Conversation state; rewrite each follow-up as a standalone question; retrieve per turn; citations persist across turns | `/api/ask`, `qa.py`, UI |
+| **Sentence-level citation verification** | A local model checks that each answer sentence is supported by its cited passage. Unsupported sentences are flagged or removed; the rate is a metric | new `verify.py`, `qa.ask` |
+| **Knowledge-gap reporting** | Log abstentions, unsupported sentences and low-confidence retrievals. Aggregate them by concept, SOT and work into a gap report for researchers | new `gaps.py`, admin page |
+| Sanskrit input | IAST or Devanagari queries, transliterated before alias matching | `normalize.py` |
+| Provider abstraction | Claude by default; local or other models selectable to suit data governance and for comparison in evaluation | `qa.ask` |
+
+**Acceptance:** each change must improve retrieval, citation accuracy or SOT fidelity on the
+Phase 0 set without raising `false_abstain_rate`, and the ablation results go in the PR.
+
+### Phase 4: Platform and governance (T12, T13)
+
+**Goal:** a secure, multi-user service for a private repository and a team of curators.
 
 | Deliverable | Addresses | Notes |
 |---|---|---|
-| SQLite (then Postgres) for the work registry, sessions, rate limits, build jobs and review queues | L10, L12 | Allows multiple workers; YAML stays as an import/export format |
-| OIDC login with roles (reader, contributor, reviewer, admin) and an audit log | L11 | Replaces the shared token |
-| Job queue for builds and screening (e.g. RQ or arq) | L10 | Builds no longer run in the web process |
-| Incremental builds (per work) | Build time | Needed once the corpus is 10× larger; passage IDs are already stable per work |
-| SPARQL endpoint (e.g. Oxigraph) and published RDF dumps | L13 | Linked-data access for researchers |
-| Public read API with keys and quotas | NFR-5 | Builds on `/api/*` |
+| Postgres for registries, sessions, rate limits, jobs, review queues, conversation logs; pgvector for embeddings | L10, L12 | YAML stays as an import/export format |
+| OIDC login with roles (reader, researcher/SME, curator, admin) and an audit log | L11 | Needed before any copyrighted material is served |
+| Graph store decision: RDF triple store (e.g. Oxigraph or GraphDB) vs. Neo4j, or both (RDF as the exchange format, Neo4j for traversal) | T13 | Decide with the Phase 2 query workload in hand |
+| Job queue for builds, transcription, classification and screening | L10 | Builds leave the web process |
+| Incremental builds per source | Scale | Passage IDs are already stable per work |
+| LLM data-governance settings: hosted model retention configuration or local models per workload | Constraint | See [07 §4](07-target-alignment.md#4-constraints-the-target-adds) |
+| Screen admin-added Gutenberg texts at rebuild time | L18 | Reuse `screen.screen` |
 | UI translations (Hindi first) | Reach | Jinja2 i18n |
-| Screen admin-added Gutenberg texts at rebuild time | L18 | Reuse `screen.screen` on the downloaded text |
 
 ## 4. Suggested order
 
-| Priority | Item | Impact | Effort |
-|---|---|---|---|
-| 1 | Eval expansion + LLM baseline + CI (Phase 0) | High: everything else depends on it | S–M |
-| 2 | Speaker attribution + speaker-aware retrieval (Phase 2) | High: fixes a known miss and enables "who said what" | M |
-| 3 | Gazetteer growth with review + epithets (Phase 2) | High: extraction recall | M |
-| 4 | Better edge weights (Phase 2) | Medium: makes the graph informative | S |
-| 5 | Parallel translations (Phase 1) | High: the distinctive research feature | M–L |
-| 6 | Hybrid retrieval + re-ranking (Phase 3) | Medium; must be shown by eval | M |
-| 7 | Database, OIDC, job queue (Phase 4) | Needed before a public multi-curator launch | L |
+| Priority | Item | Target capability | Impact | Effort |
+|---|---|---|---|---|
+| 1 | Eval expansion incl. multi-turn and SOT fidelity, LLM baseline, CI gate (Phase 0) | T10 | High: everything else depends on it | M |
+| 2 | Book + paper ingestion with page citations, metadata catalogue (Phase 1) | T3, T5 | High: the target's core content | M |
+| 3 | Sentence-level citation verification + gap reporting (Phase 3) | T8, T9 | High: reliability, which the target stresses most | M |
+| 4 | SOT/Thinker/Claim ontology + SME curation workflow (Phase 2) | T1, T2, T11 | High: the heart of the target | L |
+| 5 | Hybrid + graph retrieval, multi-turn (Phase 3) | T4, T14 | High; must be shown by eval | M–L |
+| 6 | Video/lecture transcription with timestamps (Phase 1) | T3 | Medium–high | M |
+| 7 | Speaker attribution, debate roles, better edge weights (Phase 2) | T2, T7 | Medium | S–M |
+| 8 | Postgres, OIDC + roles, job queue, graph store (Phase 4) | T12, T13 | Required before serving copyrighted material to users | L |
 
-S = days, M = 1–3 weeks, L = more than 3 weeks, for one developer.
+S = days, M = 1–3 weeks, L = more than 3 weeks, for one developer. Items 1 and 3 can run in
+parallel. Item 3 needs only the existing corpus.
 
 ## 5. Extension points reference
 

@@ -1,5 +1,30 @@
 # 01 Specification
 
+## 0. Target system and this prototype
+
+**Target.** An ontology-based AI knowledge system for Indian civilization, philosophy, history
+and intellectual traditions, of the kind Infinity Foundation describes in its call for AI
+engineers. Such a system:
+
+- organises a large body of scholarship (books, research papers, lectures, videos) into
+  ontologies and knowledge graphs of concepts, relationships, schools of thought (SOT), texts,
+  thinkers and philosophical frameworks;
+- answers complex, multi-turn questions accurately, with reliable and traceable sources, and
+  represents Indic traditions on their own terms, without ideological or cultural distortion;
+- minimises hallucination, identifies knowledge gaps, and is evaluated continuously for
+  retrieval, citation accuracy and SOT fidelity, including adversarial and multi-turn tests;
+- is refined together with researchers and subject-matter experts (SMEs).
+
+This project is independent and has no affiliation with Infinity Foundation. The target is the
+scope it is designed toward.
+
+**This prototype** implements the core of that architecture end to end on a public-domain
+corpus: four classical works in English translation. It shows source-grounded GraphRAG-style
+answering, an OWL ontology with RDF/SPARQL export, translator-aware concept modelling,
+contributor ingestion with review, and an evaluation harness. Sections 1–5 specify the
+prototype as built. The gap to the target is analysed in [07 Target alignment](07-target-alignment.md),
+and the plan to close it is in [06 Roadmap](06-roadmap.md).
+
 ## 1. Purpose
 
 The Indic Knowledge Graph (IKG) answers questions about classical Indian texts, and every
@@ -91,9 +116,9 @@ systems tend to blur three distinctions that this system keeps:
 | NFR-9 Licensing | The bundled corpus is public domain | Met: all four editions come from Project Gutenberg |
 | NFR-10 Portability | Python ≥ 3.10 on Windows, macOS and Linux | Met: file-based storage, no database |
 
-## 5. Current scope
+## 5. Scope
 
-### In scope (implemented)
+### 5.1 Prototype: implemented
 
 - **Corpus:** four works, about 3.1 million words, 15,257 passages.
 
@@ -112,16 +137,43 @@ systems tend to blur three distinctions that this system keeps:
 - **Web app:** single-process FastAPI server with a reader UI, contributor uploads and an admin console.
 - **Evaluation:** 28 hand-written questions (24 retrieval, 4 adversarial).
 
-### Out of scope (today)
+### 5.2 Target: in scope, not yet built
+
+These come from the target system (§0). The current status of each is in
+[07](07-target-alignment.md) and the plan is in [06](06-roadmap.md).
+
+| Area | Target capability |
+|---|---|
+| **Corpus** | A large, private scholarly repository: books (PDF, EPUB, DOCX) by Rajiv Malhotra and others, research papers, lecture and video transcripts. Each is cited by page, section or timestamp, alongside the primary texts it discusses |
+| **Ingestion** | Pipelines that extract, segment, classify (topic, SOT, work discussed, genre) and connect content at scale. Scholarship links to the primary passages it cites |
+| **Ontology** | SOT, thinkers, works, concepts and frameworks as first-class classes. `Claim`s attributed to a thinker or SOT and grounded in passages. Relations such as *critiques*, *responds to* and *interprets*. Sanskrit terms that resist translation modelled explicitly (an extension of today's `Rendering`). Versioned and refined with SMEs |
+| **Knowledge graph** | Typed, evidence-backed relations instead of co-occurrence only, queryable as RDF/SPARQL or a property graph (e.g. Neo4j) |
+| **Retrieval** | Hybrid lexical + semantic (embeddings in a vector store) + graph traversal (GraphRAG). Retrieval aware of SOT and speaker |
+| **Answering** | Multi-turn. Answers attribute each view to its SOT or thinker, keep traditions distinct, use the passages only, and abstain or report a knowledge gap when sources are insufficient |
+| **Reliability** | Each answer sentence is checked against its citations. Unsupported claims are flagged or removed. Questions with no coverage are logged as knowledge gaps for researchers |
+| **Evaluation** | Datasets written with SMEs for single-turn, multi-turn and adversarial questions. Metrics for retrieval, citation accuracy and **SOT fidelity**. Regression checks on every change |
+| **Collaboration** | Curation workflows for researchers and SMEs: review queues for entities, relations and claims, corrections to answers, and ontology change proposals |
+| **Platform** | Access-controlled hosting for copyrighted material, roles, audit logs, a database and job queue, a choice of hosted or local LLMs to suit data-governance needs |
+
+### 5.3 Out of scope, even for the target
+
+- **Taking positions of its own.** The system reports what sources and schools of thought say,
+  attributed to them. It does not decide disputed doctrinal or historical questions itself.
+- **Answering beyond the repository.** Questions the sources do not cover are answered as gaps,
+  not filled in from the model's general knowledge.
+- **Publishing copyrighted text.** Repository content is shown to authorised users in cited
+  excerpts. The platform is not a channel for redistributing it.
+- **General-purpose chat** unrelated to Indian civilization and intellectual traditions.
+
+### 5.4 Not yet built in the prototype
 
 - Sanskrit or other original-language texts, and alignment between originals and translations.
 - Typed relations between entities (kinship, teacher–student, speaker–listener) and populated
   `ikg:Claim` statements. The ontology defines them but nothing generates them.
 - Speaker attribution within dialogues, and coreference ("he", "the son of Pandu").
 - Dense or semantic retrieval, re-ranking, and multi-turn conversation.
+- Video and audio ingestion, page-level citations for books, and EPUB/DOCX input.
 - Multi-user accounts, roles beyond one admin token, audit logs, and a database.
 - Horizontal scaling: state is in process memory and on local disk.
 - Languages other than English for the UI and queries; no Devanagari or IAST input handling
   beyond diacritic folding.
-
-The phased plan for extending each of these is in [06 Roadmap](06-roadmap.md).
