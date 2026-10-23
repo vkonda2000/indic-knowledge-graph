@@ -63,6 +63,24 @@ when served over HTTPS. Uploads are limited to 20 MB,
 stored under random names, never executed, and never enter the corpus without admin approval.
 For a public deployment, put the app behind HTTPS and a real identity provider.
 
+**Relevance screening.** Before an upload is stored, a local model served by
+[Ollama](https://ollama.com) reads excerpts from its start, middle and end, together with the
+title and notes, and rejects material that is not about Indic texts and traditions. The reason
+is shown to the uploader. Accepted uploads keep the model's verdict, which appears in the admin
+review queue. If Ollama cannot be reached, uploads are rejected rather than accepted unchecked.
+Screening filters out off-topic material; it does not replace admin review.
+
+```bash
+ollama pull qwen3.5:9B            # default screening model (~6.6 GB; qwen3.5:4B also works)
+```
+
+| Variable | Default | |
+|---|---|---|
+| `IKG_SCREEN` | `on` | `off` disables screening |
+| `IKG_SCREEN_MODEL` | `qwen3.5:9B` | any Ollama chat model |
+| `OLLAMA_HOST` | `http://127.0.0.1:11434` | |
+| `IKG_SCREEN_TIMEOUT` | `180` | seconds; the first call loads the model |
+
 JSON API: `GET /api/search?q=`, `POST /api/ask {"question": ...}`, `GET /api/graph`,
 `GET /api/entity/{id}`, `GET /api/build/status` (admin).
 

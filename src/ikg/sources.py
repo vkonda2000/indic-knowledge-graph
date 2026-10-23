@@ -43,6 +43,7 @@ class Work:
     kind: str = "narrative"  # default passage kind for the generic parser
     submitted_by: str = ""
     submitted_at: str = ""
+    screening: str = ""  # local model's relevance verdict for uploads
     bundled: bool = False
 
     def raw_paths(self, raw_dir: Path | None = None) -> list[Path]:
@@ -113,12 +114,13 @@ def _unique_id(base: str) -> str:
 
 def add_user_work(title: str, translator: str, year: str, files: list[dict], parser: str = "generic",
                   kind: str = "narrative", submitted_by: str = "", status: str = "pending",
-                  notes: str = "") -> Work:
+                  notes: str = "", screening: str = "") -> Work:
     with _registry_lock:
         user = [_to_work(w, False) for w in _load_yaml(config.USER_WORKS_FILE)]
         work = Work(id=_unique_id(_slug(title)), title=title, translator=translator, year=str(year),
                     parser=parser, files=files, notes=notes, status=status, kind=kind,
-                    submitted_by=submitted_by, submitted_at=time.strftime("%Y-%m-%d %H:%M"))
+                    submitted_by=submitted_by, submitted_at=time.strftime("%Y-%m-%d %H:%M"),
+                    screening=screening)
         _save_user_works(user + [work])
     return work
 
