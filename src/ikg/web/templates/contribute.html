@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Contribute · Indic Knowledge Graph{% endblock %}
+{% block content %}
+<h1>Contribute material</h1>
+<p>Upload a text, paper, book chapter or lecture transcript. An admin reviews every submission before it
+  enters the knowledge base. Accepted formats: .txt, .md, .pdf (up to 20 MB). Headings such as
+  <code>BOOK 1</code>, <code>CHAPTER 3</code>, <code>CANTO II</code> or Markdown <code>#</code> / <code>##</code>
+  are used to split the text into citable sections.</p>
+<p class="muted">Only upload material you have the right to share. Primary texts should be public-domain editions.</p>
+
+{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+
+<form class="stack" method="post" action="/contribute" enctype="multipart/form-data">
+  <label>Title <input name="title" required maxlength="200"></label>
+  <label>Author or translator <input name="author" maxlength="200"></label>
+  <label>Year <input name="year" maxlength="20"></label>
+  <label>What is it?
+    <select name="kind">
+      <option value="secondary" selected>Scholarship (book, paper, lecture)</option>
+      <option value="narrative">Primary text, prose translation</option>
+      <option value="verse">Primary text, verse translation</option>
+      <option value="commentary">Commentary on a text</option>
+    </select>
+  </label>
+  <label>Your name or email <input name="contributor" maxlength="100"></label>
+  <label>Notes for the reviewer <textarea name="notes" rows="3" maxlength="2000"></textarea></label>
+  {% if needs_token %}<label>Contributor token <input name="token" type="password" required></label>{% endif %}
+  <label>File <input type="file" name="file" accept=".txt,.md,.pdf" required></label>
+  <button type="submit">Submit for review</button>
+</form>
+{% endblock %}

@@ -1,0 +1,32 @@
+[project]
+name = "indic-knowledge-graph"
+version = "0.1.0"
+description = "Ontology, knowledge graph and source-grounded QA over the Upanishads, Mahabharata, Ramayana and Puranas"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic",
+    "networkx>=3.0",
+    "rdflib>=7.0",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+web = ["fastapi>=0.110", "uvicorn>=0.29", "jinja2>=3.1", "python-multipart>=0.0.9", "pypdf>=4.0"]
+dev = ["pytest>=7.0", "httpx>=0.27"]
+
+[project.scripts]
+ikg = "ikg.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ikg = ["data/*.yaml", "web/templates/*.html", "web/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

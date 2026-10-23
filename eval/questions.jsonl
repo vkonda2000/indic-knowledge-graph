@@ -1,0 +1,28 @@
+{"id": "upa-01", "type": "retrieval", "question": "What does Yama teach Nachiketas about the Self?", "expected": ["upa.katha"]}
+{"id": "upa-02", "type": "retrieval", "question": "What are the three boons Nachiketas asks of Yama?", "expected": ["upa.katha.p1"]}
+{"id": "upa-03", "type": "retrieval", "question": "By whom commanded does the mind go towards its objects?", "expected": ["upa.kena.p1"]}
+{"id": "upa-04", "type": "retrieval", "question": "Who appears to Indra as Uma Haimavati and what does she reveal?", "expected": ["upa.kena"]}
+{"id": "upa-05", "type": "retrieval", "question": "What does the Isa Upanishad say about renouncing and enjoying, and coveting wealth?", "expected": ["upa.isa"]}
+{"id": "mbh-01", "type": "retrieval", "question": "What happened to Yudhishthira's dog at the gates of heaven?", "expected": ["mbh.b17", "mbh.b18"]}
+{"id": "mbh-02", "type": "retrieval", "question": "What does Bhishma say to Yudhishthira about the duties of a king?", "expected": ["mbh.b12", "mbh.b13"]}
+{"id": "mbh-03", "type": "retrieval", "question": "How was Draupadi dragged into the assembly hall after the game of dice?", "expected": ["mbh.b02"]}
+{"id": "mbh-04", "type": "retrieval", "question": "How did Karna die when the wheel of his chariot sank into the earth?", "expected": ["mbh.b08"]}
+{"id": "mbh-05", "type": "retrieval", "question": "What did Ashvatthaman do during the night attack on the sleeping Pandava camp?", "expected": ["mbh.b10"]}
+{"id": "mbh-06", "type": "retrieval", "question": "What questions does the Yaksha ask Yudhishthira at the lake?", "expected": ["mbh.b03"]}
+{"id": "ram-01", "type": "retrieval", "question": "How did Ravana carry Sita away from the hermitage?", "expected": ["ram.b3", "mbh.b03"]}
+{"id": "ram-02", "type": "retrieval", "question": "Why did Kaikeyi demand that Rama be exiled to the forest?", "expected": ["ram.b2"]}
+{"id": "ram-03", "type": "retrieval", "question": "How did Hanuman leap across the sea to Lanka?", "expected": ["ram.b5", "ram.b4"]}
+{"id": "ram-04", "type": "retrieval", "question": "How did Rama break the great bow at the court of Janak?", "expected": ["ram.b1"]}
+{"id": "vp-01", "type": "retrieval", "question": "How does Parasara describe the creation of the universe to Maitreya?", "expected": ["vp.b1"]}
+{"id": "vp-02", "type": "retrieval", "question": "How did Dhruva perform austerities and become the pole star?", "expected": ["vp.b1"]}
+{"id": "vp-03", "type": "retrieval", "question": "How was Prahlada protected by Vishnu from his father Hiranyakasipu?", "expected": ["vp.b1"]}
+{"id": "vp-04", "type": "retrieval", "question": "What are the characteristics of the Kali age according to the Vishnu Purana?", "expected": ["vp.b6", "vp.b4"]}
+{"id": "adv-01", "type": "adversarial", "question": "Which verse of the Katha Upanishad describes Hanuman leaping to Lanka?", "expected": [], "works": ["upanishads"]}
+{"id": "adv-02", "type": "adversarial", "question": "What does the Kena Upanishad say about the battle of Kurukshetra?", "expected": [], "works": ["upanishads"]}
+{"id": "adv-03", "type": "adversarial", "question": "Quote Shankaracharya's commentary on the Ramayana from these texts.", "expected": [], "works": ["ramayana"]}
+{"id": "adv-04", "type": "adversarial", "question": "What does the Vishnu Purana say about the Buddha's Four Noble Truths?", "expected": [], "works": ["vishnu_purana"]}
+{"id": "con-01", "type": "retrieval", "question": "What does Bhishma teach about moksha and the abandonment of attachment?", "expected": ["mbh.b12"]}
+{"id": "con-02", "type": "retrieval", "question": "What is the dharma of a kshatriya on the battlefield according to Krishna?", "expected": ["mbh.b06"]}
+{"id": "con-03", "type": "retrieval", "question": "How does Dhruva's tapas lead Vishnu to appear before him?", "expected": ["vp.b1"]}
+{"id": "con-04", "type": "retrieval", "question": "What does Yama say about the atman being unborn and undying?", "expected": ["upa.katha"]}
+{"id": "con-05", "type": "retrieval", "question": "What yajna did Dasaratha perform to obtain sons?", "expected": ["ram.b1"]}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ p.id }} · Indic Knowledge Graph{% endblock %}
+{% block content %}
+<p class="muted"><code>{{ p.id }}</code></p>
+<h1 class="passage-title">{{ p.ref }}</h1>
+<p><span class="kind {{ p.kind }}">{{ p.kind }}</span>
+  {% if p.kind in ('commentary', 'introduction') %}This is the translator's own explanation, not the primary text.{% endif %}
+  {% if p.kind == 'secondary' %}This is modern scholarship, not the primary text.{% endif %}
+</p>
+<div class="passage-text">{{ p.text }}</div>
+{% if entities %}
+  <p>Entities: {% for e in entities %}<a class="chip {{ e.type|lower }}" href="/entity/{{ e.id }}">{{ e.label }}</a>{% endfor %}</p>
+{% endif %}
+<p class="pager">
+  {% if prev %}<a href="/passage/{{ prev.id }}">&larr; {{ prev.id }}</a>{% endif %}
+  {% if nxt %}<a href="/passage/{{ nxt.id }}">{{ nxt.id }} &rarr;</a>{% endif %}
+</p>
+<p class="muted small">Source: {% if p.source_url.startswith('http') %}<a href="{{ p.source_url }}" rel="noopener">{{ p.source_url }}</a>{% else %}{{ p.source_url }}{% endif %}</p>
+{% endblock %}

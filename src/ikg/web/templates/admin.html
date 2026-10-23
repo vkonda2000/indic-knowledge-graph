@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Admin · Indic Knowledge Graph{% endblock %}
+{% block content %}
+<h1>Admin</h1>
+{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+
+<section class="card">
+  <h2>Rebuild knowledge graph</h2>
+  <p>Downloads new Gutenberg texts, re-segments every approved work, re-extracts entities with the current
+    gazetteer, and rebuilds the search index, graph and RDF export. Search keeps serving the previous build
+    until the new one finishes.</p>
+  <form method="post" action="/admin/rebuild" class="inline"><button {% if job.state == 'running' %}disabled{% endif %}>Rebuild now</button></form>
+  <span id="job-state" class="kind {{ job.state }}">{{ job.state }}</span>
+  <pre id="job-log" class="log">{{ job.log | join('\n') }}</pre>
+</section>
+
+{% set pending = works | selectattr('status', 'equalto', 'pending') | list %}
+<section class="card">
+  <h2>Submissions awaiting review ({{ pending | length }})</h2>
+  {% if pending %}
+  <table>
+    <thead><tr><th>Title</th><th>Author</th><th>Kind</th><th>From</th><th>Submitted</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+      {% for w in pending %}
+      <tr>
+        <td>{{ w.title }}<br><span class="muted small">{{ w.source_urls() | join(', ') }}</span></td>
+        <td>{{ w.translator }}</td><td>{{ w.kind }}</td><td>{{ w.submitted_by }}</td><td>{{ w.submitted_at }}</td>
+        <td class="small">{{ w.notes }}</td>
+        <td class="actions">
+          <form method="post" action="/admin/works/{{ w.id }}/status" class="inline"><input type="hidden" name="status" value="approved"><button>Approve</button></form>
+          <form method="post" action="/admin/works/{{ w.id }}/status" class="inline"><input type="hidden" name="status" value="rejected"><button class="secondary">Reject</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Nothing to review.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Works</h2>
+  <table>
+    <thead><tr><th>Work</th><th>Translator / author</th><th>Parser</th><th>Status</th><th>Passages in current build</th><th></th></tr></thead>
+    <tbody>
+      {% for w in works if w.status != 'pending' %}
+      <tr>
+        <td>{{ w.title }} <span class="muted small">({{ w.id }})</span>{% if w.bundled %} <span class="chip">bundled</span>{% endif %}</td>
+        <td>{{ w.translator }}{% if w.year %}, {{ w.year }}{% endif %}</td>
+        <td>{{ w.parser }}</td>
+        <td><span class="kind {{ w.status }}">{{ w.status }}</span></td>
+        <td>{{ counts.get(w.id, 0) }}</td>
+        <td class="actions">
+          {% if not w.bundled %}
+            {% if w.status == 'approved' %}
+              <form method="post" action="/admin/works/{{ w.id }}/status" class="inline"><input type="hidden" name="status" value="rejected"><button class="secondary">Remove</button></form>
+            {% else %}
+              <form method="post" action="/admin/works/{{ w.id }}/status" class="inline"><input type="hidden" name="status" value="approved"><button>Restore</button></form>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="grid2">
+  <section class="card">
+    <h2>Add a Project Gutenberg text</h2>
+    <form class="stack" method="post" action="/admin/gutenberg">
+      <label>Gutenberg ebook number <input name="gutenberg_id" type="number" min="1" required></label>
+      <label>Title <input name="title" required></label>
+      <label>Translator <input name="translator"></label>
+      <label>Year <input name="year"></label>
+      <label>Passage kind
+        <select name="kind">{% for k in kinds %}<option value="{{ k }}" {% if k == 'narrative' %}selected{% endif %}>{{ k }}</option>{% endfor %}</select>
+      </label>
+      <label>Parser
+        <select name="parser">{% for p in parsers %}<option value="{{ p }}" {% if p == 'generic' %}selected{% endif %}>{{ p }}</option>{% endfor %}</select>
+      </label>
+      <button>Add</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Upload a file</h2>
+    <form class="stack" method="post" action="/admin/upload" enctype="multipart/form-data">
+      <label>Title <input name="title" required></label>
+      <label>Author or translator <input name="author"></label>
+      <label>Year <input name="year"></label>
+      <label>Passage kind
+        <select name="kind">{% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select>
+      </label>
+      <label>File (.txt, .md, .pdf) <input type="file" name="file" accept=".txt,.md,.pdf" required></label>
+      <button>Upload</button>
+    </form>
+    <p class="muted small">Admin uploads are approved immediately. Public submissions arrive through <a href="/contribute">/contribute</a> and wait for review.</p>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Gazetteer (entities, aliases, renderings){% if gazetteer_custom %} <span class="chip">customised</span>{% endif %}</h2>
+  <p>Edit the entities the extractor recognises. Changes are validated on save and take effect at the next rebuild.</p>
+  <form method="post" action="/admin/gazetteer">
+    <textarea name="yaml_text" rows="22" class="code" spellcheck="false">{{ gazetteer_text }}</textarea>
+    <button name="action" value="save">Save gazetteer</button>
+    {% if gazetteer_custom %}<button name="action" value="reset" class="secondary">Reset to bundled</button>{% endif %}
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Poll the build log while a rebuild is running.
+  (function () {
+    const stateEl = document.getElementById("job-state");
+    const logEl = document.getElementById("job-log");
+    if (stateEl.textContent.trim() !== "running") return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch("/api/build/status");
+        if (!res.ok) return;
+        const job = await res.json();
+        stateEl.textContent = job.state;
+        stateEl.className = "kind " + job.state;
+        logEl.textContent = job.log.join("\n");
+        if (job.state !== "running") { clearInterval(timer); setTimeout(() => location.assign("/admin"), 800); }
+      } catch (e) { /* keep polling */ }
+    }, 1500);
+  })();
+</script>
+{% endblock %}

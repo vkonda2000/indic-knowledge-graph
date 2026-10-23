@@ -1,0 +1,130 @@
+# Seed gazetteer: entities the extractor recognises.
+#
+# Fields
+#   id          stable identifier used in the graph
+#   type        Person | Deity | Place | Concept | SchoolOfThought
+#   label       display name
+#   iast        Sanskrit name in IAST (for Concepts and key figures)
+#   aliases     surface forms, case-insensitive, matched after diacritics are folded
+#   aliases_cs  case-sensitive surface forms (e.g. "Self" for atman, not "self")
+#   renderings  English words a translator used for this Sanskrit term. Matches are
+#               recorded with via=rendering so translation choices stay visible
+#               (e.g. Ganguli often renders dharma as "righteousness").
+#   works       optional: only match inside these works (resolves ambiguous names,
+#               e.g. "Bharata" is Rama's brother in the Ramayana but a vocative
+#               epithet in the Mahabharata)
+#   aliases_by_work  optional: extra aliases that only apply inside one work
+#
+# Longer aliases win over shorter ones ("Krishna-Dwaipayana" is Vyasa, not Krishna).
+
+entities:
+  # ---------------- Concepts ----------------
+  - {id: dharma, type: Concept, label: Dharma, iast: dharma,
+     aliases: [dharma], renderings: [righteousness, duty, duties]}
+  - {id: karma, type: Concept, label: Karma, iast: karma,
+     aliases: [karma, karman], renderings: [actions, fruits of action, fruit of action]}
+  - {id: atman, type: Concept, label: Atman, iast: ātman,
+     aliases: [atman, atma], aliases_cs: [Self], renderings: [soul]}
+  - {id: brahman, type: Concept, label: Brahman, iast: brahman,
+     aliases: [brahman], renderings: [the Absolute],
+     works: [upanishads, vishnu_purana]}
+  - {id: moksha, type: Concept, label: Moksha, iast: mokṣa,
+     aliases: [moksha, mukti, nirvana],
+     renderings: [emancipation, final emancipation, liberation, salvation]}
+  - {id: yoga, type: Concept, label: Yoga, iast: yoga, aliases: [yoga]}
+  - {id: maya, type: Concept, label: Maya, iast: māyā, aliases: [maya], renderings: [illusion]}
+  - {id: tapas, type: Concept, label: Tapas, iast: tapas,
+     aliases: [tapas, tapasya], renderings: [austerities, austerity, penance, penances, asceticism]}
+  - {id: yajna, type: Concept, label: Yajna, iast: yajña,
+     aliases: [yajna, yajnya], renderings: [sacrifice, sacrifices]}
+  - {id: samsara, type: Concept, label: Samsara, iast: saṃsāra,
+     aliases: [samsara], renderings: [rebirth, transmigration, birth and death]}
+  - {id: ahimsa, type: Concept, label: Ahimsa, iast: ahiṃsā,
+     aliases: [ahimsa], renderings: [abstention from injury, harmlessness, non-injury]}
+  - {id: bhakti, type: Concept, label: Bhakti, iast: bhakti, aliases: [bhakti], renderings: [devotion]}
+  - {id: om, type: Concept, label: Om, iast: oṃ, aliases: [pranava], aliases_cs: [OM, Om, AUM]}
+  - {id: guna, type: Concept, label: Guna, iast: guṇa, aliases: [guna, gunas, sattva, rajas, tamas]}
+  - {id: avatara, type: Concept, label: Avatara, iast: avatāra,
+     aliases: [avatar, avatara], renderings: [incarnation, incarnations]}
+
+  # ---------------- Schools of thought ----------------
+  - {id: advaita, type: SchoolOfThought, label: Advaita, iast: advaita,
+     aliases: [advaita], renderings: [non-dualism, non-duality]}
+  - {id: samkhya, type: SchoolOfThought, label: Samkhya, iast: sāṃkhya, aliases: [samkhya, sankhya]}
+
+  # ---------------- Deities ----------------
+  - {id: vishnu, type: Deity, label: Vishnu, iast: viṣṇu, aliases: [vishnu, narayana, hari]}
+  - {id: shiva, type: Deity, label: Shiva, iast: śiva, aliases: [shiva, siva, mahadeva, rudra]}
+  - {id: brahma, type: Deity, label: Brahma, iast: brahmā, aliases: [brahma, pitamaha]}
+  - {id: indra, type: Deity, label: Indra, iast: indra, aliases: [indra, sakra, purandara]}
+  - {id: agni, type: Deity, label: Agni, iast: agni, aliases: [agni]}
+  - {id: yama, type: Deity, label: Yama, iast: yama, aliases: [yama]}
+  - {id: lakshmi, type: Deity, label: Lakshmi, iast: lakṣmī, aliases: [lakshmi]}
+  - {id: ganga, type: Deity, label: Ganga, iast: gaṅgā, aliases: [ganga, ganges]}
+  - {id: uma, type: Deity, label: Uma Haimavati, iast: umā haimavatī, aliases: [uma, haimavati, parvati]}
+
+  # ---------------- Persons: Ramayana ----------------
+  # "Rama" in the Mahabharata and Vishnu Purana often means Balarama or Parasurama,
+  # so the bare name is only matched in the Ramayana; "Dasarathi" works everywhere.
+  - {id: rama, type: Person, label: Rama, iast: rāma, aliases: [dasarathi],
+     aliases_by_work: {ramayana: [rama, raghava]}}
+  - {id: sita, type: Person, label: Sita, iast: sītā, aliases: [sita, janaki, vaidehi, maithili]}
+  - {id: lakshmana, type: Person, label: Lakshmana, iast: lakṣmaṇa, aliases: [lakshmana, lakshman]}
+  - {id: bharata_ram, type: Person, label: Bharata (brother of Rama), iast: bharata,
+     aliases: [bharat, bharata], works: [ramayana]}
+  - {id: hanuman, type: Person, label: Hanuman, iast: hanumān, aliases: [hanuman, hanumat, maruti]}
+  - {id: ravana, type: Person, label: Ravana, iast: rāvaṇa, aliases: [ravana, ravan]}
+  - {id: dasaratha, type: Person, label: Dasaratha, iast: daśaratha, aliases: [dasaratha, dasarath]}
+  - {id: kaikeyi, type: Person, label: Kaikeyi, iast: kaikeyī, aliases: [kaikeyi]}
+  - {id: sugriva, type: Person, label: Sugriva, iast: sugrīva, aliases: [sugriva]}
+  - {id: vibhishana, type: Person, label: Vibhishana, iast: vibhīṣaṇa, aliases: [vibhishana, vibhishan]}
+  - {id: valmiki, type: Person, label: Valmiki, iast: vālmīki, aliases: [valmiki]}
+
+  # ---------------- Persons: Mahabharata ----------------
+  - {id: krishna, type: Person, label: Krishna, iast: kṛṣṇa,
+     aliases: [krishna, kesava, keshava, janardana, govinda]}
+  - {id: vyasa, type: Person, label: Vyasa, iast: vyāsa,
+     aliases: [vyasa, dwaipayana, krishna-dwaipayana, vedavyasa]}
+  - {id: arjuna, type: Person, label: Arjuna, iast: arjuna, aliases: [arjuna, partha, dhananjaya, phalguna]}
+  - {id: yudhishthira, type: Person, label: Yudhishthira, iast: yudhiṣṭhira, aliases: [yudhishthira]}
+  - {id: bhima, type: Person, label: Bhima, iast: bhīma, aliases: [bhima, bhimasena, vrikodara]}
+  - {id: nakula, type: Person, label: Nakula, iast: nakula, aliases: [nakula]}
+  - {id: sahadeva, type: Person, label: Sahadeva, iast: sahadeva, aliases: [sahadeva]}
+  - {id: draupadi, type: Person, label: Draupadi, iast: draupadī, aliases: [draupadi, panchali, yajnaseni]}
+  - {id: kunti, type: Person, label: Kunti, iast: kuntī, aliases: [kunti, pritha]}
+  - {id: bhishma, type: Person, label: Bhishma, iast: bhīṣma, aliases: [bhishma, devavrata]}
+  - {id: drona, type: Person, label: Drona, iast: droṇa, aliases: [drona]}
+  - {id: karna, type: Person, label: Karna, iast: karṇa, aliases: [karna, radheya]}
+  - {id: duryodhana, type: Person, label: Duryodhana, iast: duryodhana, aliases: [duryodhana, suyodhana]}
+  - {id: dhritarashtra, type: Person, label: Dhritarashtra, iast: dhṛtarāṣṭra, aliases: [dhritarashtra]}
+  - {id: gandhari, type: Person, label: Gandhari, iast: gāndhārī, aliases: [gandhari]}
+  - {id: vidura, type: Person, label: Vidura, iast: vidura, aliases: [vidura]}
+  - {id: sanjaya, type: Person, label: Sanjaya, iast: sañjaya, aliases: [sanjaya]}
+  - {id: shakuni, type: Person, label: Shakuni, iast: śakuni, aliases: [shakuni, sakuni]}
+  - {id: abhimanyu, type: Person, label: Abhimanyu, iast: abhimanyu, aliases: [abhimanyu]}
+  - {id: pandu, type: Person, label: Pandu, iast: pāṇḍu, aliases: [pandu]}
+
+  # ---------------- Persons: across texts ----------------
+  - {id: narada, type: Person, label: Narada, iast: nārada, aliases: [narada, narad]}
+  - {id: vasishtha, type: Person, label: Vasishtha, iast: vasiṣṭha, aliases: [vasishtha, vasistha, vasishta]}
+  - {id: vishvamitra, type: Person, label: Vishvamitra, iast: viśvāmitra,
+     aliases: [vishvamitra, viswamitra, visvamitra, vicwamitra]}
+  - {id: parasara, type: Person, label: Parasara, iast: parāśara, aliases: [parasara, paracara, parashara]}
+  - {id: maitreya, type: Person, label: Maitreya, iast: maitreya, aliases: [maitreya]}
+  - {id: nachiketas, type: Person, label: Nachiketas, iast: naciketas, aliases: [nachiketas, nachiketa]}
+  - {id: shankaracharya, type: Person, label: Shankaracharya, iast: śaṅkarācārya,
+     aliases: [sankaracharya, shankaracharya]}
+  - {id: markandeya, type: Person, label: Markandeya, iast: mārkaṇḍeya, aliases: [markandeya]}
+  - {id: prahlada, type: Person, label: Prahlada, iast: prahlāda, aliases: [prahlada, prahlad]}
+  - {id: dhruva, type: Person, label: Dhruva, iast: dhruva, aliases: [dhruva]}
+
+  # ---------------- Places ----------------
+  - {id: ayodhya, type: Place, label: Ayodhya, iast: ayodhyā, aliases: [ayodhya]}
+  - {id: lanka, type: Place, label: Lanka, iast: laṅkā, aliases: [lanka]}
+  - {id: mithila, type: Place, label: Mithila, iast: mithilā, aliases: [mithila]}
+  - {id: dandaka, type: Place, label: Dandaka forest, iast: daṇḍaka, aliases: [dandaka]}
+  - {id: kurukshetra, type: Place, label: Kurukshetra, iast: kurukṣetra, aliases: [kurukshetra]}
+  - {id: hastinapura, type: Place, label: Hastinapura, iast: hastināpura, aliases: [hastinapura]}
+  - {id: indraprastha, type: Place, label: Indraprastha, iast: indraprastha, aliases: [indraprastha]}
+  - {id: naimisha, type: Place, label: Naimisha forest, iast: naimiṣa, aliases: [naimisha]}
+  - {id: himalaya, type: Place, label: Himalaya, iast: himālaya, aliases: [himalaya, himalayas, himavat]}

@@ -1,0 +1,96 @@
+@prefix ikg:  <https://example.org/ikg#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<https://example.org/ikg> a owl:Ontology ;
+    rdfs:label "Indic Knowledge Graph ontology" ;
+    rdfs:comment """Ontology for source-grounded knowledge over Indic texts. Two design rules:
+(1) every textual unit records the edition and translator it came from, and
+(2) translator renderings of Sanskrit terms are modelled explicitly (ikg:Rendering),
+so translation choices are visible rather than silently merged into the concept.""" .
+
+#################################################################
+# Textual structure
+#################################################################
+
+ikg:Work a owl:Class ;
+    rdfs:comment "A text tradition, e.g. the Mahabharata or the Katha Upanishad collection." .
+ikg:Edition a owl:Class ;
+    rdfs:comment "A specific published edition or translation of a Work." .
+ikg:Book a owl:Class ;
+    rdfs:comment "Top-level division: a parva, kanda, Upanishad, or Purana part (amsha)." .
+ikg:Section a owl:Class ;
+    rdfs:comment "Second-level division: a section (adhyaya), canto (sarga), or part (valli)." .
+ikg:Passage a owl:Class ;
+    rdfs:comment "Smallest citable unit: a verse, a paragraph group, or a commentary block." .
+
+ikg:Verse a owl:Class ; rdfs:subClassOf ikg:Passage ;
+    rdfs:comment "Translated primary text." .
+ikg:Narrative a owl:Class ; rdfs:subClassOf ikg:Passage ;
+    rdfs:comment "Translated primary prose or verse narrative." .
+ikg:Commentary a owl:Class ; rdfs:subClassOf ikg:Passage ;
+    rdfs:comment "Translator's or commentator's explanation; NOT the primary text." .
+ikg:Introduction a owl:Class ; rdfs:subClassOf ikg:Passage ;
+    rdfs:comment "Editorial introduction; NOT the primary text." .
+ikg:Secondary a owl:Class ; rdfs:subClassOf ikg:Passage ;
+    rdfs:comment "Modern scholarship (books, papers, lecture transcripts); NOT the primary text." .
+
+ikg:partOf a owl:ObjectProperty, owl:TransitiveProperty .
+ikg:editionOf a owl:ObjectProperty ; rdfs:domain ikg:Edition ; rdfs:range ikg:Work .
+ikg:fromEdition a owl:ObjectProperty ; rdfs:range ikg:Edition .
+ikg:translator a owl:DatatypeProperty ; rdfs:domain ikg:Edition ; rdfs:range xsd:string .
+ikg:year a owl:DatatypeProperty ; rdfs:range xsd:string .
+ikg:sourceUrl a owl:DatatypeProperty ; rdfs:range xsd:anyURI .
+ikg:ordinal a owl:DatatypeProperty ; rdfs:range xsd:integer .
+
+#################################################################
+# Entities
+#################################################################
+
+ikg:Entity a owl:Class .
+ikg:Person a owl:Class ; rdfs:subClassOf ikg:Entity .
+ikg:Deity a owl:Class ; rdfs:subClassOf ikg:Entity .
+ikg:Place a owl:Class ; rdfs:subClassOf ikg:Entity .
+ikg:Concept a owl:Class ; rdfs:subClassOf ikg:Entity ;
+    rdfs:comment "A Sanskrit philosophical or religious concept, e.g. dharma, atman." .
+ikg:SchoolOfThought a owl:Class ; rdfs:subClassOf ikg:Entity ;
+    rdfs:comment "A darshana or sampradaya, e.g. Advaita, Samkhya." .
+
+ikg:iast a owl:DatatypeProperty ; rdfs:domain ikg:Entity ;
+    rdfs:comment "Sanskrit name in IAST transliteration." .
+ikg:alias a owl:DatatypeProperty ; rdfs:domain ikg:Entity .
+
+#################################################################
+# Mentions, renderings and co-occurrence
+#################################################################
+
+ikg:Mention a owl:Class ;
+    rdfs:comment "Aggregated mentions of an Entity within a Book (or a single Passage)." .
+ikg:entity a owl:ObjectProperty ; rdfs:domain ikg:Mention ; rdfs:range ikg:Entity .
+ikg:inUnit a owl:ObjectProperty ; rdfs:domain ikg:Mention .
+ikg:count a owl:DatatypeProperty ; rdfs:range xsd:integer .
+ikg:via a owl:DatatypeProperty ; rdfs:domain ikg:Mention ;
+    rdfs:comment "'alias' (the name or Sanskrit term appears) or 'rendering' (a translator's English word for it)." .
+
+ikg:Rendering a owl:Class ;
+    rdfs:comment "An English word an Edition uses to translate a Sanskrit Concept." .
+ikg:renders a owl:ObjectProperty ; rdfs:domain ikg:Rendering ; rdfs:range ikg:Concept .
+ikg:surface a owl:DatatypeProperty ; rdfs:domain ikg:Rendering .
+
+ikg:coOccursWith a owl:SymmetricProperty, owl:ObjectProperty ;
+    rdfs:domain ikg:Entity ; rdfs:range ikg:Entity ;
+    rdfs:comment "Entities mentioned in the same passage (weighted in the networkx export)." .
+
+#################################################################
+# Claims and schools of thought (populated by expert curation)
+#################################################################
+
+ikg:Claim a owl:Class ;
+    rdfs:comment "A proposition attributed to a speaker or school, grounded in passages." .
+ikg:statedBy a owl:ObjectProperty ; rdfs:domain ikg:Claim ; rdfs:range ikg:Entity .
+ikg:heldBy a owl:ObjectProperty ; rdfs:domain ikg:Claim ; rdfs:range ikg:SchoolOfThought ;
+    rdfs:comment "School of thought whose reading this claim represents." .
+ikg:groundedIn a owl:ObjectProperty ; rdfs:domain ikg:Claim ; rdfs:range ikg:Passage .
+ikg:about a owl:ObjectProperty ; rdfs:domain ikg:Claim ; rdfs:range ikg:Entity .

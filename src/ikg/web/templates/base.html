@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Indic Knowledge Graph{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Indic Knowledge Graph</a>
+    <nav>
+      <a href="/">Search</a>
+      <a href="/graph">Graph</a>
+      <a href="/contribute">Contribute</a>
+      {% if is_admin %}
+        <a href="/admin">Admin</a>
+        <form method="post" action="/admin/logout" class="inline"><button class="link">Log out</button></form>
+      {% else %}
+        <a href="/admin/login">Admin</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main>
+    {% if not corpus_ready %}
+      <div class="notice warn">The corpus has not been built yet{% if corpus_error %} ({{ corpus_error }}){% endif %}.
+        An admin can run <strong>Rebuild</strong> from the admin page, or run <code>ikg build</code>.</div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer>Public-domain editions from Project Gutenberg. Every answer cites the passage, edition and translator it came from.</footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

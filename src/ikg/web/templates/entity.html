@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ e.label }} · Indic Knowledge Graph{% endblock %}
+{% block content %}
+<h1>{{ e.label }} <span class="chip {{ e.type|lower }}">{{ e.type }}</span></h1>
+{% if e.iast %}<p class="iast">{{ e.iast }}</p>{% endif %}
+
+<div class="grid2">
+  <section>
+    <h2>How it appears</h2>
+    <p><strong>{{ info.mentions }}</strong> mentions.
+      {% for w, c in info.works.items() %}<span class="chip">{{ w }}: {{ c }}</span>{% endfor %}</p>
+    <table>
+      <thead><tr><th>Surface form</th><th>Match type</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for s in info.surface_forms %}
+          <tr><td>{{ s.surface }}</td><td>{% if s.via == 'rendering' %}translator's rendering{% else %}name / term{% endif %}</td><td>{{ s.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Most often mentioned with</h2>
+    <ul class="plain">
+      {% for n in info.neighbours %}<li><a href="/entity/{{ n.id }}">{{ n.label }}</a> <span class="muted">{{ n.weight }} passages</span></li>{% endfor %}
+    </ul>
+  </section>
+</div>
+
+<section>
+  <h2>Passages (first {{ info.passages | length }})</h2>
+  {% for p in info.passages %}
+    <article class="hit">
+      <div class="hit-head"><a href="/passage/{{ p.id }}">{{ p.ref }}</a> <span class="kind {{ p.kind }}">{{ p.kind }}</span></div>
+      <p>{{ p.snippet }}</p>
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}

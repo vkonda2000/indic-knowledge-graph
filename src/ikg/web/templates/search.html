@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="search" method="get" action="/">
+  <input type="search" name="q" value="{{ q }}" placeholder="Ask about the Upanishads, Mahabharata, Ramayana or Puranas" autofocus>
+  <div class="search-options">
+    <label><input type="radio" name="mode" value="search" {% if mode != 'ask' %}checked{% endif %}> Search passages</label>
+    <label><input type="radio" name="mode" value="ask" {% if mode == 'ask' %}checked{% endif %}> Ask (cited answer)</label>
+    <span class="sep"></span>
+    {% for w in all_works %}
+      <label><input type="checkbox" name="works" value="{{ w.id }}" {% if w.id in selected_works %}checked{% endif %}> {{ w.title.split(' (')[0] | truncate(40) }}</label>
+    {% endfor %}
+    <span class="sep"></span>
+    <label title="Exclude translator commentary, introductions and modern scholarship"><input type="checkbox" name="primary_only" value="true" {% if primary_only %}checked{% endif %}> Primary text only</label>
+    <button type="submit">Go</button>
+  </div>
+</form>
+
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+
+{% if entities %}
+  <p class="muted">Recognised in your question:
+    {% for e in entities %}<a class="chip {{ e.type|lower }}" href="/entity/{{ e.id }}">{{ e.label }}</a>{% endfor %}
+    <span class="muted small">(the search also looks for their aliases and translators' renderings)</span>
+  </p>
+{% endif %}
+
+{% if answer %}
+  <section class="answer">
+    <h2>Answer</h2>
+    {% if answer.refused %}
+      <p class="notice warn">The model declined to answer this question.</p>
+    {% elif answer.abstained %}
+      <p class="notice warn">The retrieved passages do not contain enough to answer this.</p>
+      <pre class="answer-text">{{ answer.text }}</pre>
+    {% else %}
+      <pre class="answer-text">{{ answer.text }}</pre>
+    {% endif %}
+    {% if answer.citations %}
+      <h3>Cited passages</h3>
+      <ol class="citations">
+        {% for c in answer.citations %}
+          <li><a href="/passage/{{ c.passage_id }}">{{ c.ref }}</a>
+            {% if c.cited_text %}<blockquote>{{ c.cited_text | snippet(300) }}</blockquote>{% endif %}</li>
+        {% endfor %}
+      </ol>
+    {% endif %}
+  </section>
+{% endif %}
+
+{% if hits %}
+  <section>
+    <h2>{% if answer %}Passages given to the model{% else %}Passages{% endif %}</h2>
+    {% for h in hits %}
+      <article class="hit">
+        <div class="hit-head">
+          <a href="/passage/{{ h.passage.id }}">{{ h.passage.ref }}</a>
+          <span class="kind {{ h.passage.kind }}">{{ h.passage.kind }}</span>
+          <span class="score">{{ '%.1f' % h.score }}</span>
+        </div>
+        <p>{{ h.passage.text | snippet(420) }}</p>
+      </article>
+    {% endfor %}
+  </section>
+{% elif q and corpus_ready %}
+  <p class="muted">No passages matched.</p>
+{% endif %}
+{% endblock %}

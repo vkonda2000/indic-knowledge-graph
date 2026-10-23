@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Graph · Indic Knowledge Graph{% endblock %}
+{% block content %}
+<div class="graph-controls">
+  <label>Work
+    <select id="work">
+      <option value="">All works</option>
+      {% for w in all_works %}<option value="{{ w.id }}">{{ w.title | truncate(50) }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Min. shared passages <input id="min_weight" type="number" min="1" value="10"></label>
+  <label>Max. entities <input id="max_nodes" type="number" min="5" max="300" value="60"></label>
+  <span class="types">
+    {% for t in types %}<label><input type="checkbox" class="type" value="{{ t }}" checked> <span class="chip {{ t|lower }}">{{ t }}</span></label>{% endfor %}
+  </span>
+  <button id="apply">Update</button>
+</div>
+<div class="graph-layout">
+  <div id="cy" aria-label="Entity co-occurrence graph"></div>
+  <aside id="panel"><p class="muted">Click an entity to see its aliases, translators' renderings, strongest connections and passages.</p></aside>
+</div>
+<p class="muted small">An edge means two entities are mentioned in the same passage; thicker edges mean more shared passages. Node size reflects mentions.</p>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+<script src="/static/graph.js"></script>
+{% endblock %}

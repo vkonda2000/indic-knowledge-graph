@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Admin login · Indic Knowledge Graph{% endblock %}
+{% block content %}
+<h1>Admin login</h1>
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+<form class="stack narrow" method="post" action="/admin/login">
+  <label>Admin token <input type="password" name="token" required autofocus></label>
+  <button type="submit">Log in</button>
+</form>
+<p class="muted small">The token is the <code>IKG_ADMIN_TOKEN</code> environment variable, or the one printed when the server started.</p>
+{% endblock %}
