@@ -26,8 +26,9 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Upload
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
-from ikg import config, sources
+from ikg import config, screen, sources
 from ikg.entities import Gazetteer
 from ikg.graph import neighbours
 from ikg.pipeline import Runtime, build
@@ -116,6 +117,22 @@ async def read_upload(file: UploadFile) -> bytes:
             raise ValueError(f"file is larger than {sources.MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
         chunks.append(chunk)
     return b"".join(chunks)
+
+
+async def screen_upload(filename: str, content: bytes, title: str, notes: str) -> str:
+    """Reject material unrelated to Indic texts; returns the verdict summary to store."""
+    if not screen.enabled():
+        return ""
+    text = screen.extract_text(filename, content)
+    try:
+        verdict = await run_in_threadpool(screen.screen, text, title, notes)
+    except screen.ScreeningUnavailable as exc:
+        print(f"  upload screening unavailable: {exc}")
+        raise ValueError("The upload could not be checked for relevance right now. Please try again later.") from None
+    if not verdict.related:
+        raise ValueError(f"This material does not appear to be about Indic texts or traditions, "
+                         f"so it was not accepted. Reason: {verdict.reason}")
+    return verdict.summary()
 
 
 def create_app() -> FastAPI:
@@ -231,10 +248,13 @@ def create_app() -> FastAPI:
             ctx["error"] = "Invalid contributor token."
             return render(request, "contribute.html", **ctx)
         try:
-            entry = sources.save_upload(file.filename or "upload.txt", await read_upload(file))
+            filename, content = file.filename or "upload.txt", await read_upload(file)
+            verdict = await screen_upload(filename, content, title.strip()[:200], notes.strip()[:2000])
+            entry = sources.save_upload(filename, content)
             work = sources.add_user_work(title.strip()[:200], author.strip()[:200], year.strip()[:20], [entry],
                                          kind=kind if kind in KINDS else "secondary",
-                                         submitted_by=contributor.strip()[:100], notes=notes.strip()[:2000])
+                                         submitted_by=contributor.strip()[:100], notes=notes.strip()[:2000],
+                                         screening=verdict)
             ctx["message"] = f"Thank you. '{work.title}' was submitted and is waiting for admin review."
         except ValueError as exc:
             ctx["error"] = str(exc)
@@ -299,10 +319,12 @@ def create_app() -> FastAPI:
     async def admin_upload(request: Request, title: str = Form(...), author: str = Form(""),
                            year: str = Form(""), kind: str = Form("narrative"), file: UploadFile = File(...)):
         try:
-            entry = sources.save_upload(file.filename or "upload.txt", await read_upload(file))
+            filename, content = file.filename or "upload.txt", await read_upload(file)
+            verdict = await screen_upload(filename, content, title.strip(), "")
+            entry = sources.save_upload(filename, content)
             work = sources.add_user_work(title.strip(), author.strip(), year.strip(), [entry],
                                          kind=kind if kind in KINDS else "narrative",
-                                         submitted_by="admin", status="approved")
+                                         submitted_by="admin", status="approved", screening=verdict)
         except ValueError as exc:
             return admin_page(request, error=str(exc))
         return admin_page(request, message=f"Uploaded '{work.title}'. Rebuild to include it.")

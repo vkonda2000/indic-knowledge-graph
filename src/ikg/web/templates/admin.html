@@ -26,7 +26,7 @@
       <tr>
         <td>{{ w.title }}<br><span class="muted small">{{ w.source_urls() | join(', ') }}</span></td>
         <td>{{ w.translator }}</td><td>{{ w.kind }}</td><td>{{ w.submitted_by }}</td><td>{{ w.submitted_at }}</td>
-        <td class="small">{{ w.notes }}</td>
+        <td class="small">{{ w.notes }}{% if w.screening %}<br><span class="muted">Screened by {{ w.screening }}</span>{% endif %}</td>
         <td class="actions">
           <form method="post" action="/admin/works/{{ w.id }}/status" class="inline"><input type="hidden" name="status" value="approved"><button>Approve</button></form>
           <form method="post" action="/admin/works/{{ w.id }}/status" class="inline"><input type="hidden" name="status" value="rejected"><button class="secondary">Reject</button></form>

@@ -8,7 +8,7 @@ from conftest import make_work
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
-from ikg import config, pipeline, sources  # noqa: E402
+from ikg import config, pipeline, screen, sources  # noqa: E402
 from ikg.segment import parse_generic  # noqa: E402
 
 MATERIAL = b"""# Book One: The Dialogue
@@ -36,11 +36,20 @@ def client(tmp_path, monkeypatch):
     # Build only user-added works, so the test needs no Gutenberg downloads.
     monkeypatch.setattr(pipeline, "load_works", lambda: [w for w in sources.load_works() if not w.bundled])
     monkeypatch.setenv("IKG_ADMIN_TOKEN", "secret")
+    monkeypatch.setattr(config, "SCREEN_ENABLED", True)
+    monkeypatch.setattr(screen, "_call_model", fake_screen_model)
     from ikg.web.app import create_app
     app = create_app()
     with TestClient(app) as c:
         c.app_ref = app
         yield c
+
+
+def fake_screen_model(system, user):
+    """Stands in for the local model: anything about widgets is off-topic."""
+    if "widget" in user.lower():
+        return {"related": False, "reason": "It is a business report about widgets."}
+    return {"related": True, "reason": "It discusses Krishna and dharma."}
 
 
 def login(client):
@@ -108,7 +117,7 @@ def test_upload_validation_and_escaping(client):
     r = client.post("/contribute", data={"title": "bad"}, files={"file": ("x.exe", b"MZ", "application/octet-stream")})
     assert "unsupported file type" in r.text
     client.post("/contribute", data={"title": "<script>alert(1)</script>"},
-                files={"file": ("a.txt", b"some text", "text/plain")})
+                files={"file": ("a.txt", MATERIAL, "text/plain")})
     login(client)
     page = client.get("/admin").text
     assert "<script>alert(1)</script>" not in page and "&lt;script&gt;" in page
@@ -180,3 +189,44 @@ def test_oversized_upload_rejected(client, monkeypatch):
     r = client.post("/contribute", data={"title": "big"}, files={"file": ("big.txt", b"a" * 5000, "text/plain")})
     assert "larger than" in r.text
     assert not config.UPLOADS_DIR.exists() or not any(config.UPLOADS_DIR.iterdir())
+
+
+WIDGETS = b"Quarterly widget sales rose five percent across all regions this year. " * 10
+
+
+def test_unrelated_upload_rejected_and_not_stored(client):
+    r = client.post("/contribute", data={"title": "Sales report"},
+                    files={"file": ("report.txt", WIDGETS, "text/plain")})
+    assert "does not appear to be about Indic texts" in r.text and "widgets" in r.text
+    assert not config.UPLOADS_DIR.exists() or not any(config.UPLOADS_DIR.iterdir())
+    assert not config.USER_WORKS_FILE.exists()
+
+    login(client)
+    r = client.post("/admin/upload", data={"title": "Sales report"},
+                    files={"file": ("report.txt", WIDGETS, "text/plain")})
+    assert "does not appear to be about Indic texts" in r.text
+
+
+def test_related_upload_records_verdict(client):
+    client.post("/contribute", data={"title": "Gita notes"}, files={"file": ("notes.md", MATERIAL, "text/markdown")})
+    work = sources.get_work("gita_notes")
+    assert work.status == "pending" and "Krishna and dharma" in work.screening
+    login(client)
+    assert "Screened by" in client.get("/admin").text
+
+
+def test_short_or_unscreenable_upload_rejected(client, monkeypatch):
+    r = client.post("/contribute", data={"title": "tiny"}, files={"file": ("a.txt", b"Om.", "text/plain")})
+    assert "too little readable text" in r.text
+
+    def down(system, user):
+        raise screen.ScreeningUnavailable("connection refused")
+
+    monkeypatch.setattr(screen, "_call_model", down)
+    r = client.post("/contribute", data={"title": "Gita notes"}, files={"file": ("notes.md", MATERIAL, "text/markdown")})
+    assert "could not be checked" in r.text
+    assert not config.USER_WORKS_FILE.exists()
+
+    monkeypatch.setattr(config, "SCREEN_ENABLED", False)  # IKG_SCREEN=off
+    r = client.post("/contribute", data={"title": "Gita notes"}, files={"file": ("notes.md", MATERIAL, "text/markdown")})
+    assert "waiting for admin review" in r.text

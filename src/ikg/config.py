@@ -23,6 +23,12 @@ EVAL_RESULTS_DIR = Path("eval") / "results"
 
 MODEL = "claude-opus-5-5"
 
+# Local model (Ollama) that screens uploads for relevance; see ikg.screen.
+SCREEN_ENABLED = os.environ.get("IKG_SCREEN", "on").lower() not in ("off", "0", "false", "no")
+SCREEN_MODEL = os.environ.get("IKG_SCREEN_MODEL", "qwen3.5:9B")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+SCREEN_TIMEOUT = float(os.environ.get("IKG_SCREEN_TIMEOUT", "180"))  # first call loads the model
+
 
 def package_file(name: str) -> Path:
     """Path to a bundled data file (sources.yaml, gazetteer.yaml)."""
