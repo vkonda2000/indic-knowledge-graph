@@ -8,3 +8,6 @@ data/uploads/
 data/works.yaml
 data/gazetteer.yaml
 eval/results/
+
+# Local secrets and settings
+.env

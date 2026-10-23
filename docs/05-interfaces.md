@@ -66,6 +66,10 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 
 ## 4. Environment variables
 
+Set these in the shell or in a `.env` file (template: `.env.example`). The `ikg` command loads
+`.env` from the current directory upwards before reading any setting; values already set in the
+shell take precedence. `.env` is git-ignored.
+
 | Variable | Default | Effect |
 |---|---|---|
 | `IKG_DATA` | `data` | Data directory (raw, processed, uploads, registries) |

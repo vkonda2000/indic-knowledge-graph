@@ -5,10 +5,16 @@ import json
 import sys
 from collections import Counter
 
-from ikg import config
-from ikg.pipeline import BuildError, Runtime, build, passages_from_disk
-from ikg.retrieve import search
-from ikg.sources import fetch, load_works
+from dotenv import find_dotenv, load_dotenv
+
+# Settings in .env (API keys, tokens), found from the current directory upwards like data/, must be
+# loaded before ikg.config reads the environment. Variables already set in the shell take precedence.
+load_dotenv(find_dotenv(usecwd=True))
+
+from ikg import config  # noqa: E402
+from ikg.pipeline import BuildError, Runtime, build, passages_from_disk  # noqa: E402
+from ikg.retrieve import search  # noqa: E402
+from ikg.sources import fetch, load_works  # noqa: E402
 
 
 def _select_works(names: list[str] | None):

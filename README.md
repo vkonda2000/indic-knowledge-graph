@@ -42,7 +42,9 @@ ikg build                         # segment, extract entities, index, build grap
 ikg serve                         # web app at http://127.0.0.1:8000
 ```
 
-Cited answers call Claude (`claude-opus-5-5`) and need an API key: set `ANTHROPIC_API_KEY`.
+Cited answers call Claude (`claude-opus-5-5`) and need an API key. Copy `.env.example` to `.env`
+and set `ANTHROPIC_API_KEY` and `IKG_ADMIN_TOKEN` there; `ikg` loads it from the current
+directory, and `.env` is git-ignored. Variables set in the shell take precedence.
 Search, the graph explorer, analysis and the retrieval evaluation work without one.
 
 ## Web app
