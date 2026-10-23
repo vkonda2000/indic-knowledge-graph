@@ -10,12 +10,16 @@ JSON API:          /api/search /api/ask /api/graph /api/entity/{id} /api/build/s
 Admin login uses the IKG_ADMIN_TOKEN environment variable. If it is unset, a random
 token is generated and printed at startup. Set IKG_CONTRIBUTOR_TOKEN to require a
 token for contributor uploads as well.
+
+Cited answers call the Claude API, so non-admin visitors are limited to IKG_ASK_LIMIT
+questions per hour per client address (default 20; 0 restricts Ask to admins).
 """
 
 import os
 import secrets
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -33,6 +37,28 @@ from ikg.segment import KINDS, PARSERS
 HERE = Path(__file__).parent
 SESSION_COOKIE = "ikg_admin"
 SESSION_TTL = 12 * 3600
+MAX_SEARCH_K = 50
+MAX_ASK_K = 20
+
+
+class RateLimiter:
+    """Sliding one-hour window of events per key, kept in memory."""
+
+    def __init__(self, per_hour: int):
+        self.per_hour = per_hour
+        self.lock = threading.Lock()
+        self.events: dict[str, deque] = {}
+
+    def allow(self, key: str) -> bool:
+        now = time.time()
+        with self.lock:
+            q = self.events.setdefault(key, deque())
+            while q and q[0] <= now - 3600:
+                q.popleft()
+            if len(q) >= self.per_hour:
+                return False
+            q.append(now)
+            return True
 
 
 class BuildJob:
@@ -74,6 +100,24 @@ def snippet(text: str, n: int = 320) -> str:
     return flat if len(flat) <= n else flat[:n].rsplit(" ", 1)[0] + "..."
 
 
+def clamp_k(k, upper: int) -> int:
+    try:
+        return max(1, min(int(k), upper))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "k must be an integer") from None
+
+
+async def read_upload(file: UploadFile) -> bytes:
+    """Read an upload in chunks, stopping as soon as it exceeds the size limit."""
+    chunks, size = [], 0
+    while chunk := await file.read(1024 * 1024):
+        size += len(chunk)
+        if size > sources.MAX_UPLOAD_BYTES:
+            raise ValueError(f"file is larger than {sources.MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Indic Knowledge Graph")
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
@@ -86,6 +130,7 @@ def create_app() -> FastAPI:
         print(f"\n  IKG_ADMIN_TOKEN not set; admin token for this run: {admin_token}\n")
     contributor_token = os.environ.get("IKG_CONTRIBUTOR_TOKEN", "")
     sessions: dict[str, float] = {}
+    ask_limiter = RateLimiter(int(os.environ.get("IKG_ASK_LIMIT", "20")))
     job = BuildJob()
     state = {"runtime": None, "error": ""}
 
@@ -111,6 +156,9 @@ def create_app() -> FastAPI:
         if not is_admin(request):
             raise HTTPException(303, headers={"Location": "/admin/login"})
 
+    def ask_allowed(request: Request) -> bool:
+        return is_admin(request) or ask_limiter.allow(request.client.host if request.client else "")
+
     def render(request: Request, name: str, **ctx):
         rt = state["runtime"]
         works = sources.load_works()
@@ -123,11 +171,14 @@ def create_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request, q: str = "", mode: str = "search", primary_only: bool = False, k: int = 8):
         works = request.query_params.getlist("works") or None
+        k = clamp_k(k, MAX_ASK_K if mode == "ask" else MAX_SEARCH_K)
         ctx = {"q": q, "mode": mode, "primary_only": primary_only, "k": k, "selected_works": works or [],
                "hits": [], "answer": None, "error": ""}
         if q and state["runtime"] is not None:
             rt = runtime()
-            if mode == "ask":
+            if mode == "ask" and not ask_allowed(request):
+                ctx["error"] = "Question limit reached for this hour. Search still works."
+            elif mode == "ask":
                 try:
                     from ikg.qa import ask
                     ctx["answer"] = ask(q, rt.index, rt.gazetteer, graph=rt.graph,
@@ -180,7 +231,7 @@ def create_app() -> FastAPI:
             ctx["error"] = "Invalid contributor token."
             return render(request, "contribute.html", **ctx)
         try:
-            entry = sources.save_upload(file.filename or "upload.txt", await file.read())
+            entry = sources.save_upload(file.filename or "upload.txt", await read_upload(file))
             work = sources.add_user_work(title.strip()[:200], author.strip()[:200], year.strip()[:20], [entry],
                                          kind=kind if kind in KINDS else "secondary",
                                          submitted_by=contributor.strip()[:100], notes=notes.strip()[:2000])
@@ -199,10 +250,14 @@ def create_app() -> FastAPI:
     def login(request: Request, token: str = Form(...)):
         if not secrets.compare_digest(token, admin_token):
             return render(request, "login.html", error="Invalid token.")
+        now = time.time()
+        for old in [s for s, expiry in sessions.items() if expiry <= now]:
+            del sessions[old]
         sid = secrets.token_urlsafe(32)
-        sessions[sid] = time.time() + SESSION_TTL
+        sessions[sid] = now + SESSION_TTL
         resp = RedirectResponse("/admin", status_code=303)
-        resp.set_cookie(SESSION_COOKIE, sid, httponly=True, samesite="strict", max_age=SESSION_TTL)
+        resp.set_cookie(SESSION_COOKIE, sid, httponly=True, samesite="strict", max_age=SESSION_TTL,
+                        secure=request.url.scheme == "https")
         return resp
 
     @app.post("/admin/logout")
@@ -244,7 +299,7 @@ def create_app() -> FastAPI:
     async def admin_upload(request: Request, title: str = Form(...), author: str = Form(""),
                            year: str = Form(""), kind: str = Form("narrative"), file: UploadFile = File(...)):
         try:
-            entry = sources.save_upload(file.filename or "upload.txt", await file.read())
+            entry = sources.save_upload(file.filename or "upload.txt", await read_upload(file))
             work = sources.add_user_work(title.strip(), author.strip(), year.strip(), [entry],
                                          kind=kind if kind in KINDS else "narrative",
                                          submitted_by="admin", status="approved")
@@ -288,7 +343,7 @@ def create_app() -> FastAPI:
     @app.get("/api/search")
     def api_search(request: Request, q: str, k: int = 8, primary_only: bool = False):
         rt = runtime()
-        hits = search(rt.index, rt.gazetteer, q, k=min(k, 50), works=request.query_params.getlist("works") or None,
+        hits = search(rt.index, rt.gazetteer, q, k=clamp_k(k, MAX_SEARCH_K), works=request.query_params.getlist("works") or None,
                       primary_only=primary_only, passage_entities=rt.passage_entities)
         return {"query": q, "entities": rt.gazetteer.entities_in(q), "results": [
             {"id": h.passage.id, "ref": h.passage.ref, "kind": h.passage.kind, "score": round(h.score, 3),
@@ -296,12 +351,26 @@ def create_app() -> FastAPI:
 
     @app.post("/api/ask")
     async def api_ask(request: Request):
-        body = await request.json()
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, "Request body must be JSON") from None
+        if not isinstance(body, dict) or not str(body.get("question", "")).strip():
+            raise HTTPException(400, "Body must be an object with a non-empty 'question'")
+        works = body.get("works")
+        if works is not None and not (isinstance(works, list) and all(isinstance(w, str) for w in works)):
+            raise HTTPException(400, "'works' must be a list of work ids")
+        k = clamp_k(body.get("k", 8), MAX_ASK_K)
         rt = runtime()
+        if not ask_allowed(request):
+            raise HTTPException(429, "Question limit reached for this hour")
         from ikg.qa import ask
-        ans = ask(str(body.get("question", ""))[:2000], rt.index, rt.gazetteer, graph=rt.graph,
-                  passage_entities=rt.passage_entities, k=min(int(body.get("k", 8)), 20),
-                  works=body.get("works"), primary_only=bool(body.get("primary_only")))
+        try:
+            ans = ask(str(body["question"])[:2000], rt.index, rt.gazetteer, graph=rt.graph,
+                      passage_entities=rt.passage_entities, k=k, works=works or None,
+                      primary_only=bool(body.get("primary_only")))
+        except Exception as exc:  # missing API key, network, rate limit...
+            raise HTTPException(503, f"Answering failed: {exc}") from None
         return {"answer": ans.text, "abstained": ans.abstained, "refused": ans.refused,
                 "citations": [c.__dict__ for c in ans.citations],
                 "retrieved": [h.passage.id for h in ans.hits]}
@@ -354,6 +423,7 @@ def create_app() -> FastAPI:
     app.state.job = job
     app.state.reload_runtime = reload_runtime
     app.state.sessions = sessions
+    app.state.ask_limiter = ask_limiter
     return app
 
 

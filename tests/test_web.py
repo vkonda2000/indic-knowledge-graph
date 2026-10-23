@@ -120,3 +120,63 @@ def test_gazetteer_editor_validates(client):
     good = "entities:\n  - {id: x, type: Concept, label: X, aliases: [xyz]}\n"
     assert "Gazetteer saved (1 entities)" in client.post("/admin/gazetteer", data={"yaml_text": good}).text
     assert config.USER_GAZETTEER_FILE.read_text() == good
+
+
+def build_sample(client):
+    """Approve and build the sample material so the corpus endpoints are available."""
+    login(client)
+    client.post("/admin/upload", data={"title": "Gita notes", "kind": "secondary"},
+                files={"file": ("notes.md", MATERIAL, "text/markdown")})
+    client.post("/admin/rebuild")
+    wait_for_build(client)
+    client.post("/admin/logout")
+
+
+def fake_ask(question, index, gazetteer, **kwargs):
+    from ikg.qa import Answer
+    fake_ask.calls.append(kwargs)
+    return Answer(question=question, text="An answer.")
+
+
+def test_ask_is_rate_limited_and_validated(client, monkeypatch):
+    from ikg import qa
+    fake_ask.calls = []
+    monkeypatch.setattr(qa, "ask", fake_ask)
+    build_sample(client)
+    client.app_ref.state.ask_limiter.per_hour = 2
+
+    assert client.post("/api/ask", content=b"not json").status_code == 400
+    assert client.post("/api/ask", json={"question": ""}).status_code == 400
+    assert client.post("/api/ask", json={"question": "x", "k": "abc"}).status_code == 400
+    assert client.post("/api/ask", json={"question": "x", "works": "ramayana"}).status_code == 400
+    assert fake_ask.calls == []  # invalid requests do not reach the model
+
+    assert client.post("/api/ask", json={"question": "dharma?", "k": 500}).json()["answer"] == "An answer."
+    assert fake_ask.calls[-1]["k"] == 20  # capped
+    client.get("/", params={"q": "dharma?", "mode": "ask", "k": 100000})
+    assert fake_ask.calls[-1]["k"] == 20
+    assert client.post("/api/ask", json={"question": "dharma?"}).status_code == 429
+    assert "Question limit reached" in client.get("/", params={"q": "dharma?", "mode": "ask"}).text
+    assert len(fake_ask.calls) == 2
+
+    login(client)  # admins are not limited
+    assert client.post("/api/ask", json={"question": "dharma?"}).status_code == 200
+
+
+def test_ask_failure_returns_503(client, monkeypatch):
+    from ikg import qa
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("no API key")
+
+    monkeypatch.setattr(qa, "ask", broken)
+    build_sample(client)
+    r = client.post("/api/ask", json={"question": "dharma?"})
+    assert r.status_code == 503 and "no API key" in r.json()["detail"]
+
+
+def test_oversized_upload_rejected(client, monkeypatch):
+    monkeypatch.setattr(sources, "MAX_UPLOAD_BYTES", 1024)
+    r = client.post("/contribute", data={"title": "big"}, files={"file": ("big.txt", b"a" * 5000, "text/plain")})
+    assert "larger than" in r.text
+    assert not config.UPLOADS_DIR.exists() or not any(config.UPLOADS_DIR.iterdir())

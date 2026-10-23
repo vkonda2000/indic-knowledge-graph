@@ -55,7 +55,11 @@ Search, the graph explorer, analysis and the retrieval evaluation work without o
 
 **Access control.** Admin login uses the `IKG_ADMIN_TOKEN` environment variable. If it is unset,
 a random token is printed at startup. Set `IKG_CONTRIBUTOR_TOKEN` to require a token for
-uploads too. Sessions are `HttpOnly`, `SameSite=Strict` cookies. Uploads are limited to 20 MB,
+uploads too. Cited answers cost API credits, so visitors who are not logged in as admin get
+`IKG_ASK_LIMIT` questions per hour per client address (default 20; `0` restricts Ask to admins).
+Behind a reverse proxy the client address comes from `X-Forwarded-For`, which uvicorn trusts
+only from 127.0.0.1; for a proxy on another host, set `FORWARDED_ALLOW_IPS` to its address. Sessions are `HttpOnly`, `SameSite=Strict` cookies, marked `Secure`
+when served over HTTPS. Uploads are limited to 20 MB,
 stored under random names, never executed, and never enter the corpus without admin approval.
 For a public deployment, put the app behind HTTPS and a real identity provider.
 
