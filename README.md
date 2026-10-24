@@ -192,9 +192,13 @@ What this shows so far:
   | Haiku 5.5, medium | 0.917 | 0.735 | 1.0 | 0.083 | $0.0013 |
   | **Haiku 5.5, low (default)** | 0.917 | 0.747 | 1.0 | 0.083 | **$0.0012** |
 
-  One run each, with the earlier book-level expectations (to be re-run at section level), and the set is small; it doesn't yet test
-  fidelity to schools of thought. The comparison will be re-run when that benchmark exists.
-  The default row is [eval/baseline-llm.json](eval/baseline-llm.json).
+  One run each, with the earlier book-level expectations on 28 items, and the set is small; it
+  doesn't yet test fidelity to schools of thought. The comparison will be re-run when that
+  benchmark exists.
+- **Current answer baseline** (57 items, section level, [eval/baseline-llm.json](eval/baseline-llm.json)):
+  the default cites the answering passage for 66% of answerable questions (exactly when retrieval
+  finds it) and abstains on the rest rather than answering from the wrong passages; it abstains
+  on every unanswerable question. Retrieval is the bottleneck.
 - **Retrieval is guarded in CI.** The row with gazetteer expansion is committed as
   [eval/baseline.json](eval/baseline.json), and a pull request that lowers either number fails.
 

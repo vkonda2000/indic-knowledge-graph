@@ -1,14 +1,14 @@
 {
-  "description": "STALE since 2026-10-23: recorded with the old book-level expectations, so cites_expected and citation_precision here are not comparable with section-level runs. Re-record with ikg eval --llm (about $0.04 on Haiku 5.5) before using --check. Answer-level baseline for the default answering model (claude-haiku-5-5, effort low), checked by hand: ikg eval --llm --check eval/baseline-llm.json. Not run in CI because it calls the Claude API (about $0.04 per run). Model answers vary between runs, so re-run before treating a small drop as a regression. Update it in the same PR as any change that legitimately moves these numbers.",
-  "recorded": "2026-10-23",
+  "description": "Answer-level baseline for the default answering model (claude-haiku-5-5, effort low), section-level expectations, 57 items. Checked by hand: ikg eval --llm --check eval/baseline-llm.json. Not run in CI because it calls the Claude API (about $0.06 per run). Model answers vary between runs, so re-run before treating a small drop as a regression. Update it in the same PR as any change that legitimately moves these numbers.",
+  "recorded": "2026-10-24",
   "k": 8,
   "metrics": {
-    "n_retrieval": 24,
-    "n_adversarial": 4,
-    "cites_expected": 0.917,
-    "citation_precision": 0.747,
-    "has_citations": 0.958,
-    "false_abstain_rate": 0.083,
+    "n_retrieval": 47,
+    "n_adversarial": 10,
+    "cites_expected": 0.66,
+    "citation_precision": 0.463,
+    "has_citations": 0.787,
+    "false_abstain_rate": 0.277,
     "adversarial_abstain_rate": 1.0,
     "truncated_rate": 0.0
   }

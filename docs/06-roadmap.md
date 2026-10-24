@@ -57,12 +57,21 @@ What this shows:
 
 Every question sends about 7,000 input tokens (eight passages). Haiku 5.5 at low effort met
 the agreed bar (citation metrics within 5 points of Opus 5.5 high, adversarial abstention no
-lower, false abstentions no higher), so it is the default (D13); its row is
-`eval/baseline-llm.json`. One run per setting: the differences are 1–2 items. Caveats: the set
-is small, these runs used the old book-level expectations (so `cites_expected` and
-`citation_precision` are not comparable with section-level runs; `eval/baseline-llm.json` must
-be re-recorded, about $0.04), and it doesn't test SOT fidelity; re-run when the fidelity
-benchmark exists.
+lower, false abstentions no higher), so it is the default (D13). One run per setting: the
+differences are 1–2 items. Caveats: the set is small, these runs used the old book-level
+expectations, and it doesn't test SOT fidelity; re-run when the fidelity benchmark exists.
+
+**Current answer baseline** (Haiku 5.5 low, 57 items, section-level expectations, 2026-10-24,
+$0.063; `eval/baseline-llm.json`):
+
+| cites_expected | citation_precision | has_citations | false_abstain | adversarial_abstain | Cost / question |
+|---|---|---|---|---|---|
+| 0.660 | 0.463 | 0.787 | 0.277 | 1.0 | $0.0011 |
+
+`cites_expected` equals retrieval hit@8: the model cites the answering passage whenever
+retrieval puts it in the top 8. When retrieval misses, the model mostly abstains rather than
+answering from the wrong passages (13 of 47 answerable items), so retrieval is the bottleneck,
+not answering.
 Measured with the earlier book-level expectations: retrieval with k = 4 still reached hit@k 0.958 (k = 3: 0.917), but answers got worse: with
 k = 4, cites_expected fell to 0.833 and false abstentions rose to 0.167, at $0.00079 a question.
 k stays 8 (Phase 0 row "Send fewer passages"). Book-level hit@k can't tell whether the model
@@ -255,7 +264,7 @@ flowchart LR
 | **Data-model decisions before eval growth**: edition on passages, v1 ID and locator scheme, per-edition renderings, permanent namespace | L27, L28, L29, L13 | [02 §6](02-architecture.md#6-key-decisions) D9–D11 | **Decided** 2026-10-23 |
 | Implement D10 and D11: `edition` and `locator` on `Passage`, editions in the registry, per-edition renderings, frozen chunking parameters recorded in the build | L27, L28, L29 | `segment.py`, `sources.py`, `graph.py`, ontology | **Done**: also a build manifest (`processed/manifest.json`) and per-edition renderings in RDF |
 | Implement D9: register `https://w3id.org/ikg/` (PR to perma-id/w3id.org), switch the ontology and export, add `owl:versionIRI` | L13 | `ontology/ikg.ttl`, `graph.py`, `cli.py` | Not started; registration needs a maintainer |
-| Section-level eval expectations and MRR | L1 (B3) | `evaluate.py`, `eval/questions.jsonl` | **Done**: hit@1 0.292, hit@8 0.792, MRR 0.502 (§1); also fixed two segmentation defects it exposed (footnotes inside sections, Kena Part 4 missing). `eval/baseline-llm.json` needs re-recording (~$0.04) |
+| Section-level eval expectations and MRR | L1 (B3) | `evaluate.py`, `eval/questions.jsonl` | **Done**: hit@1 0.292, hit@8 0.792, MRR 0.502 (§1); also fixed two segmentation defects it exposed (footnotes inside sections, Kena Part 4 missing). `eval/baseline-llm.json` re-recorded 2026-10-24 |
 | Gazetteer schema validation (field types, `type` value) | L22 | `entities.py` | **Done** |
 | **Send fewer passages per answer (k = 8 → 4)**: with the earlier book-level expectations, retrieval found the right book as often with 4 passages as with 8 (hit@k 0.958 for both; k = 3 drops to 0.917), which would roughly halve input tokens (~7,000 → ~3,500) and answer cost. Run `ikg eval --llm -k 4` (about $0.02 on Haiku 5.5) and compare with `eval/baseline-llm.json` on the agreed bar before changing the default `k` in the CLI, web form and API | Cost (NFR-5) | `cli.py`, `web/app.py`, `search.html`, `eval/baseline-llm.json` | **Measured 2026-10-23: rejected; k stays 8.** Haiku 5.5 low at k = 4: cites_expected 0.833 (−8 pts, fails the 5-point bar), citation_precision 0.722, false_abstain 0.167 (worse), adversarial 1.0, $0.00079 a question (−32%, not −50%: the system prompt, graph summary and question are fixed overhead). `ram-01` and `vp-01` abstained with 4 passages. Revisit with re-ranking (Phase 3), which could put the best passages in a smaller k |
 
