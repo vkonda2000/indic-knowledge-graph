@@ -55,3 +55,32 @@
 {"id": "adv-08", "type": "adversarial", "question": "What does Griffith's Ramayana say about Krishna's teaching in the Bhagavad Gita?", "expected": [], "works": ["ramayana"]}
 {"id": "adv-09", "type": "adversarial", "question": "What does the Katha Upanishad say about Ravana's ten heads?", "expected": [], "works": ["upanishads"]}
 {"id": "adv-10", "type": "adversarial", "question": "Which canto of the Ramayana describes the battle of Kurukshetra?", "expected": [], "works": ["ramayana"]}
+{"id": "ram-05", "type": "retrieval", "question": "How did Rama kill Vali?", "expected": ["ram.b4.c016", "mbh.b03.s278"]}
+{"id": "ram-06", "type": "retrieval", "question": "How did Hanuman set Lanka on fire?", "expected": ["ram.b5.c054", "mbh.b03.s280", "ram.b5.c053"]}
+{"id": "ram-07", "type": "retrieval", "question": "How did Rama kill Ravana?", "expected": ["ram.b6.c108", "ram.b6.c109", "ram.b6.c110", "mbh.b03.s288"]}
+{"id": "ram-08", "type": "retrieval", "question": "Why did Rama make Sita undergo the ordeal by fire, and how was she restored to him?", "expected": ["ram.b6.c117", "ram.b6.c118", "ram.b6.c119", "ram.b6.c120", "mbh.b03.s289"]}
+{"id": "vp-05", "type": "retrieval", "question": "How did Krishna hold up the Govardhana mountain?", "expected": ["vp.b5.s011"]}
+{"id": "vp-06", "type": "retrieval", "question": "How did Krishna kill Kamsa?", "expected": ["vp.b5.s020"]}
+{"id": "vp-07", "type": "retrieval", "question": "What does the Vishnu Purana say about the seven continents of the earth?", "expected": ["vp.b2.s002", "vp.b2.s003", "vp.b2.s004", "vp.b2.s001"]}
+{"id": "skt-12", "type": "retrieval", "question": "What does Krishna teach Arjuna about the atman?", "expected": ["mbh.b06.s026", "mbh.b06.s030", "mbh.b06.s037"]}
+{"id": "skt-13", "type": "retrieval", "question": "What does Krishna say about svadharma?", "expected": ["mbh.b06.s027", "mbh.b06.s042", "mbh.b06.s026"]}
+{"id": "skt-14", "type": "retrieval", "question": "What does Krishna say about tyaga and sannyasa?", "expected": ["mbh.b06.s029", "mbh.b06.s042", "mbh.b06.s030"]}
+{"id": "skt-15", "type": "retrieval", "question": "What does Krishna say about his maya?", "expected": ["mbh.b06.s028", "mbh.b06.s031", "mbh.b06.s042"]}
+{"id": "skt-16", "type": "retrieval", "question": "What does Krishna teach about dhyana?", "expected": ["mbh.b06.s030", "mbh.b06.s036"]}
+{"id": "skt-17", "type": "retrieval", "question": "What does Vidura say about krodha?", "expected": ["mbh.b05.s033", "mbh.b05.s034", "mbh.b05.s035", "mbh.b05.s036", "mbh.b05.s037", "mbh.b05.s038", "mbh.b05.s039", "mbh.b05.s040"]}
+{"id": "spk-09", "type": "retrieval", "question": "What does Vali say to Rama after Rama shoots him from hiding, and how does Rama answer?", "expected": ["ram.b4.c017", "ram.b4.c018"]}
+{"id": "spk-10", "type": "retrieval", "question": "What does Sita say to Ravana when he tries to win her?", "expected": ["ram.b3.c047", "ram.b3.c048", "ram.b5.c021", "ram.b5.c022"]}
+{"id": "spk-11", "type": "retrieval", "question": "What does Kausalya say when Rama tells her he must go into exile?", "expected": ["ram.b2.c020", "ram.b2.c021", "ram.b2.c024"]}
+{"id": "spk-12", "type": "retrieval", "question": "What does Vishvamitra ask King Dasaratha for?", "expected": ["ram.b1.c020", "ram.b1.c021"]}
+{"id": "spk-13", "type": "retrieval", "question": "What does Prahlada say to his father about Vishnu?", "expected": ["vp.b1.s017", "vp.b1.s019", "vp.b1.s020"]}
+{"id": "spk-14", "type": "retrieval", "question": "What does Suniti tell her son Dhruva after he is humiliated?", "expected": ["vp.b1.s011"]}
+{"id": "spk-15", "type": "retrieval", "question": "What does Draupadi tell Krishna about her humiliation in the assembly?", "expected": ["mbh.b03.s012"]}
+{"id": "spk-16", "type": "retrieval", "question": "What does Bhishma tell Karna when Karna visits him on his bed of arrows?", "expected": ["mbh.b06.s124", "mbh.b07.s003", "mbh.b07.s004"]}
+{"id": "xw-05", "type": "retrieval", "question": "What was the quarrel between Vasishtha and Vishvamitra?", "expected": ["ram.b1.c051", "ram.b1.c052", "ram.b1.c053", "ram.b1.c054", "ram.b1.c055", "ram.b1.c056", "mbh.b01.s175", "mbh.b01.s176", "mbh.b09.s042", "mbh.b01.s178"]}
+{"id": "xw-06", "type": "retrieval", "question": "What is the story of King Yayati and his sons?", "expected": ["mbh.b01.s075", "mbh.b01.s078", "mbh.b01.s081", "mbh.b01.s082", "mbh.b01.s083", "mbh.b01.s084", "mbh.b01.s085", "mbh.b01.s086", "mbh.b01.s087", "mbh.b01.s088", "mbh.b01.s089", "mbh.b01.s090", "mbh.b01.s091", "mbh.b01.s092", "mbh.b01.s093", "vp.b4.s010"]}
+{"id": "xw-07", "type": "retrieval", "question": "How did Dushyanta marry Shakuntala, and how was Bharata born?", "expected": ["mbh.b01.s069", "mbh.b01.s070", "mbh.b01.s071", "mbh.b01.s072", "mbh.b01.s073", "mbh.b01.s074", "vp.b4.s019", "mbh.b01.s095"]}
+{"id": "adv-11", "type": "adversarial", "question": "What does the Ramayana say about Draupadi and the Pandavas?", "expected": [], "works": ["ramayana"]}
+{"id": "adv-12", "type": "adversarial", "question": "What does the Isa Upanishad say about Hanuman?", "expected": [], "works": ["upanishads"]}
+{"id": "adv-13", "type": "adversarial", "question": "What does the Vishnu Purana say about the Roman Empire?", "expected": [], "works": ["vishnu_purana"]}
+{"id": "adv-14", "type": "adversarial", "question": "What does the Ramayana say about Bhishma's vow?", "expected": [], "works": ["ramayana"]}
+{"id": "adv-15", "type": "adversarial", "question": "What does the Katha Upanishad say about Sita's exile?", "expected": [], "works": ["upanishads"]}

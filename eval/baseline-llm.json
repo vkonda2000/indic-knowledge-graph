@@ -1,5 +1,5 @@
 {
-  "description": "Answer-level baseline for the default answering model (claude-haiku-5-5, effort low), section-level expectations, 57 items. Checked by hand: ikg eval --llm --check eval/baseline-llm.json. Not run in CI because it calls the Claude API (about $0.06 per run). Model answers vary between runs, so re-run before treating a small drop as a regression. Update it in the same PR as any change that legitimately moves these numbers.",
+  "description": "Answer-level baseline for the default answering model (claude-haiku-5-5, effort low), section-level expectations, recorded on the first 57 items (the set now has 86; the item counts still pass --check, but rates should be re-recorded before comparing). Checked by hand: ikg eval --llm --check eval/baseline-llm.json. Not run in CI because it calls the Claude API (about $0.06 per run). Model answers vary between runs, so re-run before treating a small drop as a regression. Update it in the same PR as any change that legitimately moves these numbers.",
   "recorded": "2026-10-24",
   "k": 8,
   "metrics": {

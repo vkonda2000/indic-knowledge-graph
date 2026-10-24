@@ -153,7 +153,7 @@ Gutenberg / uploads ──► segment ──► passages (id, work, book, sectio
 
 ## Evaluation
 
-`eval/questions.jsonl` has 47 retrieval questions across all four works and 10 adversarial
+`eval/questions.jsonl` has 71 retrieval questions across all four works and 15 adversarial
 questions the corpus cannot answer (for example, Hanuman in the Katha Upanishad). Retrieval
 questions include ones phrased with the Sanskrit term where the translation uses an English
 word (`skt-`), ones about what a named speaker says (`spk-`), and stories told in more than one
@@ -166,19 +166,20 @@ Only primary text counts as a hit, not commentary on the expected verse.
 
 | Retrieval (k = 8) | hit@1 | hit@8 | MRR |
 |---|---|---|---|
-| With gazetteer expansion | 29.8% | 66.0% | 0.450 |
-| Without (`--no-expand`) | 31.9% | 63.8% | 0.444 |
+| With gazetteer expansion | 28.2% | 62.0% | 0.423 |
+| Without (`--no-expand`) | 29.6% | 62.0% | 0.420 |
 
 What this shows so far:
 
 - **Finding the right passage is much harder than finding the right book.** On the original 24 items
-  with book-level expectations the same system scored 62.5% / 95.8%. Retrieval misses 16 of 47
-  items entirely; questions phrased with Sanskrit terms (6 of 9 miss) and questions about what a
-  named speaker says (5 of 8 miss) are the weakest.
+  with book-level expectations the same system scored 62.5% / 95.8%. Retrieval misses 27 of 71
+  items entirely; questions phrased with Sanskrit terms (12 of 15 miss) and questions about what
+  a named speaker says (8 of 16 miss) are the weakest.
   Hybrid retrieval and re-ranking (Phase 3) are measured against these numbers.
 - **For the Upanishads, the translator's commentary outranks the verse itself**, because it is
   longer and wordier.
-- **Gazetteer expansion is mixed here:** slightly better hit@8 and MRR, slightly worse hit@1. The set is
+- **Gazetteer expansion is mixed here:** the same hit@8, slightly better MRR, slightly worse hit@1;
+  it is what finds the few Sanskrit-phrased questions that hit at all. The set is
   still small; a larger set written by subject experts is the next step.
 - **One known failure, kept deliberately.** `con-02` asks about a kshatriya's dharma "according
   to Krishna". The Bhagavad Gita (Bhishma Parva, sections 25–42) loses to Santi Parva passages on
@@ -195,7 +196,7 @@ What this shows so far:
   One run each, with the earlier book-level expectations on 28 items, and the set is small; it
   doesn't yet test fidelity to schools of thought. The comparison will be re-run when that
   benchmark exists.
-- **Current answer baseline** (57 items, section level, [eval/baseline-llm.json](eval/baseline-llm.json)):
+- **Current answer baseline** (the first 57 items, section level, [eval/baseline-llm.json](eval/baseline-llm.json)):
   the default cites the answering passage for 66% of answerable questions, matching retrieval
   hit@8. On retrieval misses it usually abstains (10 of 16) but answered from the wrong passages
   5 times; it abstains on all 10 unanswerable questions. Retrieval is the bottleneck.

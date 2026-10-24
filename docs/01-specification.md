@@ -133,7 +133,7 @@ systems tend to blur three distinctions that this system keeps:
 - **Graph:** passage-level co-occurrence with no typed relations, plus RDF export.
 - **QA:** single-turn questions answered by Claude with citations, filterable by work and kind.
 - **Web app:** single-process FastAPI server with a reader UI, contributor uploads and an admin console.
-- **Evaluation:** 57 hand-written questions (47 retrieval at section level, 10 adversarial).
+- **Evaluation:** 86 hand-written questions (71 retrieval at section level, 15 adversarial).
 
 ### 5.2 Target: in scope, not yet built
 
