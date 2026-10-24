@@ -93,12 +93,15 @@ so hit@8 measures "a passage from the right book", not the right passage.
 | L24 | Source downloads are not pinned by checksum (A7) | **Resolved (Oct 2026):** bundled texts carry a `sha256` in `sources.yaml`, verified by `fetch` and `build`; downloads retry. Admin-added Gutenberg texts are not pinned yet | `sources.py` |
 | L25 | Non-ASCII tokens crashed the login and contribute checks (A8) | **Resolved (Oct 2026):** tokens are compared as bytes | `web/app.py` |
 | L26 | Small robustness gaps (A9, A10) | **Partly resolved (Oct 2026):** truncated answers are flagged and `primary_only` must be a boolean. Still open: the API redirect on an expired session and the Gutenberg marker edge case | `web/app.py`, `sources.py` |
-| L27 | Work and edition are not separated in the data model (B1) | Parallel translations and C2 can't be modelled; must be decided before Phase 1 | `Passage`, IRIs, gazetteer |
-| L28 | Passage IDs include a chunk ordinal that depends on chunking parameters (B2) | Changing the chunker renumbers IDs used by eval items; pages and timestamps don't fit | `segment.py` |
-| L29 | The RDF shape lacks passages by default, `Section` instances, per-edition renderings and `ordinal` (B4) | Claims curated in Phase 2 would point at IRIs that later change | `graph.py`, ontology |
+| L27 | Work and edition are not separated in the data model (B1) | **Resolved (Oct 2026, D10):** passages, the registry and RDF separate the text (`work`) from the translation (`edition`); books, mentions and renderings are per edition | `Passage`, IRIs, gazetteer |
+| L28 | Passage IDs include a chunk ordinal that depends on chunking parameters (B2) | **Resolved (Oct 2026, D11):** v1 IDs are frozen (chunking parameters pinned by a test and recorded in the build manifest); positions for citations come from the new `locator` field | `segment.py` |
+| L29 | The RDF shape lacks passages by default, `Section` instances, per-edition renderings and `ordinal` (B4) | **Partly resolved (Oct 2026):** renderings are now per edition with counts. Still open: passages only with `--with-passages`, no `Section` instances, `ordinal` not exported, placeholder namespace (D9) | `graph.py`, ontology |
 | L30 | Curation provenance and copyrighted ingestion are planned before identity and roles (B5) | "Who approved" can't be recorded correctly with one shared token | Phases 1, 2, 4 |
 | L31 | When a refusal fallback answers (Opus or Sonnet only), cost is estimated from the final model's usage alone; the declined attempt (`usage.iterations`) is not added, and an unpriced fallback model is charged a flat $0.25 | Budget under- or over-estimates in rare cases; not relevant to the Haiku default | `qa.py`, `config.PRICES` |
 | L32 | The daily budget is checked before a call and charged after it | Concurrent requests can overshoot the budget by their combined cost (about $0.001 each on Haiku) | `web/app.py` |
+| L33 | `ikg analyze` reports per work only: its Translator column takes one edition's translator and concept densities merge editions | Wrong once a text has two editions; the per-edition comparison D10 enables is not in the report yet (SPARQL has it) | `analysis.py` |
+| L34 | Registry validation is partial: a duplicate edition ID in a hand-edited `works.yaml` makes every page fail; `work:` is not checked against known works | A typo creates an unlabelled new work; a collision takes the site down until fixed | `sources.py`, `web/app.py` |
+| L35 | A `bm25.pkl` built before D10 loads without complaint; its passages have no `edition` or `locator` | Editions fall back to the work id until the next rebuild | `pipeline.Runtime.load` (see L19) |
 
 ## 3. Status against the target responsibilities
 
@@ -129,6 +132,7 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 - [x] **Tests for the RDF export, analysis report and CLI** `search`/`stats`, including a check that the export uses only terms declared in the ontology (L15)
 - [x] **Cost control for answers**: configurable model and effort, per-answer token and cost tracking, answer cache, daily budget, POST-only Ask; Haiku 5.5 at low effort is the default after an eval comparison with Opus 5.5 (D13, NFR-5)
 - [x] **Answer-level baseline**: `ikg eval --llm` recorded for three model settings ([§1](#1-measured-baseline), `eval/baseline-llm.json`)
+- [x] **Text vs. translation in the data model (D10)** and **frozen v1 passage IDs with locators (D11)**: every passage records its work, edition and position; RDF renderings are per edition with counts, so translators' word choices can be compared with SPARQL (C2)
 - [x] **Independent review practice**: each PR is reviewed by a Fable subagent (`.claude/agents/fable-reviewer.md`) and the findings are summarised in the PR
 
 ### 3.2 Partial
@@ -210,9 +214,9 @@ flowchart LR
 | Choose a permanent namespace; widen the `renders` range | L13, L14 | `graph.py`, ontology | Not started |
 | Dockerfile (app + optional Ollama sidecar) | Deployment | repo root | Not started |
 | **Review fixes, urgent**: stop citations to the graph summary; POST-only Ask, a global spend budget and limiter eviction; byte-wise token comparison | L20, L21, L25 | `qa.py`, `web/app.py` | **Done**, plus an answer cache and a configurable answering model |
-| **Self-describing, atomic builds**: build manifest (gazetteer hash, works, source checksums, chunking parameters), gazetteer snapshot, build into a temporary directory and rename, shared lock | L19, L24 | `pipeline.py`, `sources.py`, `sources.yaml` | Source checksums **done**; the rest not started |
+| **Self-describing, atomic builds**: build manifest (gazetteer hash, works, source checksums, chunking parameters), gazetteer snapshot, build into a temporary directory and rename, shared lock | L19, L24 | `pipeline.py`, `sources.py`, `sources.yaml` | Source checksums and a build manifest (ID scheme, chunking, editions, source checksums) **done**. Not started: gazetteer snapshot and hash, `Runtime` refusing mismatched artefacts, build into a temporary directory and rename, shared lock |
 | **Data-model decisions before eval growth**: edition on passages, v1 ID and locator scheme, per-edition renderings, permanent namespace | L27, L28, L29, L13 | [02 §6](02-architecture.md#6-key-decisions) D9–D11 | **Decided** 2026-10-23 |
-| Implement D10 and D11: `edition` and `locator` on `Passage`, editions in the registry, per-edition renderings, frozen chunking parameters recorded in the build | L27, L28, L29 | `segment.py`, `sources.py`, `graph.py`, ontology | Not started |
+| Implement D10 and D11: `edition` and `locator` on `Passage`, editions in the registry, per-edition renderings, frozen chunking parameters recorded in the build | L27, L28, L29 | `segment.py`, `sources.py`, `graph.py`, ontology | **Done**: also a build manifest (`processed/manifest.json`) and per-edition renderings in RDF |
 | Implement D9: register `https://w3id.org/ikg/` (PR to perma-id/w3id.org), switch the ontology and export, add `owl:versionIRI` | L13 | `ontology/ikg.ttl`, `graph.py`, `cli.py` | Not started; registration needs a maintainer |
 | Section-level eval expectations and MRR | L1 (B3) | `evaluate.py`, `eval/questions.jsonl` | Not started |
 | Gazetteer schema validation (field types, `type` value) | L22 | `entities.py` | Not started |
@@ -316,7 +320,7 @@ parallel. Item 3 needs only the existing corpus.
 
 | To add… | Change |
 |---|---|
-| A work | `sources.yaml` entry; parser in `segment.PARSERS` if needed; `WORK_LABELS`; parser test; eval questions |
+| A work | `sources.yaml` entry; parser in `segment.PARSERS` if needed; `WORK_LABELS`; parser test; eval questions; for a second translation of a text already present, a new entry with `work:` set to that text, a unique `edition:`, and a parser whose IDs use their own prefix (D10, D11) |
 | An entity | `gazetteer.yaml` (or the admin editor), then rebuild |
 | An entity type | Gazetteer `type`, ontology class, `--c-<type>` colour in all three theme blocks of `style.css`, `typeColor` in `graph.js`, a `.chip.<type>` style (the graph page's type filters are generated from the gazetteer) |
 | A passage kind | `segment.KINDS` (and `PRIMARY_KINDS` if it is primary text), ontology subclass, prompt wording in `qa.SYSTEM_PROMPT`, contribute form options |

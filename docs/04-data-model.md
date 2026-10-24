@@ -12,6 +12,7 @@ erDiagram
     PASSAGE ||--o{ MENTION : "contains"
     ENTITY ||--o{ MENTION : "entity"
     CONCEPT ||--o{ RENDERING : "renders"
+    EDITION ||--o{ RENDERING : "fromEdition (with count)"
     ENTITY }o--o{ ENTITY : "coOccursWith (weighted)"
     CLAIM }o--|| ENTITY : "statedBy / about (planned)"
     CLAIM }o--o| SCHOOL : "heldBy (planned)"
@@ -22,8 +23,13 @@ erDiagram
   `Commentary`, `Introduction` and `Secondary` are not.
 - **Entity types** are subclasses of `ikg:Entity`: `Person`, `Deity`, `Place`, `Concept`,
   `SchoolOfThought`.
-- A `Rendering` is an English word that an edition uses for a Sanskrit `Concept`. It is a
+- A **work** is the text (the Mahabharata); an **edition** is one translation of it (Ganguli's).
+  Passages record both (D10). Filters, gazetteer scoping and graph weights are per work; books,
+  mentions, renderings and citations are per edition, so two translations stay comparable.
+- A `Rendering` is an English word that an edition uses for a Sanskrit `Concept`: one per
+  (edition, concept, word), with `ikg:count` for how often that edition uses it. It is a
   separate class, so translation choices are data rather than being merged into the concept.
+  Renderings listed in the gazetteer but never used by an edition are not exported.
 - A `Mention` records *via* `alias` or `rendering`.
 - `Claim`, `statedBy`, `heldBy`, `groundedIn` and `about` are reserved for curated propositions
   ("Yama teaches that the atman is unborn", stated by Yama, grounded in `upa.katha.p1.v18`).
@@ -35,7 +41,8 @@ The full ontology is in `ontology/ikg.ttl` (OWL, 96 lines).
 
 | Thing | Format | Example |
 |---|---|---|
-| Work | slug, from the registry | `mahabharata`, `gita_notes` |
+| Work | slug, from the registry (`work:`, defaulting to `id`) | `mahabharata`, `gita_notes` |
+| Edition | slug, from the registry (`edition:`, defaulting to `id`); unique | `ganguli-1883`, `gita_notes` |
 | Mahabharata passage | `mbh.b<book:02>.s<section:03>.p<chunk:02>` | `mbh.b05.s033.p02` |
 | Ramayana passage | `ram.b<book>.c<canto:03>.p<chunk:02>` | `ram.b4.c012.p01` |
 | Upanishad verse | `upa.<name>.p<part>.v<verse:02>` | `upa.katha.p1.v19` |
@@ -45,10 +52,21 @@ The full ontology is in `ontology/ikg.ttl` (OWL, 96 lines).
 | Vishnu Purana passage | `vp.b<part>.s<section:03>.p<chunk:02>` | `vp.b1.s012.p01` |
 | Generic (added) passage | `<work>.f<file>.b<book>.s<section:03>.p<chunk:02>` | `gita_notes.f1.b1.s002.p01` |
 | Entity | gazetteer `id` | `krishna`, `dharma`, `bharata_ram` |
-| RDF instance | `https://example.org/ikg/data/<kind>/<id>` | `d:entity/krishna`, `d:book/mahabharata/05` |
+| RDF instance | `https://example.org/ikg/data/<kind>/<id>` | `d:entity/krishna`, `d:edition/ganguli-1883`, `d:book/ganguli-1883/05`, `d:rendering/ganguli-1883/dharma/righteousness`, `d:mention/dharma/ganguli-1883/12/rendering` |
 
 IDs are hierarchical, so a prefix selects a unit: `mbh.b12` is the Shanti Parva and
 `upa.katha` is the Katha Upanishad. The evaluation set relies on this.
+
+**Passage ID scheme v1 is frozen (D11).** The `.p<chunk>` part depends on the chunking
+parameters (`MAX_CHARS = 1500`, the sentence splitter and the packing in `segment.chunk`), so
+they may not change for an existing edition without an explicit ID migration map. A snapshot
+test pins the chunks v1 makes of a fixed text and the splitter pattern, and every build records
+`MAX_CHARS` and the pattern in `processed/manifest.json`. The ID prefix comes from the registry
+entry's `id_prefix`, defaulting to the parser's own (`mbh`, `ram`, `upa`, `vp`) or, for the
+generic parser, the entry's `id`. A second edition of a bundled text must set its own
+(e.g. `id_prefix: mbhd`); otherwise the build stops on duplicate passage IDs, so IDs never
+collide silently. Where a passage sits in its edition, for citations, is in its `locator`
+(§4), not parsed from the ID.
 
 ## 3. Files on disk
 
@@ -61,6 +79,7 @@ All paths are under `IKG_DATA` (default `data/`) unless noted.
 | `ontology/ikg.ttl` | Turtle/OWL | developers | people, SPARQL tools | yes |
 | `eval/questions.jsonl` | JSONL | developers | `evaluate` | yes |
 | `eval/baseline.json` | JSON | developers | `eval --check`, CI | yes |
+| `processed/manifest.json` | JSON | `build` | people, future builds | no |
 | `works.yaml` | YAML | web admin / contribute | `sources` | no |
 | `gazetteer.yaml` | YAML | web admin gazetteer editor | `entities` (takes precedence) | no |
 | `raw/pg<n>.txt` | Gutenberg text | `fetch` | `segment` | no |
@@ -84,7 +103,8 @@ elsewhere.
 {"id": "upa.katha.p1.v19", "work": "upanishads", "book": "katha", "book_label": "Katha Upanishad",
  "section": 1, "section_label": "Part 1, Verse 19", "ordinal": 19, "kind": "verse",
  "text": "O Nachiketas, this is thy fire that leads to heaven...", "translator": "Swami Paramananda",
- "source_url": "https://www.gutenberg.org/ebooks/3283", "work_title": "Upanishads"}
+ "source_url": "https://www.gutenberg.org/ebooks/3283", "work_title": "Upanishads",
+ "edition": "paramananda-1919", "locator": {"upanishad": "katha", "part": 1, "verse": 19}}
 ```
 
 | Field | Type | Notes |
@@ -99,6 +119,8 @@ elsewhere.
 | `translator` | string | From the work registry: translator or author |
 | `source_url` | string | Gutenberg ebook URL or `upload:<original name>` |
 | `work_title` | string | Display title |
+| `edition` | string | Edition ID: the translation this passage comes from (D10) |
+| `locator` | object | Position in the edition, for citations (D11). Keys by parser: Mahabharata `book`, `section`; Ramayana `book`, `canto`; Upanishads `upanishad`, `part`, `verse` (a number, or `peace`/`peace-close`; commentary shares its verse's); Vishnu Purana `part`, `section`; generic `file`, `book`, `section`. Planned: `page` for books, `start`/`end` seconds for recordings |
 
 ### Mention (`mentions.jsonl`)
 
@@ -108,11 +130,15 @@ elsewhere.
 
 ### Work registry entry (`sources.yaml`, `works.yaml`)
 
-Bundled Gutenberg files carry `sha256: <hex>` next to `gutenberg: <id>`; `fetch` and `build`
+An entry is one edition. `work` and `edition` default to `id`; edition IDs must be unique
+across both registries, or loading fails. Bundled Gutenberg files carry `sha256: <hex>` next to `gutenberg: <id>`; `fetch` and `build`
 refuse a file whose contents differ.
 
 ```yaml
-- id: gita_notes                 # unique slug
+- id: gita_notes                 # unique slug (the registry key)
+  work: gita_notes               # optional: the text; set to an existing work id for a second translation
+  edition: gita_notes            # optional: the edition id; must be unique
+  id_prefix: ""                  # optional: passage ID prefix; required for a second edition of a bundled text
   title: Gita notes
   translator: A. Scholar         # translator or author
   year: "2024"
@@ -173,12 +199,15 @@ every key under `metrics` must not get worse, item counts included. `description
 ## 5. Example SPARQL
 
 ```sparql
-# Translator renderings of each concept
-SELECT ?concept ?word WHERE {
-  ?r a ikg:Rendering ; ikg:renders ?c ; ikg:surface ?word .
-  ?c rdfs:label ?concept .
-} ORDER BY ?concept
+# How each edition renders each concept, most used first
+SELECT ?concept ?edition ?word ?n WHERE {
+  ?r a ikg:Rendering ; ikg:renders ?c ; ikg:surface ?word ; ikg:fromEdition ?e ; ikg:count ?n .
+  ?c rdfs:label ?concept . ?e rdfs:label ?edition .
+} ORDER BY ?concept DESC(?n)
 ```
+
+For *dharma*: Ganguli's Mahabharata uses "duties" 1,374 times, "righteousness" 962 and "duty"
+650; Griffith's Ramayana "duty" 214; Dutt's Vishnu Purana "duties" 37 and "duty" 18.
 
 ```sparql
 # Books where Dharma is mentioned through a rendering, most first

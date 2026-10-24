@@ -72,7 +72,7 @@ def _documents(hits: list[Hit]) -> list[dict]:
             "type": "document",
             "source": {"type": "text", "media_type": "text/plain", "data": p.text},
             "title": f"[{p.id}] {p.ref}",
-            "context": f"passage_id={p.id}; work={p.work}; kind={p.kind}; translator={p.translator}",
+            "context": f"passage_id={p.id}; work={p.work}; edition={p.edition}; kind={p.kind}; translator={p.translator}",
             "citations": {"enabled": True},
         })
     return docs

@@ -219,18 +219,19 @@ API and are not run in CI.
 | D7 | Admin approval gate plus local-model screening for uploads | Keeps the corpus curated; screening keeps uploaded content on the host and costs nothing per check | Screening can be fooled; it filters, it does not replace review |
 | D8 | Separate `kind` for commentary, introductions and scholarship | Lets answers and filters separate the text from what people said about it | Parsers must classify correctly; the generic parser takes one kind per upload |
 
-### Decided, not yet implemented (2026-10-23)
+### Decided 2026-10-23: D10 and D11 implemented, D9 and D12 not yet
 
 These follow the [2026-10-23 review](reviews/2026-10-23-architecture-review.md) (B1, B2, B4, B5)
 and were agreed before eval growth, because eval items, curated claims and RDF IRIs all key
-on them. Each is a roadmap row in [06 §5](06-roadmap.md#phase-0-measure-and-harden-t10); until
-that row is done, the code still works as described in the rest of this document.
+on them. Each is a roadmap row in [06 §5](06-roadmap.md#phase-0-measure-and-harden-t10). D10 and
+D11 are in the code; until D9 and D12 are done, the namespace is still `example.org` and there
+is still one shared admin token.
 
 | # | Decision | Why | Consequences |
 |---|---|---|---|
 | D9 | **Permanent namespace on w3id.org.** Ontology terms under `https://w3id.org/ikg/ns#`, instances under `https://w3id.org/ikg/id/`. The ontology carries an `owl:versionIRI` | w3id gives a permanent redirect that can be re-pointed without breaking IRIs; it is the usual choice for academic ontologies | A one-time registration PR to the w3id repository (perma-id/w3id.org) by a maintainer. Replaces `example.org` (L13) |
-| D10 | **Separate text from translation.** `Passage.work` is the text (e.g. `mahabharata`); a new `Passage.edition` is the translation (e.g. `ganguli`). Registry entries describe editions and name their work | A second translation of the same text must not become a new work; translator comparison (C2) and parallel translations (Phase 1) need it | Gazetteer `works` scoping and graph `weight_<work>` stay per text. Citations, RDF `Edition` and `Rendering` become per edition (renderings keyed by edition, concept and surface, L29) |
-| D11 | **Freeze today's passage IDs as v1, and add a locator.** Existing IDs stay exactly as they are; the chunking parameters that produce them (`MAX_CHARS = 1500`, the sentence splitter) are frozen and recorded. New editions get edition-qualified IDs. A structured `locator` field holds book/section/verse, page, or timestamp for citations | No migration of the 28 eval items or the fidelity drafts; IDs no longer depend on accidental chunker changes; pages and timestamps fit (Phase 1) | Changing the chunker for an existing edition needs an explicit ID migration map. Eval expectations move to section level using the locator (B3) |
+| D10 | **Implemented.** **Separate text from translation.** `Passage.work` is the text (e.g. `mahabharata`); `Passage.edition` is the translation (e.g. `ganguli-1883`). Registry entries describe editions and name their work | A second translation of the same text must not become a new work; translator comparison (C2) and parallel translations (Phase 1) need it | Gazetteer `works` scoping and graph `weight_<work>` stay per text. Citations, RDF `Edition` and `Rendering` become per edition (renderings keyed by edition, concept and surface, L29) |
+| D11 | **Implemented.** **Freeze today's passage IDs as v1, and add a locator.** Existing IDs stay exactly as they are; the chunking parameters that produce them (`MAX_CHARS = 1500`, the sentence splitter) are frozen and recorded. A second edition of a text sets its own ID prefix (`id_prefix`), or the build stops on duplicate IDs. A structured `locator` field holds book/section/verse, page, or timestamp for citations | No migration of the 28 eval items or the fidelity drafts; IDs no longer depend on accidental chunker changes; pages and timestamps fit (Phase 1) | Changing the chunker for an existing edition needs an explicit ID migration map. Eval expectations move to section level using the locator (B3) |
 | D12 | **Named curator tokens and an append-only provenance log before Phase 2.** Each curator gets a named token in place of the single admin token; every approval, edit and rejection is appended to a log with who, when, what and the supporting passage | Curation provenance ("who proposed, who approved") is correct from the first record | OIDC and roles still come in Phase 4 and replace the tokens; the log format carries over |
 
 ### Decided and implemented (2026-10-23)
@@ -259,7 +260,7 @@ and are not part of the system until they appear in this table.
 | Upload screening | Ollama (local) over HTTP | default model `qwen3.5:9B` | `screen.py` | Runs on the host; uploads are rejected if Ollama is unreachable |
 | Web app | FastAPI, served by uvicorn; Jinja2 templates; python-multipart for forms | FastAPI ≥ 0.110, uvicorn ≥ 0.29, Jinja2 ≥ 3.1 | `web/app.py`, `web/templates/` | `[web]` extra. Sessions, rate limits and the build job live in process memory |
 | Graph explorer | Cytoscape.js from the jsDelivr CDN | 3.30.2 | `web/templates/graph.html`, `web/static/graph.js` | Only browser dependency |
-| Storage | Files on disk: JSONL, YAML, pickle, GraphML, Turtle | none | `data/` (D6) | No database |
+| Storage | Files on disk: JSONL, YAML, pickle, GraphML, Turtle, JSON (build manifest) | none | `data/` (D6) | No database |
 | Tests | pytest; httpx for FastAPI's `TestClient` | pytest ≥ 7.0, httpx ≥ 0.27 | `tests/` | Models and HTTP are faked; no network or key needed |
 | Evaluation | `ikg eval` with committed baselines | `eval/baseline.json` (offline, CI), `eval/baseline-llm.json` (answers, by hand) | `evaluate.py` | `--check` is the regression gate |
 | CI | GitHub Actions | `actions/checkout@v4`, `setup-python@v5`, `cache/restore@v4`, `cache/save@v4` | `.github/workflows/ci.yml` | See §5 |

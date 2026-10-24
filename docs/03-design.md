@@ -24,8 +24,11 @@ the `*** START` and `*** END` markers.
 
 ### 2.1 Passage model
 
-A passage is the smallest citable unit. It records its work, book, section, ordinal, `kind`,
-translator and source URL. `Passage.ref` builds the human citation, for example
+A passage is the smallest citable unit. It records its work (the text), its edition (the
+translation, D10), book, section, ordinal, `kind`, translator, source URL, and a `locator`
+giving its position in the edition for citations (D11; keys per parser in
+[04 §4](04-data-model.md#4-record-schemas)). `segment_work` sets `work` and `edition` from the
+registry entry after parsing, so parsers only build IDs and locators. `Passage.ref` builds the human citation, for example
 *"Upanishads, Katha Upanishad, Part 1, Verse 19 (tr. Swami Paramananda)"*. It appends
 `[commentary]` or another kind tag for non-primary text and uses "by" instead of "tr." for
 scholarship.
@@ -210,11 +213,11 @@ The graph is stored as GraphML. Today it has 75 nodes and 1,921 edges. It feeds 
 | Instances | From |
 |---|---|
 | `ikg:Work`, `ikg:Edition` (translator, year, source URLs) | Work registry |
-| `ikg:Book` (`partOf` work, `fromEdition`) | Passages |
+| `ikg:Book` (`partOf` work, `fromEdition`), one per edition and book | Passages |
 | `ikg:Verse`/`Narrative`/`Commentary`/... passages | Only with `ikg build --with-passages` |
 | Entities typed `ikg:Person`, `ikg:Concept`, ..., with `iast` and `alias` | Gazetteer |
-| `ikg:Rendering` (`renders` concept, `surface`) | Gazetteer renderings |
-| `ikg:Mention` aggregated per (entity, book, via), with `count` | Mentions |
+| `ikg:Rendering` (`renders` concept, `surface`, `fromEdition`, `count`), one per edition, concept and word actually used | Mentions with `via=rendering` |
+| `ikg:Mention` aggregated per (entity, edition and book, via), with `count` | Mentions |
 | `ikg:coOccursWith` (unweighted) | Graph edges |
 
 Mentions are aggregated per book rather than per passage to keep the default export small
@@ -332,7 +335,7 @@ eval set grows, update the baseline in the same PR and explain why.
 
 ## 12. Testing
 
-`pytest` runs 69 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 75 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer

@@ -31,7 +31,7 @@ def client(tmp_path, monkeypatch):
                       ("USER_WORKS_FILE", "works.yaml"), ("USER_GAZETTEER_FILE", "gazetteer.yaml"),
                       ("PASSAGES_FILE", "processed/passages.jsonl"), ("MENTIONS_FILE", "processed/mentions.jsonl"),
                       ("INDEX_FILE", "processed/bm25.pkl"), ("GRAPH_FILE", "processed/g.graphml"),
-                      ("RDF_FILE", "processed/ikg.ttl")]:
+                      ("RDF_FILE", "processed/ikg.ttl"), ("MANIFEST_FILE", "processed/manifest.json")]:
         monkeypatch.setattr(config, name, tmp_path / rel)
     # Build only user-added works, so the test needs no Gutenberg downloads.
     monkeypatch.setattr(pipeline, "load_works", lambda: [w for w in sources.load_works() if not w.bundled])

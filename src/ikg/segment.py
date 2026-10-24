@@ -8,7 +8,7 @@ commentary and introductions. Keeping that distinction is what lets the QA layer
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ikg.normalize import roman_to_int
@@ -17,6 +17,12 @@ from ikg.sources import Work, strip_gutenberg
 PRIMARY_KINDS = ("verse", "narrative")
 # secondary = modern scholarship (books, papers, lecture transcripts) added by contributors
 KINDS = ("verse", "narrative", "commentary", "introduction", "secondary")
+
+# Passage IDs, scheme v1 (docs/02 D11). The `.pNN` chunk number depends on MAX_CHARS and the
+# sentence splitter in chunk(), so both are frozen for existing editions: changing them
+# renumbers IDs that eval items, fidelity items and curated data refer to, and needs an
+# explicit ID migration map. The build records them in data/processed/manifest.json.
+ID_SCHEME = "v1"
 MAX_CHARS = 1500
 
 
@@ -34,6 +40,11 @@ class Passage:
     translator: str
     source_url: str
     work_title: str = ""
+    # `work` is the text (e.g. mahabharata); `edition` the translation it comes from (D10).
+    edition: str = ""
+    # Where the passage sits in its edition, for citations: e.g. {"book": 5, "section": 33},
+    # {"upanishad": "katha", "part": 1, "verse": 12}; later {"page": 112} or {"start": 754.0}.
+    locator: dict = field(default_factory=dict)
 
     @property
     def ref(self) -> str:
@@ -129,10 +140,11 @@ def parse_mahabharata(text: str, work: Work, source_url: str) -> list[Passage]:
             label = f"Book {book} ({parva.replace('-', ' ').title()})" if parva else f"Book {book}"
             for i, body in enumerate(chunk(paragraphs(buf)), 1):
                 passages.append(Passage(
-                    id=f"mbh.b{book:02d}.s{section:03d}.p{i:02d}", work=work.id,
+                    id=f"{work.id_prefix or 'mbh'}.b{book:02d}.s{section:03d}.p{i:02d}", work=work.id,
                     book=f"{book:02d}", book_label=label, section=section,
                     section_label=f"Section {section}", ordinal=i, kind="narrative",
-                    text=body, translator=work.translator, source_url=source_url))
+                    text=body, translator=work.translator, source_url=source_url,
+                    locator={"book": book, "section": section}))
 
     for line in text.split("\n"):
         stripped = line.strip()
@@ -181,10 +193,11 @@ def parse_ramayana(text: str, work: Work, source_url: str) -> list[Passage]:
             section_label = f"Canto {canto}" + (f": {title}" if title else "")
             for i, body in enumerate(chunk(paragraphs(buf, joiner="\n")), 1):
                 passages.append(Passage(
-                    id=f"ram.b{book}.c{canto:03d}.p{i:02d}", work=work.id, book=str(book),
+                    id=f"{work.id_prefix or 'ram'}.b{book}.c{canto:03d}.p{i:02d}", work=work.id, book=str(book),
                     book_label=label, section=canto, section_label=section_label,
                     ordinal=i, kind="verse", text=body,
-                    translator=work.translator, source_url=source_url))
+                    translator=work.translator, source_url=source_url,
+                    locator={"book": book, "canto": canto}))
 
     for line in lines[start:]:
         clean = PAREN_NOTE_RE.sub("", line).rstrip()
@@ -254,13 +267,16 @@ def parse_upanishads(text: str, work: Work, source_url: str) -> list[Passage]:
             continue
         book_label = "Introduction" if upa == "general" else f"{upa.title()} Upanishad"
         section_label = f"Part {part}" if part else ""
-        base = f"upa.{upa}" + (f".p{part}" if part else "")
+        base = f"{work.id_prefix or 'upa'}.{upa}" + (f".p{part}" if part else "")
 
-        def add(pid, kind, body, ordinal, label=section_label):
+        locator = {"upanishad": upa, **({"part": part} if part else {})}
+
+        def add(pid, kind, body, ordinal, label=section_label, verse=None):
             passages.append(Passage(
                 id=pid, work=work.id, book=upa, book_label=book_label, section=part,
                 section_label=label, ordinal=ordinal, kind=kind, text=body,
-                translator=work.translator, source_url=source_url))
+                translator=work.translator, source_url=source_url,
+                locator={**locator, **({"verse": verse} if verse else {})}))
 
         if mode == "intro" or not verse:
             for i, body in enumerate(chunk(paras), 1):
@@ -277,9 +293,10 @@ def parse_upanishads(text: str, work: Work, source_url: str) -> list[Passage]:
             vid = f"{base}.v{int(verse):02d}"
             vlabel = ", ".join(filter(None, [section_label, f"Verse {verse}"]))
             ordinal = int(verse)
-        add(vid, "verse", "\n\n".join(paras[:split]), ordinal, vlabel)
+        vloc = verse if verse.startswith("peace") else int(verse)
+        add(vid, "verse", "\n\n".join(paras[:split]), ordinal, vlabel, vloc)
         for i, body in enumerate(chunk(paras[split:]), 1):
-            add(f"{vid}.c{i}", "commentary", body, ordinal, vlabel)
+            add(f"{vid}.c{i}", "commentary", body, ordinal, vlabel, vloc)
     return passages
 
 
@@ -302,10 +319,11 @@ def parse_vishnu_purana(text: str, work: Work, source_url: str) -> list[Passage]
         if part and section and buf:
             for i, body in enumerate(chunk(paragraphs(buf)), 1):
                 passages.append(Passage(
-                    id=f"vp.b{part}.s{section:03d}.p{i:02d}", work=work.id, book=str(part),
+                    id=f"{work.id_prefix or 'vp'}.b{part}.s{section:03d}.p{i:02d}", work=work.id, book=str(part),
                     book_label=f"Part {part}", section=section,
                     section_label=f"Section {section}", ordinal=i, kind="narrative",
-                    text=body, translator=work.translator, source_url=source_url))
+                    text=body, translator=work.translator, source_url=source_url,
+                    locator={"part": part, "section": section}))
 
     for line in lines[start:]:
         if VP_NOTES_RE.match(line):
@@ -349,10 +367,11 @@ def parse_generic(text: str, work: Work, source_url: str, file_index: int = 1) -
     def flush():
         for i, body in enumerate(chunk(paragraphs(buf)), 1):
             passages.append(Passage(
-                id=f"{work.id}.f{file_index}.b{book}.s{section:03d}.p{i:02d}", work=work.id,
+                id=f"{work.id_prefix or work.id}.f{file_index}.b{book}.s{section:03d}.p{i:02d}", work=work.id,
                 book=f"{file_index}.{book}", book_label=book_label or f"Part {book}",
                 section=section, section_label=section_label, ordinal=i, kind=work.kind,
-                text=body, translator=work.translator, source_url=source_url))
+                text=body, translator=work.translator, source_url=source_url,
+                locator={"file": file_index, "book": book, "section": section}))
 
     def has_text():
         return any(line.strip() for line in buf)
@@ -405,9 +424,10 @@ def segment_work(work: Work, raw_dir: Path | None = None) -> list[Passage]:
             passages.extend(parse_generic(text, work, url, file_index=n))
         else:
             passages.extend(parser(text, work, url))
-    title = WORK_LABELS.get(work.id, work.title)
+    title = WORK_LABELS.get(work.work_id, work.title)
     for p in passages:
-        p.work_title = title
+        # Parsers build IDs from the registry entry; the passage records the text and edition.
+        p.work, p.edition, p.work_title = work.work_id, work.edition_id, title
     return passages
 
 

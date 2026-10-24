@@ -16,6 +16,7 @@ MENTIONS_FILE = PROCESSED_DIR / "mentions.jsonl"
 INDEX_FILE = PROCESSED_DIR / "bm25.pkl"
 GRAPH_FILE = PROCESSED_DIR / "cooccurrence.graphml"
 RDF_FILE = PROCESSED_DIR / "ikg.ttl"
+MANIFEST_FILE = PROCESSED_DIR / "manifest.json"  # what the build was made from (D11)
 
 REPORTS_DIR = Path("reports")
 EVAL_FILE = Path("eval") / "questions.jsonl"

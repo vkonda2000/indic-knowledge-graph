@@ -1,12 +1,18 @@
 # Source registry. Every passage in the corpus carries its work, translator and source URL,
 # so answers can always be traced back to a specific public-domain edition.
 #
+# Each entry is one edition (translation) of a work (text). `id` is the registry key and, by
+# default, the work id that filters, gazetteer scoping and graph weights use. `edition` names
+# the translation; it must be unique. To add a second translation of a text already here, give
+# it its own `id` and `edition` and set `work:` to the existing work id (docs/02 D10).
+#
 # To add a work: add an entry here and a parser in ikg/segment.py (keyed by `parser`).
 # Each Gutenberg file is pinned by `sha256`: `ikg fetch` and `ikg build` refuse a file whose
 # contents differ, so a re-edited upstream text can't silently change passages or eval results.
 
 works:
   - id: upanishads
+    edition: paramananda-1919
     title: The Upanishads (Isa, Katha, Kena)
     translator: Swami Paramananda
     year: 1919
@@ -19,6 +25,7 @@ works:
       verse text (kind=verse) from commentary (kind=commentary) and introductions.
 
   - id: mahabharata
+    edition: ganguli-1883
     title: The Mahabharata of Krishna-Dwaipayana Vyasa
     translator: Kisari Mohan Ganguli
     year: 1883-1896
@@ -34,6 +41,7 @@ works:
         sha256: 60de2a2f82f22247fdb72096c7ebbb01b63ad42770506c10f6d7c7a82868e437
 
   - id: ramayana
+    edition: griffith-1870
     title: The Ramayan of Valmiki, translated into English verse
     translator: Ralph T. H. Griffith
     year: 1870-1874
@@ -43,6 +51,7 @@ works:
         sha256: 4310b710a9c6942490bf8270a8a6620f314dcc2adf7b413833596ca9aaebca6f
 
   - id: vishnu_purana
+    edition: dutt-1896
     title: A Prose English Translation of Vishnupuranam
     translator: Manmatha Nath Dutt (after H. H. Wilson)
     year: 1896

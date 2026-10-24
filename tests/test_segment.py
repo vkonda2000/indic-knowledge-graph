@@ -49,6 +49,7 @@ def test_mahabharata_roman_and_arabic_sections():
     assert "42 warriors" in ps[2].text
     assert ps[0].book_label == "Book 1 (Adi Parva)"
     assert ps[2].book_label == "Book 8 (Karna Parva)"
+    assert ps[2].locator == {"book": 8, "section": 1}
 
 
 RAM = """Book I.
@@ -141,6 +142,11 @@ def test_upanishads_separate_verse_commentary_and_introduction():
     assert ps["upa.isa.v01.c1"].text == "The translator explains verse one."
     assert "upa.isa.v02.c1" not in ps
     assert ps["upa.kena.p1.v01"].section_label == "Part 1, Verse 1"
+    # Locators give the citation position; the commentary shares its verse's locator.
+    assert ps["upa.kena.p1.v01"].locator == {"upanishad": "kena", "part": 1, "verse": 1}
+    assert ps["upa.isa.v01.c1"].locator == {"upanishad": "isa", "verse": 1}
+    assert ps["upa.isa.peace"].locator == {"upanishad": "isa", "verse": "peace"}
+    assert ps["upa.isa.intro01"].locator == {"upanishad": "isa"}
 
 
 VP = """PART I.
@@ -183,3 +189,38 @@ def test_chunk_packs_paragraphs_and_splits_long_ones():
     assert chunks[0] == "short one\n\nshort two"
     assert all(len(c) <= 500 for c in chunks)
     assert "".join(chunks).count("Sentence number") == 200
+
+
+def test_segment_work_records_work_and_edition(tmp_path):
+    from ikg.segment import segment_work
+    work = make_work("mahabharata-dutt", parser="mahabharata")
+    work.work, work.edition, work.files = "mahabharata", "dutt-1895", [{"gutenberg": 1}]
+    work.id_prefix = "mbhd"  # a second edition of a bundled text needs its own ID prefix (D11)
+    (tmp_path / "pg1.txt").write_text(MBH, encoding="utf-8")
+    ps = segment_work(work, raw_dir=tmp_path)
+    assert {(p.work, p.edition) for p in ps} == {("mahabharata", "dutt-1895")}
+    assert ps[0].work_title == "Mahabharata"
+    ganguli = {p.id for p in parse_mahabharata(MBH, make_work("mahabharata"), "url")}
+    assert ps[0].id == "mbhd.b01.s001.p01" and not ganguli & {p.id for p in ps}
+
+
+# A fixed text and the exact chunks v1 makes of it. Passage IDs number these chunks, so any
+# change to chunk(), the sentence splitter or MAX_CHARS that fails this test renumbers IDs
+# for every edition and needs an ID migration map (D11).
+SNAPSHOT_PARAS = [
+    "First short paragraph.",
+    "Second paragraph. " * 60,
+    "Third (with a quotation). \"Then he spoke!\" And it ended; the end. " * 25,
+    "Last.",
+]
+
+
+SNAPSHOT_LENGTHS = [1104, 1494, 162]
+SNAPSHOT_PATTERN = r"(?:(?<=[.!?;])|(?<=[.!?;][\"')\]]))\s+(?=[\"'(A-Z])"
+
+
+def test_chunking_v1_snapshot():
+    from ikg.segment import _SENTENCE_END_RE
+    chunks = chunk(SNAPSHOT_PARAS)
+    assert [len(c) for c in chunks] == SNAPSHOT_LENGTHS
+    assert _SENTENCE_END_RE.pattern == SNAPSHOT_PATTERN

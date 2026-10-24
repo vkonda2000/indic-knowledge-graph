@@ -216,7 +216,7 @@ pytest
 ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-69 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+75 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
 matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
 (checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
 citation handling, model choice and cost with a mocked Claude client, and the web app end to end: contribute, review,
