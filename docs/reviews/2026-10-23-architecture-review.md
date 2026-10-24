@@ -51,9 +51,10 @@ and named curator tokens with a provenance log before Phase 2.
 
 ## Fix status
 
-A2, A3 and A8 were fixed on 2026-10-23 (branch `fix/answer-cost-and-grounding`), together with
-the `max_tokens` and `primary_only` parts of A10. A1, A4–A7 (A7 done in PR #8), A9 and the rest
-of A10 are tracked in 06 §2.
+A2, A3 and A8 were fixed on 2026-10-23 (PR #9), together with the `max_tokens` and `primary_only`
+parts of A10; A7 in PR #8; A4 in PR #14; A1 and A6 in the atomic-build PR (L19). B1, B2 and part of
+B4 by D10/D11 (PR #11); B3 by section-level evaluation (PR #12). A5, A9 and the rest of A10 are
+tracked in 06 §2.
 
 ## Reviewer's suggested first steps
 

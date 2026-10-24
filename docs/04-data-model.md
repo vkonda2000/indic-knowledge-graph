@@ -87,7 +87,9 @@ All paths are under `IKG_DATA` (default `data/`) unless noted.
 | `ontology/ikg.ttl` | Turtle/OWL | developers | people, SPARQL tools | yes |
 | `eval/questions.jsonl` | JSONL | developers | `evaluate` | yes |
 | `eval/baseline.json` | JSON | developers | `eval --check`, CI | yes |
-| `processed/manifest.json` | JSON | `build` | people, future builds | no |
+| `processed/manifest.json` | JSON: ID scheme, chunking, editions and sources, and a SHA-256 for each artefact | `build` (written last) | `Runtime` (verifies), people | no |
+| `processed/gazetteer.yaml` | YAML, a copy of the gazetteer the build used | `build` | `Runtime`, `analyze` | no |
+| `processed/.build.lock` | Text (process ID), present only during a build | `build` | `build` | no |
 | `works.yaml` | YAML | web admin / contribute | `sources` | no |
 | `gazetteer.yaml` | YAML | web admin gazetteer editor | `entities` (takes precedence) | no |
 | `raw/pg<n>.txt` | Gutenberg text | `fetch` | `segment` | no |

@@ -31,7 +31,8 @@ def client(tmp_path, monkeypatch):
                       ("USER_WORKS_FILE", "works.yaml"), ("USER_GAZETTEER_FILE", "gazetteer.yaml"),
                       ("PASSAGES_FILE", "processed/passages.jsonl"), ("MENTIONS_FILE", "processed/mentions.jsonl"),
                       ("INDEX_FILE", "processed/bm25.pkl"), ("GRAPH_FILE", "processed/g.graphml"),
-                      ("RDF_FILE", "processed/ikg.ttl"), ("MANIFEST_FILE", "processed/manifest.json")]:
+                      ("RDF_FILE", "processed/ikg.ttl"), ("MANIFEST_FILE", "processed/manifest.json"),
+                      ("GAZETTEER_SNAPSHOT_FILE", "processed/gazetteer.yaml"), ("BUILD_LOCK_FILE", "processed/.build.lock")]:
         monkeypatch.setattr(config, name, tmp_path / rel)
     # Build only user-added works, so the test needs no Gutenberg downloads.
     monkeypatch.setattr(pipeline, "load_works", lambda: [w for w in sources.load_works() if not w.bundled])
@@ -370,3 +371,73 @@ def test_broken_registry_shows_a_notice_not_a_500(client, text):
     login(client)
     assert "The work registry is invalid" in client.get("/admin").text
     assert client.post("/admin/gutenberg", data={"gutenberg_id": "1", "title": "T"}).status_code == 200
+
+
+def test_failed_rebuild_leaves_the_previous_build_intact(client, monkeypatch):
+    build_sample(client)
+    before = config.PASSAGES_FILE.read_bytes()
+
+    def broken(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(pipeline, "save_graph", broken)  # fails after passages and mentions were written
+    login(client)
+    client.post("/admin/rebuild")
+    job = client.app_ref.state.job
+    deadline = time.time() + 30
+    while job.state == "running" and time.time() < deadline:
+        time.sleep(0.1)
+    assert job.state == "error" and "disk full" in job.error
+    assert config.PASSAGES_FILE.read_bytes() == before
+    assert not list(config.PASSAGES_FILE.parent.glob("*.tmp"))
+    pipeline.Runtime.load()  # the old build still verifies against its manifest
+    assert not config.BUILD_LOCK_FILE.exists()
+    assert "Arjuna" in client.get("/api/search", params={"q": "Arjuna"}).text
+
+
+def _rebuild_and_wait(client):
+    login(client)
+    client.post("/admin/rebuild")
+    job = client.app_ref.state.job
+    deadline = time.time() + 30
+    while job.state == "running" and time.time() < deadline:
+        time.sleep(0.1)
+    return job
+
+
+def test_swap_failure_is_reported_and_the_site_keeps_serving(client, monkeypatch):
+    build_sample(client)
+    real, calls = pipeline._replace, []
+
+    def flaky(src, dst, attempts=10):
+        calls.append(dst)
+        if len(calls) == 3:  # fails part-way through swapping the artefacts in
+            raise PermissionError("file in use")
+        real(src, dst, attempts)
+
+    monkeypatch.setattr(pipeline, "_replace", flaky)
+    # Change the input, so the new artefacts differ (an identical rebuild swaps in identical files).
+    bundled = config.package_file("gazetteer.yaml").read_text(encoding="utf-8")
+    config.USER_GAZETTEER_FILE.write_text(
+        bundled + "  - {id: kurukshetra_field, type: Place, label: The field, aliases: [field]}\n", encoding="utf-8")
+    job = _rebuild_and_wait(client)
+    assert job.state == "error" and "run the build again" in job.error
+    with pytest.raises(ValueError, match="does not match the build manifest"):
+        pipeline.Runtime.verify()  # the mixed files on disk are refused, not served
+    assert not list(config.PASSAGES_FILE.parent.glob("*.tmp"))
+    assert "Arjuna" in client.get("/api/search", params={"q": "Arjuna"}).text  # the loaded build still serves
+    monkeypatch.setattr(pipeline, "_replace", real)
+    assert _rebuild_and_wait(client).state == "done"  # and a rebuild recovers
+    pipeline.Runtime.verify()
+
+
+def test_a_build_that_cannot_be_loaded_keeps_the_previous_one_serving(client, monkeypatch):
+    build_sample(client)
+
+    def refuse(cls):
+        raise ValueError("cannot load")
+
+    monkeypatch.setattr(pipeline.Runtime, "load", classmethod(refuse))
+    job = _rebuild_and_wait(client)
+    assert job.state == "error" and "still serving the previous one" in job.error
+    assert "Arjuna" in client.get("/api/search", params={"q": "Arjuna"}).text

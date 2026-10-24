@@ -33,8 +33,8 @@ def _runtime() -> Runtime:
         return Runtime.load()
     except FileNotFoundError as exc:
         sys.exit(str(exc))
-    except ValueError as exc:  # an invalid gazetteer
-        sys.exit(f"Gazetteer error: {exc}")
+    except ValueError as exc:  # artefacts that don't match the manifest, or an invalid snapshot
+        sys.exit(f"Cannot load the built corpus: {exc}")
 
 
 def cmd_fetch(args):
@@ -52,7 +52,16 @@ def cmd_build(args):
         sys.exit(f"Build failed: {exc}")
 
 
+def _verified():
+    """Exit with a clear message unless the build on disk is complete and matches its manifest."""
+    try:
+        Runtime.verify()
+    except (FileNotFoundError, ValueError) as exc:
+        sys.exit(str(exc))
+
+
 def cmd_stats(args):
+    _verified()
     passages = passages_from_disk()
     by_work = Counter(p.work for p in passages)
     kinds = Counter((p.work, p.kind) for p in passages)
@@ -85,8 +94,9 @@ def cmd_ask(args):
 
 def cmd_analyze(args):
     from ikg.analysis import write_report
-    from ikg.entities import Gazetteer, read_mentions
-    path = write_report(passages_from_disk(), read_mentions(config.MENTIONS_FILE), Gazetteer.load(),
+    from ikg.entities import read_mentions
+    rt = _runtime()  # checks the build; its gazetteer is the one the mentions came from
+    path = write_report(passages_from_disk(), read_mentions(config.MENTIONS_FILE), rt.gazetteer,
                         config.REPORTS_DIR)
     print(f"Wrote {path}")
 
@@ -117,6 +127,7 @@ def cmd_eval(args):
 
 def cmd_sparql(args):
     from rdflib import Graph
+    _verified()
     g = Graph()
     g.parse(config.RDF_FILE, format="turtle")
     query = args.query

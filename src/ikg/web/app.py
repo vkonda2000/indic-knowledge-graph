@@ -185,7 +185,8 @@ class BuildJob:
         def work():
             try:
                 self.stats = build(log=self.log.append)
-                on_success()
+                if error := on_success():
+                    raise RuntimeError(f"the new build could not be loaded ({error}); still serving the previous one")
                 self.state = "done"
             except Exception as exc:  # surface any failure in the admin UI
                 self.state, self.error = "error", str(exc)
@@ -257,13 +258,19 @@ def create_app() -> FastAPI:
     job = BuildJob()
     state = {"runtime": None, "error": "", "generation": 0}
 
-    def reload_runtime():
-        state["generation"] += 1
+    def reload_runtime() -> str:
+        """Load the build on disk. If that fails while a build is already being served, keep serving
+        it and return the error, so a bad rebuild can't take the site down."""
         try:
-            state["runtime"], state["error"] = Runtime.load(), ""
+            runtime = Runtime.load()
         except Exception as exc:
-            state["runtime"], state["error"] = None, str(exc)
+            if state["runtime"] is None:
+                state["error"] = str(exc)
+            return str(exc)
+        state["generation"] += 1
+        state["runtime"], state["error"] = runtime, ""
         answer_cache.clear()  # cached answers cite passages of the previous build
+        return ""
 
     reload_runtime()
 

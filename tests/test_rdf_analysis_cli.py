@@ -15,6 +15,7 @@ from ikg.analysis import write_report
 from ikg.entities import Gazetteer, extract, write_mentions
 from ikg.evaluate import regressions
 from ikg.graph import DATA, IKG, build_cooccurrence, save_graph, to_rdf
+from ikg.pipeline import artefacts, write_manifest
 from ikg.retrieve import BM25Index
 from ikg.segment import write_passages
 
@@ -121,15 +122,20 @@ def built(tmp_path, monkeypatch, gazetteer):
     """A small built corpus on disk, as `ikg build` would leave it."""
     for name, rel in [("USER_GAZETTEER_FILE", "gazetteer.yaml"), ("PASSAGES_FILE", "passages.jsonl"),
                       ("MENTIONS_FILE", "mentions.jsonl"), ("INDEX_FILE", "bm25.pkl"),
-                      ("GRAPH_FILE", "g.graphml")]:
+                      ("GRAPH_FILE", "g.graphml"), ("GAZETTEER_SNAPSHOT_FILE", "snapshot.yaml"),
+                      ("MANIFEST_FILE", "manifest.json"), ("RDF_FILE", "ikg.ttl")]:
         monkeypatch.setattr(config, name, tmp_path / rel)
     entities = [{k: v for k, v in vars(e).items() if v} for e in gazetteer.entities.values()]
-    config.USER_GAZETTEER_FILE.write_text(yaml.safe_dump({"entities": entities}), encoding="utf-8")
+    text = yaml.safe_dump({"entities": entities})
+    config.USER_GAZETTEER_FILE.write_text(text, encoding="utf-8")
+    config.GAZETTEER_SNAPSHOT_FILE.write_text(text, encoding="utf-8")
     mentions = extract(PASSAGES, gazetteer)
     write_passages(PASSAGES, config.PASSAGES_FILE)
     write_mentions(mentions, config.MENTIONS_FILE)
     BM25Index(PASSAGES).save(config.INDEX_FILE)
     save_graph(build_cooccurrence(mentions, gazetteer), config.GRAPH_FILE)
+    files = {k: p for k, p in artefacts().items() if k != "rdf"}  # this fixture writes no RDF
+    write_manifest([], PASSAGES, files)
 
 
 def test_cli_stats(built, capsys):
@@ -149,7 +155,7 @@ def test_cli_search(built, capsys):
 
 def test_cli_search_without_build(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "PASSAGES_FILE", tmp_path / "missing.jsonl")
-    with pytest.raises(SystemExit, match="No built corpus"):
+    with pytest.raises(SystemExit, match="No complete built corpus"):
         cli.main(["search", "anything"])
 
 
@@ -191,12 +197,41 @@ def test_gazetteer_repeat_within_one_entity_keeps_wider_scope():
     assert [h[0] for h in gz.find("Rama spoke.", work="mahabharata")] == ["rama"]
 
 
-def test_cli_reports_invalid_gazetteer(built):
+def test_runtime_uses_the_gazetteer_the_build_used(built, capsys):
+    """Editing (even breaking) the gazetteer after a build changes nothing until the next build (A1)."""
     config.USER_GAZETTEER_FILE.write_text(yaml.safe_dump({"entities": [
         {"id": "a", "type": "Person", "label": "A", "aliases": ["x"]},
         {"id": "b", "type": "Person", "label": "B", "aliases": ["x"]}]}), encoding="utf-8")
-    with pytest.raises(SystemExit, match="Gazetteer error"):
+    cli.main(["search", "Sita forest", "-k", "1"])
+    assert "ram.b01.s001.p01" in capsys.readouterr().out
+    from ikg.pipeline import Runtime
+    assert "sita" in Runtime.load().gazetteer.entities
+
+
+def test_runtime_refuses_artefacts_that_do_not_match_the_manifest(built):
+    with config.MENTIONS_FILE.open("a", encoding="utf-8") as f:
+        f.write('{"entity": "sita", "passage": "x", "work": "w", "surface": "Sita", "via": "alias"}\n')
+    with pytest.raises(SystemExit, match="mentions.jsonl does not match the build manifest"):
         cli.main(["search", "anything"])
+    config.MANIFEST_FILE.write_text('{"id_scheme": "v1"}', encoding="utf-8")  # an older build: no checksums
+    with pytest.raises(SystemExit, match="older version"):
+        cli.main(["search", "anything"])
+
+
+def test_build_lock(tmp_path, monkeypatch):
+    import os
+    from ikg.pipeline import BuildError, build_lock
+    monkeypatch.setattr(config, "BUILD_LOCK_FILE", tmp_path / ".build.lock")
+    with build_lock():
+        assert config.BUILD_LOCK_FILE.exists()
+        with pytest.raises(BuildError, match="another build is running"):
+            with build_lock():
+                pass
+    assert not config.BUILD_LOCK_FILE.exists()
+    config.BUILD_LOCK_FILE.write_text("1234\n")
+    os.utime(config.BUILD_LOCK_FILE, (0, 0))  # left by a crash long ago
+    with build_lock():
+        pass
 
 
 def test_fetch_verifies_pinned_checksum(tmp_path, monkeypatch):
@@ -260,7 +295,7 @@ def test_build_manifest_records_id_scheme_and_editions(tmp_path, monkeypatch):
     work.edition, work.files = "ganguli-1883", [{"gutenberg": 1, "sha256": "ab" * 32}]
     p = make_passage("mbh.b01.s001.p01", "mahabharata", "text")
     p.edition = "ganguli-1883"
-    write_manifest([work], [p])
+    write_manifest([work], [p], files={})
     m = json.loads(config.MANIFEST_FILE.read_text(encoding="utf-8"))
     assert m["id_scheme"] == "v1" and m["chunking"]["max_chars"] == 1500 and m["passages"] == 1
     assert m["chunking"]["sentence_end"]  # the splitter pattern is recorded too

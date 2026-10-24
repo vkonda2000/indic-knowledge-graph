@@ -290,7 +290,9 @@ including two prompt-injection attempts.
 - **Background rebuild.** `BuildJob` uses a non-blocking lock, so only one rebuild runs at a
   time. It runs `build()` in a daemon thread, appends log lines to a list that the admin page
   polls through `/api/build/status`, and on success swaps in a new `Runtime`. Requests in
-  flight keep the old runtime object, so there is no partial state.
+  flight keep the old runtime object, so there is no partial state. `build()` itself also takes
+  the cross-process build lock and writes all-or-nothing ([02 §3.1](02-architecture.md#31-build-offline-deterministic)),
+  so a failed rebuild leaves the previous build in place.
 - **Rendering.** Jinja2 autoescaping is on for all HTML templates, so user-supplied titles and
   notes are escaped (covered by a test). The graph page loads Cytoscape 3.30.2 from jsDelivr;
   `graph.js` builds DOM nodes with `textContent`, never `innerHTML`.
@@ -342,7 +344,7 @@ eval set grows, update the baseline in the same PR and explain why.
 
 ## 12. Testing
 
-`pytest` runs 92 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 97 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer
