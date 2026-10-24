@@ -52,7 +52,7 @@ Each bundled edition has a different layout, so each has a parser keyed by `work
 | `ramayana` | `BOOK IV.` → `Canto XII. <title>` | `ram.b4.c012.p01` | verse | Starts at the BOOK heading just before the first canto, skipping the table of contents. Stops at `APPENDIX.` Strips `(12)` note markers. Keeps line breaks inside verse |
 | `upanishads` | Upanishad name → `Part First` → Roman verse number → `Peace Chant` | `upa.katha.p1.v19`, `.c1` for commentary, `.intro01`, `.peace` | verse / commentary / introduction | The first paragraph after a verse number is the verse and the rest is commentary. The first occurrence of an Upanishad's name opens its introduction, the second opens its text. Peace chants split at "PEACE!" Part headings are matched case-insensitively (the Kena's last is "Part fourth"). |
 | `vishnu_purana` | `PART I.` → `SECTION XII.` | `vp.b1.s012.p01` | narrative | Stops at the footnotes (`[1] `). Strips `[n]` markers. Section numbers are forced to increase, to work around a typo in Part V |
-| `generic` | Level 1: Markdown `#` or `BOOK/PART/VOLUME/KANDA/PARVA n`. Level 2: `##` or `CHAPTER/SECTION/CANTO/ADHYAYA/SARGA n`. Headings are at most 100 characters | `<work>.f1.b2.s003.p01` | taken from the work (chosen on upload) | Text with no headings becomes one book with one section. Multi-file works get `f<n>` per file. Used for all uploads and added Gutenberg texts unless an admin picks another parser |
+| `generic` | Level 1: Markdown `#` or `BOOK/PART/VOLUME/KANDA/PARVA n`. Level 2: `##` or `CHAPTER/SECTION/CANTO/ADHYAYA/SARGA n`. Headings are at most 100 characters | `<work>.f1.b2.s003.p01` | taken from the work (chosen on upload) | Text with no headings becomes one book with one section. Multi-file works get `f<n>` per file. Used for all uploads and added Gutenberg texts unless an admin picks another parser. For a PDF, the build reads each page (`read_pdf`), joins them with a blank line exactly as before, and passes the page of every line beside the text (`line_pages`), never inside it, so the paragraphs, chunks and IDs are exactly what the text alone gives and nothing in a document can forge a page. Each passage records the pages its paragraphs came from (`chunk_sources` mirrors `chunk`), and the PDF's printed page labels when it defines them |
 
 `read_source()` extracts PDF text with `pypdf` and runs `strip_gutenberg` on text files.
 `segment_work()` sets `work_title` on each passage. The bundled works use fixed display labels
@@ -385,7 +385,7 @@ expert-approved, current-corpus items are scored; the command refuses to run oth
 
 ## 12. Testing
 
-`pytest` runs 127 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 132 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer

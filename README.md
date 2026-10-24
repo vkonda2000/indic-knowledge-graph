@@ -100,7 +100,10 @@ JSON API: `GET /api/search?q=`, `POST /api/ask {"question": ...}`, `GET /api/gra
 **Uploaded material** is split into sections on common headings (`BOOK 1`, `PART II`,
 `CHAPTER 3`, `SECTION IV`, `CANTO 12`, or Markdown `#` and `##`). Text without headings
 becomes one section. Choose the passage kind on upload: scholarship (`secondary`), primary
-prose (`narrative`) or verse, or `commentary`.
+prose (`narrative`) or verse, or `commentary`. Passages from a PDF keep their page numbers, so
+answers cite them as, for example, *Gita notes, Part 1, Chapter 2, p. 14 [secondary] (by A. Scholar)*,
+or *pp. 14–15*; when the PDF defines printed page labels (roman-numbered front matter, a book that
+starts at page 1 on its fifth sheet), those are used.
 
 ## Command line
 
@@ -240,7 +243,7 @@ pytest
 ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-127 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+132 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
 matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
 (checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
 citation handling, model choice and cost with a mocked Claude client, and the web app end to end: contribute, review,

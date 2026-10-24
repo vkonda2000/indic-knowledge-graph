@@ -242,3 +242,100 @@ def test_upanishad_part_heading_is_case_insensitive():
     ps = {p.id: p for p in parse_upanishads(text, make_work("upanishads"), "url")}
     assert ps["upa.kena.p4.v01"].text == "She (Uma) said: It is Brahman."
     assert ps["upa.kena.p4.v01"].locator == {"upanishad": "kena", "part": 4, "verse": 1}
+
+
+def _text_pdf(pages: list[str], page_labels: str = "") -> bytes:
+    """A minimal PDF with one line of text per page (pypdf can read but not write text).
+    `page_labels` is an optional /PageLabels number tree, e.g. "0 << /S /r >> 2 << /S /D >>"."""
+    catalog = "<< /Type /Catalog /Pages 2 0 R" + (f" /PageLabels << /Nums [{page_labels}] >>" if page_labels else "") + " >>"
+    objs = [catalog, None, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    kids = []
+    for text in pages:
+        stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode()
+        objs.append(f"<< /Length {len(stream)} >>\nstream\n{stream.decode()}\nendstream")
+        objs.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> "
+                    f"/Contents {len(objs)} 0 R >>")
+        kids.append(f"{len(objs)} 0 R")
+    objs[1] = f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(kids)} >>"
+    out, offsets = b"%PDF-1.4\n", []
+    for n, body in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f"{n} 0 obj\n{body}\nendobj\n".encode()
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    out += "".join(f"{o:010d} 00000 n \n" for o in offsets).encode()
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return out
+
+
+def test_page_tracking_changes_no_paragraph_chunk_or_id():
+    from ikg.segment import _paragraphs_with_pages, chunk_sources, join_pages, paragraphs, parse_generic
+    pages = ["# Book One\n\n## Chapter 1\n\n" + ("A long sentence about dharma. " * 40),
+             "Second page text continues.\n\nAnother paragraph.", "", "## Chapter 2\n\nThird page.",
+             # Content that a text marker could be confused with: none of it may change anything.
+             "\x0cpage 7\nform feeds\x0c and a NUL\x00 in the text layer", "   ", "Last page."]
+    text, line_pages = join_pages(pages)
+    lines = text.split("\n")
+    paras, spans = _paragraphs_with_pages(lines, line_pages)
+    assert paras == paragraphs(lines) and len(spans) == len(paras)
+    assert len(chunk_sources(paras)) == len(chunk(paras))
+    work = make_work("notes", "generic")
+    before = parse_generic(text, work, "u")
+    after = parse_generic(text, work, "u", line_pages=line_pages)
+    assert [(p.id, p.text) for p in before] == [(p.id, p.text) for p in after]
+    assert all("page" not in p.locator for p in before)
+    assert after[0].locator["page"] == 1
+    assert after[-1].locator["page_end"] == 7 and "page 7" in after[-1].text  # a forged marker is just text
+    spanning = [p for p in after if "page_end" in p.locator]
+    assert spanning, "the long first chapter runs onto page 2"
+    first, last = spanning[0].locator["page"], spanning[0].locator["page_end"]
+    assert f"pp. {first}\u2013{last}" in spanning[0].ref
+
+
+def test_pdf_upload_gets_page_citations(tmp_path):
+    from ikg.segment import parse_generic, read_pdf, read_source
+    path = tmp_path / "book.pdf"
+    path.write_bytes(_text_pdf(["CHAPTER 1", "Arjuna spoke to Krishna.", "CHAPTER 2", "Krishna answered him."]))
+    text, line_pages, labels = read_pdf(path)
+    assert text == read_source(path)  # the text is exactly what it was before page tracking
+    passages = parse_generic(text, make_work("book", "generic"), "upload:book.pdf", line_pages=line_pages,
+                             page_labels=labels)
+    by_text = {p.text: p for p in passages}
+    arjuna = next(p for t, p in by_text.items() if "Arjuna" in t)
+    krishna = next(p for t, p in by_text.items() if "answered" in t)
+    assert arjuna.locator["page"] == 2 and krishna.locator["page"] == 4
+    assert arjuna.section_label == "CHAPTER 1" and arjuna.ref.split(", ")[-1].startswith("p. 2")
+
+
+def test_pdf_page_ranges_and_printed_labels(tmp_path):
+    from ikg.segment import parse_generic, read_pdf
+    path = tmp_path / "book.pdf"
+    # Two front-matter pages numbered i, ii; the body starts again at 1 on the third page.
+    path.write_bytes(_text_pdf(["Preface text.", "More preface.", "CHAPTER 1", "Arjuna spoke.", "He asked again."],
+                               page_labels="0 << /S /r >> 2 << /S /D >>"))
+    text, line_pages, labels = read_pdf(path)
+    assert labels == ["i", "ii", "1", "2", "3"]
+    passages = parse_generic(text, make_work("book", "generic"), "u", line_pages=line_pages, page_labels=labels)
+    preface = next(p for p in passages if "Preface" in p.text)
+    body = next(p for p in passages if "Arjuna" in p.text)
+    assert preface.locator == {**preface.locator, "page": 1, "page_end": 2, "page_label": "i", "page_end_label": "ii"}
+    assert "pp. i\u2013ii" in preface.ref
+    # Physical pages 4-5 carry printed labels 2-3; the citation uses the printed ones.
+    assert body.locator["page"] == 4 and body.locator["page_label"] == "2" and "pp. 2\u20133" in body.ref
+
+
+def test_nul_in_a_pdf_text_layer_does_not_shift_pages(tmp_path):
+    from ikg.segment import read_pdf
+    path = tmp_path / "nul.pdf"
+    path.write_bytes(_text_pdf([r"before\000after", "page two", "page three"]))  # \000 is a NUL in the PDF string
+    text, line_pages, _ = read_pdf(path)
+    assert "\x00" in text and max(line_pages) == 3
+
+
+def test_zero_page_pdf_and_hostile_labels(tmp_path):
+    from ikg.segment import _page_locator, join_pages, parse_generic
+    assert join_pages([]) == ("", [])
+    assert parse_generic("", make_work("e", "generic"), "u", line_pages=[]) == []
+    hostile = "A" * 5000 + "\nINJECTED\x07"
+    loc = _page_locator(1, 1, [hostile])
+    assert len(loc["page_label"]) <= 24 and "\n" not in loc["page_label"]

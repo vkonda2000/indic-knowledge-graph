@@ -43,7 +43,8 @@ class Passage:
     # `work` is the text (e.g. mahabharata); `edition` the translation it comes from (D10).
     edition: str = ""
     # Where the passage sits in its edition, for citations: e.g. {"book": 5, "section": 33},
-    # {"upanishad": "katha", "part": 1, "verse": 12}; later {"page": 112} or {"start": 754.0}.
+    # {"upanishad": "katha", "part": 1, "verse": 12}, {"page": 12, "page_label": "x"} for PDFs;
+    # later {"start": 754.0} for recordings.
     locator: dict = field(default_factory=dict)
 
     @property
@@ -51,6 +52,9 @@ class Passage:
         parts = [self.work_title or WORK_LABELS.get(self.work, self.work), self.book_label]
         if self.section_label:
             parts.append(self.section_label)
+        if page := self.locator.get("page_label") or self.locator.get("page"):
+            end = self.locator.get("page_end_label") or self.locator.get("page_end")
+            parts.append(f"pp. {page}\u2013{end}" if end else f"p. {page}")
         ref = ", ".join(p for p in parts if p)
         if self.kind not in PRIMARY_KINDS:
             ref += f" [{self.kind}]"
@@ -104,6 +108,38 @@ def _split_long(para: str, max_chars: int) -> list[str]:
     if current:
         pieces.append(current)
     return pieces
+
+
+def _paragraphs_with_pages(lines: list[str], pages: list) -> tuple[list[str], list[tuple]]:
+    """paragraphs(lines) plus, for each paragraph, the (first, last) page of its lines."""
+    paras, spans, current, first, last = [], [], [], None, None
+    for line, page in zip(lines + [""], pages + [None]):
+        if line.strip():
+            if not current:
+                first = page
+            current.append(line.strip())
+            last = page
+        elif current:
+            paras.append(" ".join(current))
+            spans.append((first, last))
+            current = []
+    return paras, spans
+
+
+def chunk_sources(paras: list[str], max_chars: int = MAX_CHARS) -> list[list[int]]:
+    """For each chunk that chunk(paras) makes, the indexes of the paragraphs it came from. Mirrors
+    chunk() exactly, so the two always line up."""
+    sources, current, size = [], [], 0
+    for index, para in enumerate(paras):
+        for piece in _split_long(para, max_chars):
+            if current and size + len(piece) > max_chars:
+                sources.append(sorted(set(current)))
+                current, size = [], 0
+            current.append(index)
+            size += len(piece) + 2
+    if current:
+        sources.append(sorted(set(current)))
+    return sources
 
 
 def chunk(paras: list[str], max_chars: int = MAX_CHARS) -> list[str]:
@@ -363,47 +399,101 @@ GEN_L2_RE = re.compile(rf"^(?:##\s+(?P<md>.+)|(?P<kw>(?:CHAPTER|SECTION|CANTO|AD
 MAX_HEADING_CHARS = 100
 
 
-def parse_generic(text: str, work: Work, source_url: str, file_index: int = 1) -> list[Passage]:
+def parse_generic(text: str, work: Work, source_url: str, file_index: int = 1,
+                  line_pages: list[int] | None = None, page_labels: list[str] | None = None) -> list[Passage]:
     """Split on common heading patterns (BOOK/PART ..., CHAPTER/SECTION/CANTO ..., or Markdown
-    # / ##). Text without headings becomes one book with one section."""
+    # / ##). Text without headings becomes one book with one section.
+
+    For a PDF, `line_pages` gives the page of each line of `text` and `page_labels` the printed
+    labels, so passages can cite pages. They travel beside the text, never inside it, so the
+    paragraphs, chunks and passage IDs are exactly what the text alone gives."""
     passages: list[Passage] = []
     book, section = 1, 1
     book_label, section_label = (f"File {file_index}" if file_index > 1 else ""), ""
     buf: list[str] = []
+    buf_pages: list = []
     started_book = False
 
     def heading(m: re.Match) -> str:
         return (m.group("md") or m.group("kw")).strip().rstrip(".")
 
     def flush():
-        for i, body in enumerate(chunk(paragraphs(buf)), 1):
+        # A paragraph split by sentence gives each of its chunks the whole paragraph's page span,
+        # so such a chunk may cite pp. 3-4 when its piece is only on p. 3: a slight over-approximation.
+        paras, spans = _paragraphs_with_pages(buf, buf_pages)
+        for i, (body, sources) in enumerate(zip(chunk(paras), chunk_sources(paras)), 1):
+            locator = {"file": file_index, "book": book, "section": section}
+            if seen := [p for k in sources for p in spans[k] if p is not None]:  # PDFs only
+                locator.update(_page_locator(min(seen), max(seen), page_labels))
             passages.append(Passage(
                 id=f"{work.id_prefix or work.id}.f{file_index}.b{book}.s{section:03d}.p{i:02d}", work=work.id,
                 book=f"{file_index}.{book}", book_label=book_label or f"Part {book}",
                 section=section, section_label=section_label, ordinal=i, kind=work.kind,
-                text=body, translator=work.translator, source_url=source_url,
-                locator={"file": file_index, "book": book, "section": section}))
+                text=body, translator=work.translator, source_url=source_url, locator=locator))
 
     def has_text():
         return any(line.strip() for line in buf)
 
-    for line in text.split("\n"):
+    for n, line in enumerate(text.split("\n")):
         stripped = line.strip()
         if len(stripped) <= MAX_HEADING_CHARS and (m := GEN_L1_RE.match(stripped)):
             flush()
             if started_book or has_text():
                 book += 1
-            started_book, buf = True, []
+            started_book, buf, buf_pages = True, [], []
             book_label, section, section_label = heading(m), 1, ""
         elif len(stripped) <= MAX_HEADING_CHARS and (m := GEN_L2_RE.match(stripped)):
             flush()
             if section_label or has_text():
                 section += 1
-            buf, section_label = [], heading(m)
+            buf, buf_pages, section_label = [], [], heading(m)
         else:
             buf.append(line)
+            buf_pages.append(line_pages[n] if line_pages else None)
     flush()
     return passages
+
+
+def _page_locator(first: int, last: int, labels: list[str] | None) -> dict:
+    """`page` is the PDF's physical page (1 = first); `page_label` its printed label when the PDF
+    defines one that differs (front matter in roman numerals, an offset start)."""
+    loc = {"page": first} | ({"page_end": last} if last != first else {})
+    if labels:
+        label, end_label = _clean_label(labels[first - 1]), _clean_label(labels[last - 1])
+        if label != str(first):
+            loc["page_label"] = label
+        if last != first and end_label != str(last):
+            loc["page_end_label"] = end_label
+    return loc
+
+
+def _clean_label(label: str) -> str:
+    """A printed page label from the PDF itself: untrusted, so keep it short, on one line and
+    printable (it goes into citations and the answer prompt)."""
+    return " ".join("".join(c for c in label if c.isprintable()).split())[:24]
+
+
+def read_pdf(path: Path) -> tuple[str, list[int], list[str]]:
+    """A PDF's text (as read_source gives it), the page of each line, and the page labels."""
+    from ikg.pdftext import pdf_document
+    pages, labels = pdf_document(path.read_bytes())
+    text, line_pages = join_pages(pages)
+    return text, line_pages, labels
+
+
+def join_pages(pages: list[str]) -> tuple[str, list[int]]:
+    """Pages joined by a blank line (exactly as pdf_text joins them), and the page of each line."""
+    if not pages:  # a PDF with no pages yields no passages, as before
+        return "", []
+    text = "\n\n".join(pages)
+    line_pages: list[int] = []
+    for n, page in enumerate(pages, 1):
+        if n > 1:
+            line_pages.append(n)  # the blank line that "\n\n" adds between pages
+        line_pages.extend([n] * len(page.split("\n")))
+    if len(line_pages) != len(text.split("\n")):  # cannot happen for a non-empty list; fail clearly if it does
+        raise ValueError("internal error: PDF page and line counts disagree")
+    return text, line_pages
 
 
 # ---------------------------------------------------------------- driver
@@ -430,6 +520,10 @@ def segment_work(work: Work, raw_dir: Path | None = None) -> list[Passage]:
     for n, (path, url) in enumerate(zip(work.raw_paths(raw_dir), work.source_urls()), 1):
         if not path.exists():
             raise FileNotFoundError(f"{path} is missing; run `ikg fetch` first")
+        if parser is parse_generic and path.suffix.lower() == ".pdf":
+            text, line_pages, labels = read_pdf(path)
+            passages.extend(parse_generic(text, work, url, file_index=n, line_pages=line_pages, page_labels=labels))
+            continue
         text = read_source(path)
         if parser is parse_generic:
             passages.extend(parse_generic(text, work, url, file_index=n))
