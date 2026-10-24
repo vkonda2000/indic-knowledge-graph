@@ -14,6 +14,7 @@ child process bounds what a bad file can cost (review finding A5):
 - Secrets: the child gets a minimal environment, never the API key or admin token.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -36,13 +37,19 @@ if len(reader.pages) > max_pages:
     sys.exit(3)
 parts, size = [], 0
 for page in reader.pages:
-    text = page.extract_text() or ""
+    # Malformed font maps can yield lone surrogates, which can't be stored as UTF-8: replace them.
+    text = (page.extract_text() or "").encode("utf-8", "replace").decode("utf-8")
     size += len(text) + 2
     if size > max_chars:
         sys.stderr.write(f"the PDF's text is longer than the limit of {max_chars:,} characters")
         sys.exit(3)
     parts.append(text)
-sys.stdout.buffer.write("\\n\\n".join(parts).encode("utf-8"))
+try:
+    labels = list(reader.page_labels)
+except Exception:  # no or broken /PageLabels: fall back to page indexes
+    labels = []
+import json
+sys.stdout.buffer.write(json.dumps({"pages": parts, "labels": labels}).encode("utf-8"))
 """
 
 _slots = threading.BoundedSemaphore(config.PDF_MAX_PARALLEL)
@@ -56,7 +63,15 @@ def _child_env() -> dict:
 
 def pdf_text(data: bytes, max_pages: int | None = None, timeout: float | None = None,
              max_chars: int | None = None) -> str:
-    """The text layer of a PDF; raises ValueError for an unreadable, oversized or too slow file."""
+    """The text layer of a PDF, pages separated by a blank line; raises ValueError for an
+    unreadable, oversized or too slow file."""
+    return "\n\n".join(pdf_document(data, max_pages, timeout, max_chars)[0])
+
+
+def pdf_document(data: bytes, max_pages: int | None = None, timeout: float | None = None,
+                 max_chars: int | None = None) -> tuple[list[str], list[str]]:
+    """Each page's text, and each page's printed label (from /PageLabels; empty if the PDF has
+    none). Sent as JSON, so nothing in the text can be mistaken for a page boundary."""
     max_pages = max_pages or config.PDF_MAX_PAGES
     timeout = timeout or config.PDF_TIMEOUT
     max_chars = max_chars or config.PDF_MAX_CHARS
@@ -72,4 +87,6 @@ def pdf_text(data: bytes, max_pages: int | None = None, timeout: float | None = 
     if done.returncode != 0:
         detail = done.stderr.decode("utf-8", errors="replace").strip().splitlines()
         raise ValueError(f"could not read the PDF{': ' + detail[-1] if detail else ''}")
-    return done.stdout.decode("utf-8", errors="replace")
+    out = json.loads(done.stdout.decode("utf-8", errors="replace"))
+    pages, labels = out["pages"], out["labels"]
+    return pages, labels if len(labels) == len(pages) else []

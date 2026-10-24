@@ -132,7 +132,7 @@ elsewhere.
 | `source_url` | string | Gutenberg ebook URL or `upload:<original name>` |
 | `work_title` | string | Display title |
 | `edition` | string | Edition ID: the translation this passage comes from (D10) |
-| `locator` | object | Position in the edition, for citations (D11). Keys by parser: Mahabharata `book`, `section`; Ramayana `book`, `canto`; Upanishads `upanishad`, `part`, `verse` (a number, or `peace`/`peace-close`; commentary shares its verse's); Vishnu Purana `part`, `section`; generic `file`, `book`, `section`. Planned: `page` for books, `start`/`end` seconds for recordings |
+| `locator` | object | Position in the edition, for citations (D11). Keys by parser: Mahabharata `book`, `section`; Ramayana `book`, `canto`; Upanishads `upanishad`, `part`, `verse` (a number, or `peace`/`peace-close`; commentary shares its verse's); Vishnu Purana `part`, `section`; generic `file`, `book`, `section`, plus for PDFs `page` (the physical page, 1 = first sheet), `page_end` when a passage spans pages, and `page_label`/`page_end_label` when the PDF's printed labels differ (citations use the labels). Planned: `start`/`end` seconds for recordings |
 
 ### Mention (`mentions.jsonl`)
 
