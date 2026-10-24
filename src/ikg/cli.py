@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
@@ -29,10 +30,15 @@ def _runtime() -> Runtime:
         return Runtime.load()
     except FileNotFoundError as exc:
         sys.exit(str(exc))
+    except ValueError as exc:  # an invalid gazetteer
+        sys.exit(f"Gazetteer error: {exc}")
 
 
 def cmd_fetch(args):
-    written = fetch(_select_works(args.works), force=args.force)
+    try:
+        written = fetch(_select_works(args.works), force=args.force)
+    except (ValueError, OSError) as exc:
+        sys.exit(f"Fetch failed: {exc}")
     print(f"Downloaded {len(written)} file(s) to {config.RAW_DIR}" if written else "All files already present.")
 
 
@@ -81,7 +87,14 @@ def cmd_analyze(args):
 
 
 def cmd_eval(args):
-    from ikg.evaluate import load_items, run
+    from ikg.evaluate import load_items, regressions, run
+    baseline = None
+    if args.check:
+        if not args.check.exists():
+            sys.exit(f"Baseline file not found: {args.check}")
+        baseline = json.loads(args.check.read_text(encoding="utf-8"))
+        if baseline.get("k", args.k) != args.k:
+            sys.exit(f"Baseline was recorded with k={baseline['k']}; run with -k {baseline['k']}.")
     rt = _runtime()
     result = run(load_items(config.EVAL_FILE), rt.index, rt.gazetteer, rt.passage_entities, k=args.k,
                  llm=args.llm, graph=rt.graph, out_dir=config.EVAL_RESULTS_DIR, expand=not args.no_expand)
@@ -89,6 +102,11 @@ def cmd_eval(args):
         if row["type"] == "retrieval" and not row["hit_at_k"]:
             print(f"MISS  {row['id']}: top={row['retrieved'][:3]}")
     print(json.dumps(result["summary"], indent=2))
+    if baseline is not None:
+        worse = regressions(result["summary"], baseline)
+        if worse:
+            sys.exit("Regression against " + str(args.check) + ":\n  " + "\n  ".join(worse))
+        print(f"No regression against {args.check}.")
 
 
 def cmd_sparql(args):
@@ -148,6 +166,8 @@ def main(argv=None):
     p.add_argument("-k", type=int, default=8)
     p.add_argument("--llm", action="store_true", help="also evaluate answers and citations (calls Claude)")
     p.add_argument("--no-expand", action="store_true", help="ablation: disable knowledge-graph query expansion")
+    p.add_argument("--check", type=Path, metavar="BASELINE",
+                   help="exit non-zero if any metric in this baseline JSON got worse (CI gate)")
     p.set_defaults(func=cmd_eval)
 
     p = sub.add_parser("sparql", help="run a SPARQL query over the RDF export")

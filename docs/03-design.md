@@ -87,7 +87,8 @@ matches only in the Ramayana, because in the Mahabharata "Bharata" is usually a 
 address meaning "descendant of Bharata".
 
 `Gazetteer.from_yaml()` checks the structure, unknown fields and duplicate IDs, and raises
-`ValueError` with the position of the bad entry. The admin editor uses it so that an invalid
+`ValueError` with the position of the bad entry. Building the lookup tables also rejects a
+surface form claimed by two different entities (§4.2). The admin editor uses it so that an invalid
 gazetteer is never saved.
 
 ### 4.2 Matching
@@ -103,8 +104,14 @@ and one case-sensitive:
 - A match whose entity is scoped to other works is discarded.
 
 Each surface form maps to exactly one entity: the lookup tables are keyed by the folded
-surface. If two entities list the same form, the later one silently wins. No duplicates
-exist today (checked), but the validator does not prevent them. This is listed in 06.
+surface, and hold one pattern per entity that uses the form. Two entities may share a form
+only if their `works` scopes are disjoint (e.g. Rama's brother Bharata in the Ramayana and a
+King Bharata in the Mahabharata). Then a match in a passage takes the entity whose scope
+contains the passage's work, and a match in a question (no work) is ambiguous and links to
+neither. Any other clash raises `ValueError` naming both entities, so the admin editor
+refuses to save it and the build fails. This includes a case-sensitive form (`aliases_cs`)
+that another entity also lists case-insensitively, because the case-insensitive pass would
+always take that span. The same form listed twice under one entity keeps the wider scope.
 
 ### 4.3 Outputs
 
@@ -165,7 +172,9 @@ passages this takes milliseconds.
    - reply `NOT_IN_SOURCES` on the first line when the passages are insufficient.
 5. Post-processing:
    - Each citation's `document_index` maps back to a hit. Citations of the graph summary
-     (index ≥ number of hits) are dropped.
+     (index ≥ number of hits) are dropped. The summary is sent with citations enabled, so a
+     sentence the model drew from it stays in the answer with no citation marker. This is a known
+     gap (L20 in [06](06-roadmap.md#2-known-limitations)).
    - Passages are numbered in order of first citation, `[n]` markers are added after each text
      block, and a *Sources* list is appended.
    - `abstained` is set when the text starts with `NOT_IN_SOURCES`.
@@ -278,12 +287,22 @@ including two prompt-injection attempts.
 | `false_abstain_rate` | `--llm` | Answerable questions where the model abstained |
 | `adversarial_abstain_rate` | `--llm` | Adversarial questions where the model abstained |
 
-Each run is written to `eval/results/run-<timestamp>.json` for regression comparison. Current
-offline results and their interpretation are in [06 §1](06-roadmap.md#1-measured-baseline).
+Each run is written to `eval/results/run-<timestamp>.json` (git-ignored). Current offline
+results and their interpretation are in [06 §1](06-roadmap.md#1-measured-baseline).
+
+**Regression gate.** `eval/baseline.json` is committed and holds the metrics the project
+promises not to lose, with the `k` they were measured at. `ikg eval --check eval/baseline.json`
+compares the run's summary with it through `evaluate.regressions()` and exits non-zero if any
+metric got worse. Higher is better for every metric except `false_abstain_rate`. The item
+counts `n_retrieval` and `n_adversarial` are gated too, so deleting a failing question doesn't
+pass. A metric missing from the run, or a non-numeric baseline value, also fails the check. CI runs the check on every pull request
+([02 §5](02-architecture.md#5-deployment)). When a change legitimately moves a number, or the
+eval set grows, update the baseline in the same PR and explain why.
 
 ## 12. Testing
 
-`pytest` runs 37 tests in about 3 s, with no network or API key needed:
+`pytest` runs 56 tests in about 3 s, with no network or API key needed. CI runs them on
+Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer
   matching, retrieval and graph, QA citation mapping with a fake client, screening with a
@@ -292,4 +311,12 @@ offline results and their interpretation are in [06 §1](06-roadmap.md#1-measure
   contribute → screen → approve → rebuild → search → graph → entity → passage. They also
   cover admin auth, escaping, gazetteer validation, rate limits and upload limits.
 
-Not covered by tests: the RDF export (`to_rdf`), the analysis report, and the CLI commands.
+- RDF, analysis and CLI tests (`tests/test_rdf_analysis_cli.py`): key triples of the RDF
+  export, and a check that every `ikg:` term it uses is declared in `ontology/ikg.ttl`; the
+  analysis report's sections and counts; `ikg stats` and `ikg search` on a small corpus built
+  on disk; surface-form clash rules; checksum pinning in `fetch`; the eval regression check
+  and the committed baseline.
+
+Not covered by tests: `ikg fetch`, `build`, `ask`, `sparql` and `serve` as CLI commands
+(the functions behind `build` and `ask` are tested), and parsing of the full Gutenberg texts,
+which the CI eval gate exercises instead.

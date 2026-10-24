@@ -189,7 +189,18 @@ Current supported topology:
 - `ikg serve` binds `127.0.0.1` by default. Put a reverse proxy (Caddy, nginx) in front for
   HTTPS. uvicorn trusts `X-Forwarded-For` from 127.0.0.1, so per-client rate limits work.
 - Configuration is through environment variables only (listed in [05](05-interfaces.md#4-environment-variables)).
-- There is no container image or CI pipeline yet; see [06](06-roadmap.md).
+- There is no container image yet; see [06](06-roadmap.md).
+
+**Continuous integration** (`.github/workflows/ci.yml`, GitHub Actions) runs on every pull
+request and on pushes to `main`:
+
+| Job | What it does | Fails when |
+|---|---|---|
+| `tests` | `pytest` on Python 3.10 and 3.12; no network or API key | Any test fails |
+| `eval-gate` | Fetches the bundled Gutenberg texts and verifies their checksums (cached on `sources.yaml`), runs `ikg build`, then `ikg eval --check eval/baseline.json` | An offline retrieval metric falls below the committed baseline |
+
+The gate covers offline retrieval metrics only. Answer-level metrics (`--llm`) call the Claude
+API and are not run in CI.
 
 ## 6. Key decisions
 
@@ -203,3 +214,44 @@ Current supported topology:
 | D6 | Files on disk (JSONL, YAML, pickle, GraphML, Turtle), no database | Zero setup, easy to diff and inspect, fast full rebuilds | Single-host, single-writer; registry writes need a lock |
 | D7 | Admin approval gate plus local-model screening for uploads | Keeps the corpus curated; screening keeps uploaded content on the host and costs nothing per check | Screening can be fooled; it filters, it does not replace review |
 | D8 | Separate `kind` for commentary, introductions and scholarship | Lets answers and filters separate the text from what people said about it | Parsers must classify correctly; the generic parser takes one kind per upload |
+
+### Decided, not yet implemented (2026-10-23)
+
+These follow the [2026-10-23 review](reviews/2026-10-23-architecture-review.md) (B1, B2, B4, B5)
+and were agreed before eval growth, because eval items, curated claims and RDF IRIs all key
+on them. Each is a roadmap row in [06 §5](06-roadmap.md#phase-0-measure-and-harden-t10); until
+that row is done, the code still works as described in the rest of this document.
+
+| # | Decision | Why | Consequences |
+|---|---|---|---|
+| D9 | **Permanent namespace on w3id.org.** Ontology terms under `https://w3id.org/ikg/ns#`, instances under `https://w3id.org/ikg/id/`. The ontology carries an `owl:versionIRI` | w3id gives a permanent redirect that can be re-pointed without breaking IRIs; it is the usual choice for academic ontologies | A one-time registration PR to the w3id repository (perma-id/w3id.org) by a maintainer. Replaces `example.org` (L13) |
+| D10 | **Separate text from translation.** `Passage.work` is the text (e.g. `mahabharata`); a new `Passage.edition` is the translation (e.g. `ganguli`). Registry entries describe editions and name their work | A second translation of the same text must not become a new work; translator comparison (C2) and parallel translations (Phase 1) need it | Gazetteer `works` scoping and graph `weight_<work>` stay per text. Citations, RDF `Edition` and `Rendering` become per edition (renderings keyed by edition, concept and surface, L29) |
+| D11 | **Freeze today's passage IDs as v1, and add a locator.** Existing IDs stay exactly as they are; the chunking parameters that produce them (`MAX_CHARS = 1500`, the sentence splitter) are frozen and recorded. New editions get edition-qualified IDs. A structured `locator` field holds book/section/verse, page, or timestamp for citations | No migration of the 28 eval items or the fidelity drafts; IDs no longer depend on accidental chunker changes; pages and timestamps fit (Phase 1) | Changing the chunker for an existing edition needs an explicit ID migration map. Eval expectations move to section level using the locator (B3) |
+| D12 | **Named curator tokens and an append-only provenance log before Phase 2.** Each curator gets a named token in place of the single admin token; every approval, edit and rejection is appended to a log with who, when, what and the supporting passage | Curation provenance ("who proposed, who approved") is correct from the first record | OIDC and roles still come in Phase 4 and replace the tokens; the log format carries over |
+
+## 7. Technology stack
+
+What the project uses today. Anything not listed here is not used. Planned technologies
+(vector store, database, OIDC, triple store, Whisper, Docker) are in [06](06-roadmap.md)
+and are not part of the system until they appear in this table.
+
+| Layer | Technology | Version / setting | Where | Notes |
+|---|---|---|---|---|
+| Language | Python | 3.10+ (CI tests 3.10 and 3.12) | everywhere | Packaged with setuptools (`pyproject.toml`), console script `ikg` |
+| Configuration | python-dotenv | ≥ 1.0 | `cli.py`, `config.py` | `.env` loaded from the working directory upwards; shell variables take precedence |
+| Source texts | Project Gutenberg plain text, fetched with `requests` | ≥ 2.31 | `sources.py`, `sources.yaml` | Seven files, about 18 MB, each pinned by SHA-256; network needed only for `fetch`/`build` |
+| Uploads | `.txt`, `.md`, `.pdf` (text layer via pypdf) | pypdf ≥ 4.0 | `sources.py`, `segment.parse_generic` | No OCR, EPUB or DOCX yet |
+| Segmentation and entity extraction | Python `re`, curated YAML gazetteer (PyYAML) | PyYAML ≥ 6.0 | `segment.py`, `entities.py`, `normalize.py` | Deterministic; no NLP or NER library |
+| Retrieval | BM25 implemented in the project (k1 = 1.5, b = 0.75), stored as a pickle | none (no search library) | `retrieve.py` | Gazetteer query expansion and entity boost; no embeddings or vector store |
+| Knowledge graph | networkx co-occurrence graph, saved as GraphML | networkx ≥ 3.0 | `graph.py` | Not a graph database |
+| Ontology and linked data | OWL ontology in Turtle; RDF export and SPARQL with rdflib | rdflib ≥ 7.0 | `ontology/ikg.ttl`, `graph.to_rdf`, `ikg sparql` | Namespace is the placeholder `https://example.org/ikg#` (L13) |
+| Answer generation | Claude API through the `anthropic` SDK, native document citations | model `claude-opus-5-5` | `qa.py` | Needs `ANTHROPIC_API_KEY`; the only hosted model |
+| Upload screening | Ollama (local) over HTTP | default model `qwen3.5:9B` | `screen.py` | Runs on the host; uploads are rejected if Ollama is unreachable |
+| Web app | FastAPI, served by uvicorn; Jinja2 templates; python-multipart for forms | FastAPI ≥ 0.110, uvicorn ≥ 0.29, Jinja2 ≥ 3.1 | `web/app.py`, `web/templates/` | `[web]` extra. Sessions, rate limits and the build job live in process memory |
+| Graph explorer | Cytoscape.js from the jsDelivr CDN | 3.30.2 | `web/templates/graph.html`, `web/static/graph.js` | Only browser dependency |
+| Storage | Files on disk: JSONL, YAML, pickle, GraphML, Turtle | none | `data/` (D6) | No database |
+| Tests | pytest; httpx for FastAPI's `TestClient` | pytest ≥ 7.0, httpx ≥ 0.27 | `tests/` | Models and HTTP are faked; no network or key needed |
+| Evaluation | `ikg eval` with a committed baseline | `eval/baseline.json` | `evaluate.py` | `--check` is the CI regression gate |
+| CI | GitHub Actions | `actions/checkout@v4`, `setup-python@v5`, `cache/restore@v4`, `cache/save@v4` | `.github/workflows/ci.yml` | See §5 |
+| Code review | Independent review by a Fable subagent before each PR | `.claude/agents/fable-reviewer.md` | PR template | See ONBOARDING §7 |
+| Docs and diagrams | Markdown with Mermaid | none | `docs/` | Render on GitHub |

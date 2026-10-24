@@ -58,7 +58,7 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | `ikg search "Q"` | Ranked passages, no API call | `-k`, `--works`, `--primary-only` | built corpus |
 | `ikg ask "Q"` | Cited answer | `-k`, `--works`, `--primary-only`, `--show-retrieval` | `ANTHROPIC_API_KEY` |
 | `ikg analyze` | Write `reports/corpus-analysis.md` | none | built corpus |
-| `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand` | built corpus (+ API key with `--llm`) |
+| `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand`, `--check BASELINE` (exit 1 if any baseline metric got worse; used by CI) | built corpus (+ API key with `--llm`) |
 | `ikg sparql "QUERY"` | Query `processed/ikg.ttl` | none | built corpus |
 | `ikg serve` | Run the web app | `--host` (127.0.0.1), `--port` (8000) | `[web]` extras |
 

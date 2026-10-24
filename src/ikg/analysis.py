@@ -50,6 +50,7 @@ def concept_density(passages, mentions, gazetteer) -> str:
 
 
 def mahabharata_trajectory(passages, mentions, gazetteer, concepts=("dharma", "moksha", "yajna", "tapas", "yoga")) -> str:
+    concepts = [c for c in concepts if c in gazetteer.entities]  # an edited gazetteer may drop some
     _, per_book = word_counts(passages)
     book_of = {p.id: p.book for p in passages if p.work == "mahabharata"}
     labels = {p.book: p.book_label for p in passages if p.work == "mahabharata"}

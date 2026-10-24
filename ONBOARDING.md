@@ -153,12 +153,13 @@ Each week pairs learning with a real task from the roadmap. Open a PR at the end
 - Set up (§2). Read docs 01, 07 and 02.
 - **Trace one question by hand:** start from `home()` in `src/ikg/web/app.py`, follow it
   into `search()` and `ask()`, and write down every function it passes through.
-- **Task: reject duplicate aliases in the gazetteer** (roadmap L5). Today, if two entities list
-  the same surface form, the later one silently wins. Change `Gazetteer.from_yaml` in
-  `src/ikg/entities.py` to raise `ValueError` naming both entities, unless the two are
-  restricted to different works.
-  - Done when: a test in `tests/test_entities_retrieve_graph.py` covers both cases, the bundled
-    gazetteer still loads, and `pytest` passes.
+- **Task: make the ontology accept renderings of a school of thought** (roadmap L14). In
+  `ontology/ikg.ttl`, `ikg:renders` has range `ikg:Concept`, but the gazetteer gives
+  `Advaita` (a `SchoolOfThought`) renderings too, so the RDF export contradicts the ontology.
+  Widen the range (for example to the union of `Concept` and `SchoolOfThought`), and update
+  [docs/04 §1](docs/04-data-model.md#1-conceptual-model).
+  - Done when: a test in `tests/test_rdf_analysis_cli.py` exports a `SchoolOfThought` with a
+    rendering and checks that the rendering's target is in the declared range, and CI is green.
 
 ### Week 2: Search and evaluation
 
@@ -182,9 +183,13 @@ Each week pairs learning with a real task from the roadmap. Open a PR at the end
 - **Task: answer-quality report.** With your mentor's OK on cost, run `ikg eval --llm`. Read
   the answers in `eval/results/` and write a short report: where citations are wrong, where it
   abstained but shouldn't have, and where commentary was presented as the text.
-- **Task: tests for the RDF export** (roadmap L15). `to_rdf()` in `src/ikg/graph.py` has no
-  tests. Build a tiny graph from the fixtures in `tests/conftest.py` and assert the key triples
-  (work, edition, entity type, rendering, mention count).
+- **Task: measure rendering precision** (roadmap L6). Renderings such as "duty" or "sacrifice"
+  are ordinary English words, so some matches are not the concept. For each ambiguous
+  rendering, sample 100 mentions from `data/processed/mentions.jsonl` with a fixed random seed,
+  read each passage, and label it as the concept or not. Report precision per rendering, and
+  propose which renderings to drop or limit to certain works.
+  - Done when: the labelled sample and the report are in the PR, and any gazetteer change keeps
+    `ikg eval --check eval/baseline.json` passing (or updates the baseline with a reason).
 
 ### Week 4: Knowledge graph feature
 
@@ -202,7 +207,21 @@ Each week pairs learning with a real task from the roadmap. Open a PR at the end
 ## 7. How we work
 
 - **Branches:** `feat/...`, `fix/...`, `docs/...` from `main`. Open a PR and ask for review.
-- **Before every PR:** `pytest -q`, and `ikg eval` if you touched search, entities or segmentation.
+- **Before every PR:** `pytest -q`, and `ikg eval --check eval/baseline.json` if you touched
+  search, entities or segmentation. CI ([.github/workflows/ci.yml](.github/workflows/ci.yml))
+  runs both on every PR. Don't merge on a red check (it becomes a hard block once required
+  status checks are set on `main`). If your change legitimately moves
+  the numbers, or you add eval items, update `eval/baseline.json` in the same PR and say why.
+- **Independent review on every PR.** Before opening a PR, run the `fable-reviewer` agent in
+  Claude Code (defined in [.claude/agents/fable-reviewer.md](.claude/agents/fable-reviewer.md)).
+  It reviews your branch against `main` on the Fable model, read-only, for bugs, the ground
+  rules in §3, security, evidence, tests and doc drift. Fix what it finds, or explain in the PR
+  why you disagree. Paste a summary into the "Review findings" section of the PR template. A
+  whole-codebase and architecture review also runs periodically.
+- **Docs are part of the change.** If behaviour changes, update `docs/` in the same PR. That
+  includes the status checklists in [docs/06](docs/06-roadmap.md) and the technology table in
+  [docs/02 §7](docs/02-architecture.md#7-technology-stack). Collaborators rely on them to know
+  exactly what is implemented.
 - **Match the surrounding code:** short docstrings explaining *why*, type hints, no
   unnecessary abstractions.
 - **Stuck for more than an hour?** Ask. Write down what you tried; it makes help faster.

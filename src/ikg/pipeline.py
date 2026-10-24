@@ -25,7 +25,10 @@ def build(works: list[Work] | None = None, log: Callable[[str], None] = print,
     t0 = time.time()
     works = works if works is not None else load_works()
     if download:
-        written = fetch(works)
+        try:
+            written = fetch(works)
+        except (ValueError, OSError) as exc:  # checksum mismatch, or a failed download
+            raise BuildError(f"fetch: {exc}") from exc
         if written:
             log(f"Downloaded {len(written)} file(s)")
     passages: list[Passage] = []
@@ -41,7 +44,10 @@ def build(works: list[Work] | None = None, log: Callable[[str], None] = print,
         raise BuildError(f"duplicate passage ids: {dupes[:5]}")
     write_passages(passages, config.PASSAGES_FILE)
 
-    gazetteer = Gazetteer.load()
+    try:
+        gazetteer = Gazetteer.load()
+    except ValueError as exc:
+        raise BuildError(f"gazetteer: {exc}") from exc
     mentions = extract(passages, gazetteer)
     write_mentions(mentions, config.MENTIONS_FILE)
     log(f"{len(mentions):,} entity mentions")

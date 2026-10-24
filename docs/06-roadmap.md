@@ -14,11 +14,14 @@ Offline retrieval evaluation, 28 questions (24 retrieval, 4 adversarial), `k = 8
 | BM25 + gazetteer expansion + entity boost (default) | 0.625 | 0.958 |
 | BM25 only (`ikg eval --no-expand`) | 0.625 | 0.958 |
 
+The default row is committed as `eval/baseline.json`. CI rebuilds the corpus on every pull
+request and fails if either number drops ([03 §11](03-design.md#11-evaluation-evaluatepy)).
+
 What this shows:
 
 - **Retrieval nearly always finds the right part of the text** (23 of 24 within the top 8), but
   ranks it first only 62% of the time.
-- **Graph expansion shows no measurable benefit on this set.** Most questions already use the
+- **Gazetteer expansion shows no measurable benefit on this set.** Most questions already use the
   same words as the translation ("Karna", "wheel", "chariot"). Only 5 questions target concepts,
   and none is phrased in Sanskrit where the translation uses an English rendering, which is the
   case the expansion is for. The set is too small and not targeted enough to support or reject
@@ -43,7 +46,7 @@ by starting at a minimum of 10 shared passages (the API default is 5).
 | L2 | No speaker attribution | Questions like "according to Krishna" can't be answered precisely; answers can't say who said what | `segment.py`, `Passage` |
 | L3 | Small gazetteer: 76 entities, a fraction of the named figures | Low extraction recall; most minor figures are invisible to the graph | `gazetteer.yaml` |
 | L4 | No epithet or pronoun resolution beyond listed aliases | "the son of Pritha", "he" are not linked | `entities.py` |
-| L5 | One entity per surface form; a duplicate alias silently overrides | A gazetteer edit could re-route an alias without warning | `Gazetteer.__init__` |
+| L5 | One entity per surface form | **Resolved (Oct 2026):** a form claimed by two entities in overlapping works is rejected on load, naming both, including case-sensitive/insensitive clashes. Entities in disjoint works may share a form; in a question with no work such a form links to neither | `Gazetteer.__init__` |
 | L6 | Renderings like "duty" also match non-technical uses | Inflated concept counts; precision not measured | `gazetteer.yaml` |
 | L7 | Co-occurrence only, no typed relations or claims | Graph answers "appear together", not "teaches", "son of", "fights" | `graph.py`, ontology `Claim` |
 | L8 | Dense graph (0.69), raw counts as weights | Common figures dominate; weak edges are noise | `build_cooccurrence` |
@@ -53,10 +56,29 @@ by starting at a minimum of 10 shared passages (the API default is 5).
 | L12 | YAML registry and file storage | Single host, single writer | `sources.py` |
 | L13 | Placeholder RDF namespace `example.org` | RDF IRIs are not stable or resolvable | `graph.py`, `ontology/ikg.ttl` |
 | L14 | `Advaita` (SchoolOfThought) has renderings, but `ikg:renders` has range `Concept` | Exported RDF is slightly inconsistent with the ontology | `gazetteer.yaml`, ontology |
-| L15 | No tests for the RDF export, analysis report or CLI; no CI | Regressions there go unnoticed | `tests/`, `.github/` |
+| L15 | Test and CI gaps | **Mostly resolved (Oct 2026):** RDF export, analysis report and CLI `search`/`stats` are tested, and CI runs `pytest` plus the offline eval gate. Still open: answer-level metrics are not gated, and `fetch`/`ask`/`sparql`/`serve` have no CLI-level tests | `tests/`, `.github/` |
 | L16 | Generic parser applies one `kind` to a whole upload | A book mixing translation and commentary can't be separated | `parse_generic` |
 | L17 | Scanned PDFs (no text layer) are rejected | Some scholarship can't be contributed | `screen.py`, `read_source` |
 | L18 | Gutenberg texts added by an admin are not screened | Depends on admin judgement | `/admin/gutenberg` |
+
+L19–L30 come from the [2026-10-23 architecture review](reviews/2026-10-23-architecture-review.md)
+(IDs A1–A10, B1–B7 there). L1 is also widened by B3: expectations are book-level prefixes,
+so hit@8 measures "a passage from the right book", not the right passage.
+
+| # | Limitation | Effect | Where |
+|---|---|---|---|
+| L19 | Builds are not self-describing or atomic: the runtime loads the current gazetteer, not the build's; artefacts are written in place; CLI and web builds don't share a lock (A1, A6) | A gazetteer edit without a rebuild, or a crash mid-build, makes pages and Ask fail with `KeyError` | `pipeline.py` |
+| L20 | The graph summary is sent to Claude as a citable document; its citations are dropped but the sentence stays (A2) | An unsupported, unmarked sentence can appear in an answer (NFR-1) | `qa.py` |
+| L21 | API spend is limited per client address only; Ask runs on GET; limiter keys never expire (A3) | NFR-5 is not met for a public deployment | `web/app.py` |
+| L22 | The gazetteer validator doesn't check field types or the `type` value (A4) | A one-character YAML slip can corrupt the whole graph | `entities.py` |
+| L23 | Uploads have no rate limit; PDFs are parsed in the web worker (A5) | Resource exhaustion from crafted or repeated uploads | `web/app.py`, `screen.py` |
+| L24 | Source downloads are not pinned by checksum (A7) | **Resolved (Oct 2026):** bundled texts carry a `sha256` in `sources.yaml`, verified by `fetch` and `build`; downloads retry. Admin-added Gutenberg texts are not pinned yet | `sources.py` |
+| L25 | Non-ASCII tokens crash the login and contribute checks (A8) | 500 error instead of "Invalid token" | `web/app.py` |
+| L26 | Small robustness gaps: API redirect on expired session, unflagged `max_tokens` truncation, string `"false"` read as true, Gutenberg marker edge case (A9, A10) | Silent misbehaviour in edge cases | `web/app.py`, `qa.py`, `sources.py` |
+| L27 | Work and edition are not separated in the data model (B1) | Parallel translations and C2 can't be modelled; must be decided before Phase 1 | `Passage`, IRIs, gazetteer |
+| L28 | Passage IDs include a chunk ordinal that depends on chunking parameters (B2) | Changing the chunker renumbers IDs used by eval items; pages and timestamps don't fit | `segment.py` |
+| L29 | The RDF shape lacks passages by default, `Section` instances, per-edition renderings and `ordinal` (B4) | Claims curated in Phase 2 would point at IRIs that later change | `graph.py`, ontology |
+| L30 | Curation provenance and copyrighted ingestion are planned before identity and roles (B5) | "Who approved" can't be recorded correctly with one shared token | Phases 1, 2, 4 |
 
 ## 3. Status against the target responsibilities
 
@@ -81,7 +103,11 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 - [x] **Upload classification for relevance** with a local model, plus an admin review queue (T5)
 - [x] **Retrieval evaluation** (hit@1, hit@k) with a graph-expansion ablation switch (T10)
 - [x] **Adversarial eval items**: 4 questions the corpus cannot answer (T10)
-- [x] **SME tooling, first step**: admin gazetteer editor with validation (T11)
+- [x] **SME tooling, first step**: admin gazetteer editor with validation, including rejection of a surface form shared by two entities (T11, L5)
+- [x] **Continuous integration**: GitHub Actions runs `pytest` on Python 3.10 and 3.12 on every PR (`.github/workflows/ci.yml`) (L15)
+- [x] **Offline regression gate**: CI builds the corpus and runs `ikg eval --check eval/baseline.json`; a drop in hit@1 or hit@8 fails the PR (T10)
+- [x] **Tests for the RDF export, analysis report and CLI** `search`/`stats`, including a check that the export uses only terms declared in the ontology (L15)
+- [x] **Independent review practice**: each PR is reviewed by a Fable subagent (`.claude/agents/fable-reviewer.md`) and the findings are summarised in the PR
 
 ### 3.2 Partial
 
@@ -96,6 +122,7 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 | Representation without distortion (T7) | Kinds, renderings, per-work separation, prompt forbids blending | SOT-level attribution, debate roles (*pūrvapakṣa* vs. *siddhānta*) | A commentary states an opposing view in order to refute it; the answer must not report it as the commentary's conclusion | 2–3 |
 | Minimise hallucinations (T8) | Grounding, native citations, abstention, refusal handling | Checking each sentence against its citation; unsupported-claim rate | A five-sentence answer where one sentence is not supported by its passage; that sentence is flagged and counted | 3 |
 | Evaluation datasets (T10) | 28 items; citation precision and abstention metrics in `--llm` | `--llm` baseline never recorded; SME gold answers; about 150 items | Record the first citation-precision baseline, then grow the set with speaker-specific and Sanskrit-phrased questions | 0 |
+| Regression checks in CI (T10) | Offline gate on hit@1 and hit@8 against `eval/baseline.json` | Answer-level metrics (citation precision, abstention) and SOT fidelity are not gated: they call the Claude API | A pull request that lowers citation precision fails its checks | 0 |
 | Collaboration with researchers and SMEs (T11) | Gazetteer editor, upload review queue | Curation of relations and claims with provenance; correcting answers | An SME marks an answer that blends two schools; the correction becomes an eval item | 2, 4 |
 
 ### 3.3 Not started
@@ -107,7 +134,6 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 | Multi-turn question answering | "What does Yama teach Nachiketas?" followed by "How does Shankara read that?" | 3 |
 | Multi-turn eval items (T10) | The same conversation, scored on whether the follow-up keeps the right context and citations | 0 |
 | SOT-fidelity metric and eval items (T7, T10). Item format and 10 draft items are in [`eval/fidelity/`](../eval/fidelity/README.md), awaiting SME review | "What is *maya*?" answered for Advaita and Vishishtadvaita separately, without blending, scored on the four rates in [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) | 0 |
-| Regression checks in CI (T10) | A pull request that lowers hit@8 or citation precision fails its checks | 0 |
 
 ## 4. Original contributions
 
@@ -149,21 +175,29 @@ flowchart LR
 
 **Goal:** every later change can be judged by numbers, including the target's metrics.
 
-| Deliverable | Addresses | Extension point |
-|---|---|---|
-| Grow the eval set to about 150 items: about 30 phrased in Sanskrit where the translation uses renderings, about 20 speaker-specific, about 20 cross-work, about 20 adversarial (false premises, misattributions, out-of-corpus) | L1, T10 | `eval/questions.jsonl` |
-| **Multi-turn eval items**: conversations whose follow-ups depend on earlier turns ("and how does Shankara read that verse?") | T10 | new `type: multiturn` in `evaluate.py` |
-| **Fidelity benchmark (C1)**: SME-approved items and the four rates from [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) (attribution, separation, own terms, debate position), using a rubric-guided LLM judge checked against SME labels. Run against a plain model with no retrieval as well as this system, and report both | T7, T10 | `eval/fidelity/items.jsonl`, new `type: fidelity` and a `--baseline` switch in `evaluate.py` |
-| Record the first `ikg eval --llm` baseline and commit the summary | §1 | `eval/results/` (commit summaries only) |
-| GitHub Actions: `pytest` plus an offline eval regression gate on every PR | L15, T10 | `.github/workflows/` |
-| Tests for `to_rdf`, `analysis.write_report`, CLI `search`/`stats` | L15 | `tests/` |
-| Reject duplicate surface forms across entities in the gazetteer validator | L5 | `entities.py` |
-| Measure rendering precision on a sample of 100 mentions per ambiguous rendering; scope or drop noisy ones | L6 | `gazetteer.yaml`, `analysis.py` |
-| Choose a permanent namespace; widen the `renders` range | L13, L14 | `graph.py`, ontology |
-| Dockerfile (app + optional Ollama sidecar) | Deployment | repo root |
+| Deliverable | Addresses | Extension point | Status |
+|---|---|---|---|
+| Grow the eval set to about 150 items: about 30 phrased in Sanskrit where the translation uses renderings, about 20 speaker-specific, about 20 cross-work, about 20 adversarial (false premises, misattributions, out-of-corpus) | L1, T10 | `eval/questions.jsonl` | Not started (28 items) |
+| **Multi-turn eval items**: conversations whose follow-ups depend on earlier turns ("and how does Shankara read that verse?") | T10 | new `type: multiturn` in `evaluate.py` | Not started |
+| **Fidelity benchmark (C1)**: SME-approved items and the four rates from [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) (attribution, separation, own terms, debate position), using a rubric-guided LLM judge checked against SME labels. Run against a plain model with no retrieval as well as this system, and report both | T7, T10 | `eval/fidelity/items.jsonl`, new `type: fidelity` and a `--baseline` switch in `evaluate.py` | 10 draft items awaiting SME review; evaluator not started |
+| Record the first `ikg eval --llm` baseline and commit the summary | §1 | add the answer metrics to `eval/baseline.json` | Not started |
+| GitHub Actions: `pytest` plus an offline eval regression gate on every PR | L15, T10 | `.github/workflows/ci.yml`, `ikg eval --check`, `eval/baseline.json` | **Done** |
+| Tests for `to_rdf`, `analysis.write_report`, CLI `search`/`stats` | L15 | `tests/test_rdf_analysis_cli.py` | **Done**; also fixed a crash in `ikg analyze` when the gazetteer lacks one of its fixed concepts |
+| Reject duplicate surface forms across entities in the gazetteer validator | L5 | `entities.py` | **Done** |
+| Measure rendering precision on a sample of 100 mentions per ambiguous rendering; scope or drop noisy ones | L6 | `gazetteer.yaml`, `analysis.py` | Not started |
+| Choose a permanent namespace; widen the `renders` range | L13, L14 | `graph.py`, ontology | Not started |
+| Dockerfile (app + optional Ollama sidecar) | Deployment | repo root | Not started |
+| **Review fixes, urgent**: stop citations to the graph summary; POST-only Ask, a global spend budget and limiter eviction; byte-wise token comparison | L20, L21, L25 | `qa.py`, `web/app.py` | Not started (proposed for the next PR) |
+| **Self-describing, atomic builds**: build manifest (gazetteer hash, works, source checksums, chunking parameters), gazetteer snapshot, build into a temporary directory and rename, shared lock | L19, L24 | `pipeline.py`, `sources.py`, `sources.yaml` | Source checksums **done**; the rest not started |
+| **Data-model decisions before eval growth**: edition on passages, v1 ID and locator scheme, per-edition renderings, permanent namespace | L27, L28, L29, L13 | [02 §6](02-architecture.md#6-key-decisions) D9–D11 | **Decided** 2026-10-23 |
+| Implement D10 and D11: `edition` and `locator` on `Passage`, editions in the registry, per-edition renderings, frozen chunking parameters recorded in the build | L27, L28, L29 | `segment.py`, `sources.py`, `graph.py`, ontology | Not started |
+| Implement D9: register `https://w3id.org/ikg/` (PR to perma-id/w3id.org), switch the ontology and export, add `owl:versionIRI` | L13 | `ontology/ikg.ttl`, `graph.py`, `cli.py` | Not started; registration needs a maintainer |
+| Section-level eval expectations and MRR | L1 (B3) | `evaluate.py`, `eval/questions.jsonl` | Not started |
+| Gazetteer schema validation (field types, `type` value) | L22 | `entities.py` | Not started |
 
 **Exit criteria:** CI is green; baselines for retrieval, citations, abstention and SOT fidelity
-are committed.
+are committed. As of October 2026, CI and the retrieval baseline are in place; the citation,
+abstention and fidelity baselines are not.
 
 ### Phase 1: Repository ingestion (T3, T5, T15)
 
@@ -191,6 +225,7 @@ evidence-backed relations, built together with SMEs.
 | Deliverable | Approach | Extension point |
 |---|---|---|
 | **Ontology extensions** | Thinker, Framework, populated Claims, `critiques`/`respondsTo`/`interprets`, debate roles, `citesPassage`, page/time segments, provenance ([07 §3](07-target-alignment.md#3-ontology-extensions-the-target-needs)) | `ontology/ikg.ttl`, `to_rdf` |
+| **Curator identity and provenance (D12)**: named curator tokens replacing the single admin token, and an append-only provenance log. Prerequisite for everything else in this phase | Before the first curation queue | `web/app.py`, new `provenance.py` |
 | **SME curation workflow** | Review queues for proposed entities, relations, claims and classifications, with approve/edit/reject and provenance (who proposed, who approved). Ontology change proposals | `web/app.py`, new `curation.py`, data files replayed in the build |
 | Claim extraction | A model proposes claims ("X holds that Y", grounded in passage P, attributed to thinker or SOT S); SMEs approve | new `claims.py`, `claims.yaml` |
 | **Speaker attribution** (Mahabharata first) | Deterministic. Ganguli marks speakers as `"X said,"`: 3,599 markers in 2,904 of 12,561 passages (23%). Carry the last speaker forward within a section | `segment.py`, `Passage` (+ `speaker`, `addressee`) |
