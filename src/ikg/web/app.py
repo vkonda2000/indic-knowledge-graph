@@ -315,12 +315,21 @@ def create_app() -> FastAPI:
             answer_cache.put(AnswerCache.key(q, k, works, primary_only, generation), ans)
         return ans
 
+    def registry(include_unapproved: bool = False) -> tuple[list, str]:
+        """The work registry, or no works and the reason: a broken data/works.yaml shows as a notice
+        instead of failing every page."""
+        try:
+            return sources.load_works(include_unapproved=include_unapproved), ""
+        except ValueError as exc:
+            return [], f"The work registry is invalid: {exc}. Fix {config.USER_WORKS_FILE}."
+
     def render(request: Request, name: str, **ctx):
         rt = state["runtime"]
-        works = sources.load_works()
+        works, registry_error = registry()
         return templates.TemplateResponse(request, name, {
             "is_admin": is_admin(request), "corpus_ready": rt is not None,
-            "corpus_error": state["error"], "all_works": filter_works(works), **ctx})
+            "corpus_error": state["error"], "registry_error": registry_error,
+            "all_works": filter_works(works), **ctx})
 
     # ------------------------------------------------------------------ viewer
 
@@ -440,7 +449,7 @@ def create_app() -> FastAPI:
         return resp
 
     def admin_page(request: Request, message: str = "", error: str = ""):
-        works = sources.load_works(include_unapproved=True)
+        works, _ = registry(include_unapproved=True)
         rt = state["runtime"]
         counts = {}
         if rt:
@@ -462,9 +471,12 @@ def create_app() -> FastAPI:
                       parser: str = Form("generic")):
         if parser not in PARSERS or kind not in KINDS:
             return admin_page(request, error="Unknown parser or kind.")
-        work = sources.add_user_work(title.strip(), translator.strip(), year.strip(),
-                                     [{"gutenberg": gutenberg_id}], parser=parser, kind=kind,
-                                     submitted_by="admin", status="approved")
+        try:
+            work = sources.add_user_work(title.strip(), translator.strip(), year.strip(),
+                                         [{"gutenberg": gutenberg_id}], parser=parser, kind=kind,
+                                         submitted_by="admin", status="approved")
+        except ValueError as exc:
+            return admin_page(request, error=str(exc))
         return admin_page(request, message=f"Added '{work.title}' (Gutenberg #{gutenberg_id}). "
                                            "It is downloaded on the next rebuild.")
 

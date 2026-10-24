@@ -47,6 +47,29 @@ class _Pattern:
     works: frozenset | None  # None means all works
 
 
+ENTITY_TYPES = ("Person", "Deity", "Place", "Concept", "SchoolOfThought")  # classes in ontology/ikg.ttl
+
+
+def _check_fields(e: Entity, where: str) -> None:
+    """Reject the YAML slips that would otherwise corrupt the graph silently, e.g. `aliases: krishna`
+    (a string, which would become one alias per letter) or `type: Persn`."""
+    for name in ("id", "label"):
+        if not isinstance(getattr(e, name), str) or not getattr(e, name).strip():
+            raise ValueError(f"{where}: '{name}' must be a non-empty string")
+    if e.type not in ENTITY_TYPES:
+        raise ValueError(f"{where}: type must be one of {', '.join(ENTITY_TYPES)}, not {e.type!r}")
+    if not isinstance(e.iast, str):
+        raise ValueError(f"{where}: 'iast' must be a string")
+    for name in ("aliases", "aliases_cs", "renderings", "works"):
+        value = getattr(e, name)
+        if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+            raise ValueError(f"{where}: '{name}' must be a list of non-empty strings, e.g. [first, second]")
+    if not isinstance(e.aliases_by_work, dict) or not all(
+            isinstance(w, str) and isinstance(v, list) and all(isinstance(a, str) and a.strip() for a in v)
+            for w, v in e.aliases_by_work.items()):
+        raise ValueError(f"{where}: 'aliases_by_work' must map a work id to a list of aliases")
+
+
 def _overlap(a: frozenset | None, b: frozenset | None) -> bool:
     return a is None or b is None or bool(a & b)
 
@@ -125,10 +148,15 @@ class Gazetteer:
             raise ValueError("gazetteer must be a mapping with an 'entities' list")
         entities, seen = [], set()
         for i, e in enumerate(data["entities"]):
+            if not isinstance(e, dict):
+                raise ValueError(f"entity #{i + 1}: must be a mapping, not {type(e).__name__}")
+            # A key left blank (`iast:`) is YAML null; treat it as not set, as the editor always has.
+            e = {k: v for k, v in e.items() if v is not None}
             try:
                 entity = Entity(**e)
             except TypeError as exc:
                 raise ValueError(f"entity #{i + 1}: {exc}") from exc
+            _check_fields(entity, f"entity #{i + 1} ({entity.id or 'no id'})")
             if entity.id in seen:
                 raise ValueError(f"duplicate entity id: {entity.id}")
             seen.add(entity.id)

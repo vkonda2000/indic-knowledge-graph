@@ -80,24 +80,50 @@ class Work:
 
 
 def _load_yaml(path: Path) -> list[dict]:
+    """The registry entries in ``path``; any malformed content raises ValueError naming the file."""
     if not path.exists():
         return []
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return data.get("works", [])
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path}: not valid YAML ({exc})") from exc
+    works = data.get("works", []) if isinstance(data, dict) else None
+    if not isinstance(works, list) or not all(isinstance(w, dict) for w in works):
+        raise ValueError(f"{path}: must be a mapping with a 'works' list of entries")
+    return works
 
 
-def _to_work(entry: dict, bundled: bool) -> Work:
+def _to_work(entry: dict, bundled: bool, where: str) -> Work:
     entry = {**entry, "year": str(entry.get("year", ""))}
     entry.pop("bundled", None)
-    return Work(**entry, bundled=bundled)
+    try:
+        return Work(**entry, bundled=bundled)
+    except TypeError as exc:  # an unknown or missing field
+        raise ValueError(f"{where} ({entry.get('id', 'no id')}): {exc}") from exc
+
+
+def _check_registry(works: list[Work]) -> None:
+    """Raise ValueError for registry entries that would collide or silently create a stray work."""
+    for label, key in (("registry ids", lambda w: w.id), ("edition ids", lambda w: w.edition_id)):
+        if dupes := sorted(k for k, n in Counter(key(w) for w in works).items() if n > 1):
+            raise ValueError(f"{label} must be unique across the registry: {', '.join(dupes)}")
+    # A `work:` reference names an existing text, i.e. an entry whose id is that work; a typo
+    # would otherwise create a new, unlabelled work.
+    defined = {w.id for w in works if not w.work or w.work == w.id}
+    if bad := sorted({f"{w.id} -> {w.work}" for w in works if w.work and w.work not in defined}):
+        raise ValueError(f"'work' must name an existing work id: {', '.join(bad)}")
+
+
+def _user_works() -> list[Work]:
+    return [_to_work(w, False, f"{config.USER_WORKS_FILE} entry #{i}")
+            for i, w in enumerate(_load_yaml(config.USER_WORKS_FILE), 1)]
 
 
 def load_works(include_unapproved: bool = False) -> list[Work]:
-    works = [_to_work(w, True) for w in _load_yaml(config.package_file("sources.yaml"))]
-    works += [_to_work(w, False) for w in _load_yaml(config.USER_WORKS_FILE)]
-    editions = Counter(w.edition_id for w in works)
-    if dupes := sorted(e for e, n in editions.items() if n > 1):
-        raise ValueError(f"edition ids must be unique across the registry: {', '.join(dupes)}")
+    works = [_to_work(w, True, f"sources.yaml entry #{i}")
+             for i, w in enumerate(_load_yaml(config.package_file("sources.yaml")), 1)]
+    works += _user_works()
+    _check_registry(works)
     if not include_unapproved:
         works = [w for w in works if w.status == "approved"]
     return works
@@ -138,7 +164,7 @@ def add_user_work(title: str, translator: str, year: str, files: list[dict], par
                   kind: str = "narrative", submitted_by: str = "", status: str = "pending",
                   notes: str = "", screening: str = "") -> Work:
     with _registry_lock:
-        user = [_to_work(w, False) for w in _load_yaml(config.USER_WORKS_FILE)]
+        user = _user_works()
         work = Work(id=_unique_id(_slug(title)), title=title, translator=translator, year=str(year),
                     parser=parser, files=files, notes=notes, status=status, kind=kind,
                     submitted_by=submitted_by, submitted_at=time.strftime("%Y-%m-%d %H:%M"),
@@ -151,7 +177,7 @@ def set_status(work_id: str, status: str) -> Work:
     if status not in STATUSES:
         raise ValueError(f"status must be one of {STATUSES}")
     with _registry_lock:
-        user = [_to_work(w, False) for w in _load_yaml(config.USER_WORKS_FILE)]
+        user = _user_works()
         for w in user:
             if w.id == work_id:
                 w.status = status

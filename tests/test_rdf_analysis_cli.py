@@ -287,3 +287,40 @@ def test_eval_breaks_results_down_by_question_type(gazetteer):
     by_type = run(items, BM25Index(PASSAGES), gazetteer, None, k=3)["summary"]["retrieval_by_type"]
     assert by_type == {"skt": {"n": 1, "hit_at_1": 1.0, "hit_at_k": 1.0, "mrr": 1.0},
                        "spk": {"n": 1, "hit_at_1": 0.0, "hit_at_k": 0.0, "mrr": 0.0}}
+
+
+@pytest.mark.parametrize("entity, message", [
+    ({"id": "k", "type": "Person", "label": "K", "aliases": "krishna"}, "'aliases' must be a list"),
+    ({"id": "k", "type": "Persn", "label": "K"}, "type must be one of"),
+    ({"id": "k", "type": "Person", "label": ""}, "'label' must be a non-empty string"),
+    ({"id": "k", "type": "Person", "label": "K", "works": "ramayana"}, "'works' must be a list"),
+    ({"id": "k", "type": "Person", "label": "K", "aliases_by_work": {"ramayana": "rama"}}, "'aliases_by_work'"),
+    ({"id": "k", "type": "Person", "label": "K", "renderings": ["duty", ""]}, "'renderings' must be a list"),
+])
+def test_gazetteer_rejects_malformed_fields(entity, message):
+    with pytest.raises(ValueError, match=message):
+        _gz(entity)
+    with pytest.raises(ValueError, match="must be a mapping"):
+        Gazetteer.from_yaml(yaml.safe_dump({"entities": ["krishna"]}))
+
+
+def test_registry_rejects_unknown_work_and_duplicate_ids(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "USER_WORKS_FILE", tmp_path / "works.yaml")
+    entry = {"title": "T", "translator": "X", "year": "1900", "parser": "generic"}
+
+    def write(*entries):
+        (tmp_path / "works.yaml").write_text(yaml.safe_dump({"works": list(entries)}), encoding="utf-8")
+
+    write({**entry, "id": "dutt", "work": "mahabharta"})  # typo for mahabharata
+    with pytest.raises(ValueError, match="'work' must name an existing work id: dutt -> mahabharta"):
+        sources.load_works()
+    write({**entry, "id": "dutt", "work": "mahabharata", "edition": "dutt-1895"})
+    assert any(w.edition_id == "dutt-1895" for w in sources.load_works())
+    write({**entry, "id": "ramayana", "edition": "other"})
+    with pytest.raises(ValueError, match="registry ids must be unique.*ramayana"):
+        sources.load_works()
+
+
+def test_gazetteer_blank_optional_fields_mean_unset():
+    gz = Gazetteer.from_yaml("entities:\n  - id: k\n    type: Person\n    label: K\n    iast:\n    works:\n")
+    assert gz.entities["k"].iast == "" and gz.entities["k"].works == []

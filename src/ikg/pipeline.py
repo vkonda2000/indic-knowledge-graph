@@ -24,7 +24,10 @@ def build(works: list[Work] | None = None, log: Callable[[str], None] = print,
           with_passages: bool = False, download: bool = True) -> dict:
     """Fetch missing sources, segment, extract entities, index, and write graph + RDF."""
     t0 = time.time()
-    works = works if works is not None else load_works()
+    try:
+        works = works if works is not None else load_works()
+    except ValueError as exc:
+        raise BuildError(f"source registry: {exc}") from exc
     if download:
         try:
             written = fetch(works)

@@ -138,8 +138,10 @@ elsewhere.
 
 ### Work registry entry (`sources.yaml`, `works.yaml`)
 
-An entry is one edition. `work` and `edition` default to `id`; edition IDs must be unique
-across both registries, or loading fails. Bundled Gutenberg files carry `sha256: <hex>` next to `gutenberg: <id>`; `fetch` and `build`
+An entry is one edition. `work` and `edition` default to `id`. Registry IDs and edition IDs must
+be unique across both registries, and a `work:` value must be the `id` of an existing work, or
+loading fails. So does malformed YAML, an unknown or missing field, or a `works:` that is not a
+list of entries; every such error names the file and entry, and the web app shows it as a notice. Bundled Gutenberg files carry `sha256: <hex>` next to `gutenberg: <id>`; `fetch` and `build`
 refuse a file whose contents differ.
 
 ```yaml
@@ -176,7 +178,9 @@ refuse a file whose contents differ.
   aliases_by_work: {}            # optional: {ramayana: [rama]}
 ```
 
-Unknown fields and duplicate IDs are rejected when the gazetteer is loaded. So is a surface
+Unknown fields, duplicate IDs and wrongly typed fields (a string where a list is expected, a
+`type` that is not an entity type) are rejected when the gazetteer is loaded. A key left blank
+(`iast:`) counts as not set. So is a surface
 form listed under two entities, unless their `works` scopes are disjoint ([03 §4.2](03-design.md#42-matching)).
 
 ### Graph (GraphML)
