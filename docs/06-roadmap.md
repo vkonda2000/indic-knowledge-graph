@@ -189,7 +189,9 @@ flowchart LR
 | Dockerfile (app + optional Ollama sidecar) | Deployment | repo root | Not started |
 | **Review fixes, urgent**: stop citations to the graph summary; POST-only Ask, a global spend budget and limiter eviction; byte-wise token comparison | L20, L21, L25 | `qa.py`, `web/app.py` | Not started (proposed for the next PR) |
 | **Self-describing, atomic builds**: build manifest (gazetteer hash, works, source checksums, chunking parameters), gazetteer snapshot, build into a temporary directory and rename, shared lock | L19, L24 | `pipeline.py`, `sources.py`, `sources.yaml` | Source checksums **done**; the rest not started |
-| **Data-model decisions before eval growth**: edition on passages, v1 ID and locator scheme, per-edition renderings, permanent namespace. Write them down as decisions in 02 §6 | L27, L28, L29, L13 | docs first, then `segment.py`, `graph.py` | Not started; needs a decision |
+| **Data-model decisions before eval growth**: edition on passages, v1 ID and locator scheme, per-edition renderings, permanent namespace | L27, L28, L29, L13 | [02 §6](02-architecture.md#6-key-decisions) D9–D11 | **Decided** 2026-10-23 |
+| Implement D10 and D11: `edition` and `locator` on `Passage`, editions in the registry, per-edition renderings, frozen chunking parameters recorded in the build | L27, L28, L29 | `segment.py`, `sources.py`, `graph.py`, ontology | Not started |
+| Implement D9: register `https://w3id.org/ikg/` (PR to perma-id/w3id.org), switch the ontology and export, add `owl:versionIRI` | L13 | `ontology/ikg.ttl`, `graph.py`, `cli.py` | Not started; registration needs a maintainer |
 | Section-level eval expectations and MRR | L1 (B3) | `evaluate.py`, `eval/questions.jsonl` | Not started |
 | Gazetteer schema validation (field types, `type` value) | L22 | `entities.py` | Not started |
 
@@ -223,6 +225,7 @@ evidence-backed relations, built together with SMEs.
 | Deliverable | Approach | Extension point |
 |---|---|---|
 | **Ontology extensions** | Thinker, Framework, populated Claims, `critiques`/`respondsTo`/`interprets`, debate roles, `citesPassage`, page/time segments, provenance ([07 §3](07-target-alignment.md#3-ontology-extensions-the-target-needs)) | `ontology/ikg.ttl`, `to_rdf` |
+| **Curator identity and provenance (D12)**: named curator tokens replacing the single admin token, and an append-only provenance log. Prerequisite for everything else in this phase | Before the first curation queue | `web/app.py`, new `provenance.py` |
 | **SME curation workflow** | Review queues for proposed entities, relations, claims and classifications, with approve/edit/reject and provenance (who proposed, who approved). Ontology change proposals | `web/app.py`, new `curation.py`, data files replayed in the build |
 | Claim extraction | A model proposes claims ("X holds that Y", grounded in passage P, attributed to thinker or SOT S); SMEs approve | new `claims.py`, `claims.yaml` |
 | **Speaker attribution** (Mahabharata first) | Deterministic. Ganguli marks speakers as `"X said,"`: 3,599 markers in 2,904 of 12,561 passages (23%). Carry the last speaker forward within a section | `segment.py`, `Passage` (+ `speaker`, `addressee`) |

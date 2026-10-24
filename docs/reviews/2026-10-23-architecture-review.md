@@ -42,6 +42,13 @@ analysis and are still to be confirmed when they are worked on.
 - README, 07 T4 and 06 §1 call query expansion "from the knowledge graph"; it comes from the gazetteer, and the graph only feeds the prompt summary (B3).
 - Test counts in README (25) and 03 §12 (37) were stale; 39 collected on `main` (corrected to 51 with this branch).
 
+## Decisions taken
+
+On 2026-10-23 the maintainer accepted the recommendations for B1, B2, B4 (namespace) and B5.
+They are recorded as D9–D12 in [02 §6](../02-architecture.md#6-key-decisions): w3id.org
+namespace, `edition` separate from `work`, today's IDs frozen as v1 plus a `locator` field,
+and named curator tokens with a provenance log before Phase 2.
+
 ## Reviewer's suggested first steps
 
 1. Stop the grounding leak and the spend hole (A2, A3, A8).
