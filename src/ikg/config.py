@@ -10,6 +10,8 @@ PROCESSED_DIR = DATA_DIR / "processed"
 UPLOADS_DIR = DATA_DIR / "uploads"
 USER_WORKS_FILE = DATA_DIR / "works.yaml"          # works added through the web admin
 USER_GAZETTEER_FILE = DATA_DIR / "gazetteer.yaml"  # admin-edited gazetteer (overrides the bundled one)
+CURATORS_FILE = DATA_DIR / "curators.yaml"          # named curators: name and token SHA-256 (D12)
+PROVENANCE_FILE = DATA_DIR / "provenance.jsonl"     # append-only log of who did what (D12)
 
 PASSAGES_FILE = PROCESSED_DIR / "passages.jsonl"
 MENTIONS_FILE = PROCESSED_DIR / "mentions.jsonl"
@@ -58,6 +60,7 @@ PDF_MAX_PARALLEL = int(os.environ.get("IKG_PDF_MAX_PARALLEL", "2"))
 # Contributor uploads per hour, per client address and across all clients (admins excluded).
 UPLOAD_LIMIT = int(os.environ.get("IKG_UPLOAD_LIMIT", "10"))
 UPLOAD_GLOBAL_LIMIT = int(os.environ.get("IKG_UPLOAD_GLOBAL_LIMIT", "100"))
+LOGIN_FAILURE_LIMIT = int(os.environ.get("IKG_LOGIN_FAILURE_LIMIT", "10"))  # failed admin logins per client per hour
 
 # Spend cap for Ask in the web app, across all visitors, per UTC day (admins included).
 ASK_BUDGET_USD = float(os.environ.get("IKG_ASK_BUDGET_USD", "5"))

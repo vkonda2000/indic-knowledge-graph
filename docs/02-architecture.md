@@ -191,7 +191,9 @@ sequenceDiagram
 | Gazetteer of the current build | `data/processed/gazetteer.yaml` | Until the next build | What `Runtime` and `ikg analyze` use |
 | Build lock | `data/processed/.build.lock` | During a build | Shared by the CLI and the web app |
 | Uploaded files | `data/uploads/<uuid>.<ext>` | Persistent | |
-| Admin sessions | Process memory (dict) | 12 h, lost on restart | |
+| Admin sessions | Process memory (dict) | 12 h, lost on restart | Each records which curator logged in |
+| Curators | `data/curators.yaml` | Persistent | Name and token SHA-256 only; `ikg curator add/remove/list` (D12) |
+| Provenance log | `data/provenance.jsonl` | Persistent, append-only | Who did what, when, to what: logins, submissions, approvals, gazetteer edits, rebuilds (D12) |
 | Ask rate-limit windows | Process memory | 1 h sliding window | Per client IP; idle clients forgotten |
 | Ask spend | Process memory | Current UTC day, lost on restart | Estimated USD, all visitors |
 | Answer cache | Process memory | Until the next corpus reload or restart | Up to 1,000 answers |
@@ -242,20 +244,19 @@ API and are not run in CI.
 | D7 | Admin approval gate plus local-model screening for uploads | Keeps the corpus curated; screening keeps uploaded content on the host and costs nothing per check | Screening can be fooled; it filters, it does not replace review |
 | D8 | Separate `kind` for commentary, introductions and scholarship | Lets answers and filters separate the text from what people said about it | Parsers must classify correctly; the generic parser takes one kind per upload |
 
-### Decided 2026-10-23: D10 and D11 implemented, D9 and D12 not yet
+### Decided 2026-10-23: D10, D11 and D12 implemented, D9 not yet
 
 These follow the [2026-10-23 review](reviews/2026-10-23-architecture-review.md) (B1, B2, B4, B5)
 and were agreed before eval growth, because eval items, curated claims and RDF IRIs all key
-on them. Each is a roadmap row in [06 §5](06-roadmap.md#phase-0-measure-and-harden-t10). D10 and
-D11 are in the code; until D9 and D12 are done, the namespace is still `example.org` and there
-is still one shared admin token.
+on them. Each is a roadmap row in [06 §5](06-roadmap.md#phase-0-measure-and-harden-t10). D10,
+D11 and D12 are in the code; until D9 is done, the namespace is still `example.org`.
 
 | # | Decision | Why | Consequences |
 |---|---|---|---|
 | D9 | **Permanent namespace on w3id.org.** Ontology terms under `https://w3id.org/ikg/ns#`, instances under `https://w3id.org/ikg/id/`. The ontology carries an `owl:versionIRI` | w3id gives a permanent redirect that can be re-pointed without breaking IRIs; it is the usual choice for academic ontologies | A one-time registration PR to the w3id repository (perma-id/w3id.org) by a maintainer. Replaces `example.org` (L13) |
 | D10 | **Implemented.** **Separate text from translation.** `Passage.work` is the text (e.g. `mahabharata`); `Passage.edition` is the translation (e.g. `ganguli-1883`). Registry entries describe editions and name their work | A second translation of the same text must not become a new work; translator comparison (C2) and parallel translations (Phase 1) need it | Gazetteer `works` scoping and graph `weight_<work>` stay per text. Citations, RDF `Edition` and `Rendering` become per edition (renderings keyed by edition, concept and surface, L29) |
 | D11 | **Implemented.** **Freeze today's passage IDs as v1, and add a locator.** Existing IDs stay exactly as they are; the chunking parameters that produce them (`MAX_CHARS = 1500`, the sentence splitter) are frozen and recorded. A second edition of a text sets its own ID prefix (`id_prefix`), or the build stops on duplicate IDs. A structured `locator` field holds book/section/verse, page, or timestamp for citations | No migration of the 28 eval items or the fidelity drafts; IDs no longer depend on accidental chunker changes; pages and timestamps fit (Phase 1) | Changing the chunker for an existing edition needs an explicit ID migration map. Eval expectations move to section level using the locator (B3) |
-| D12 | **Named curator tokens and an append-only provenance log before Phase 2.** Each curator gets a named token in place of the single admin token; every approval, edit and rejection is appended to a log with who, when, what and the supporting passage | Curation provenance ("who proposed, who approved") is correct from the first record | OIDC and roles still come in Phase 4 and replace the tokens; the log format carries over |
+| D12 | **Implemented.** **Named curator tokens and an append-only provenance log before Phase 2.** Each curator gets a named token in place of the single admin token; every approval, edit and rejection is appended to a log with who, when, what and the supporting passage | Curation provenance ("who proposed, who approved") is correct from the first record | OIDC and roles still come in Phase 4 and replace the tokens; the log format carries over. The log has no passage field yet: it will gain one when passage-level curation (claims, relations) exists |
 
 ### Decided and implemented (2026-10-23)
 

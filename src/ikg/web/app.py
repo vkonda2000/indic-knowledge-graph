@@ -18,6 +18,7 @@ UTC day once their estimated cost reaches IKG_ASK_BUDGET_USD (default 5).
 """
 
 import dataclasses
+import hashlib
 import os
 import secrets
 import threading
@@ -32,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
-from ikg import config, screen, sources
+from ikg import config, curators, screen, sources
 from ikg.entities import Gazetteer
 from ikg.graph import neighbours
 from ikg.pipeline import Runtime, build
@@ -143,6 +144,14 @@ class AnswerCache:
             self.items.clear()
 
 
+def _record(*args) -> None:
+    """Provenance logging must never undo or fail a completed action."""
+    try:
+        curators.record(*args)
+    except OSError as exc:
+        print(f"  could not write the provenance log: {exc}")
+
+
 def filter_works(works) -> list[dict]:
     """One entry per text for the work filters: passages, filters and graph weights are keyed by
     the work, so two translations of the same text are one choice (D10)."""
@@ -182,9 +191,13 @@ class BuildJob:
         return {"state": self.state, "log": self.log[-200:], "stats": self.stats, "error": self.error,
                 "started": self.started, "finished": self.finished}
 
-    def start(self, on_success) -> bool:
+    def start(self, on_success, on_finish=None, on_start=None) -> bool:
+        """Run a build in a thread. `on_start()` runs before it begins and `on_finish(state, error)`
+        when it ends, either way."""
         if not self.lock.acquire(blocking=False):
             return False
+        if on_start:
+            on_start()
         self.state, self.log, self.stats, self.error = "running", [], None, ""
         self.started, self.finished = time.strftime("%H:%M:%S"), None
 
@@ -200,6 +213,8 @@ class BuildJob:
             finally:
                 self.finished = time.strftime("%H:%M:%S")
                 self.lock.release()
+                if on_finish:
+                    on_finish(self.state, self.error)
 
         threading.Thread(target=work, daemon=True).start()
         return True
@@ -255,9 +270,10 @@ def create_app() -> FastAPI:
         admin_token = secrets.token_urlsafe(18)
         print(f"\n  IKG_ADMIN_TOKEN not set; admin token for this run: {admin_token}\n")
     contributor_token = os.environ.get("IKG_CONTRIBUTOR_TOKEN", "")
-    sessions: dict[str, float] = {}
+    sessions: dict[str, tuple[float, str]] = {}  # session id -> (expiry, curator)
     ask_limiter = RateLimiter(int(os.environ.get("IKG_ASK_LIMIT", "20")))
     upload_limiter = RateLimiter(config.UPLOAD_LIMIT)
+    login_failures = RateLimiter(config.LOGIN_FAILURE_LIMIT)  # failed admin logins per client per hour
     upload_global = RateLimiter(config.UPLOAD_GLOBAL_LIMIT)
     app.state.upload_limiter, app.state.upload_global = upload_limiter, upload_global
     budget = SpendBudget(config.ASK_BUDGET_USD)
@@ -288,10 +304,15 @@ def create_app() -> FastAPI:
             raise HTTPException(503, state["error"] or "Corpus not built yet. Ask an admin to run a rebuild.")
         return state["runtime"]
 
+    def curator(request: Request) -> str | None:
+        """The curator logged in on this request, or None."""
+        session = sessions.get(request.cookies.get(SESSION_COOKIE, ""))
+        if not session or session[0] <= time.time():
+            return None
+        return session[1] if curators.is_current(session[1]) else None  # a removed curator is logged out
+
     def is_admin(request: Request) -> bool:
-        sid = request.cookies.get(SESSION_COOKIE, "")
-        expiry = sessions.get(sid)
-        return bool(expiry and expiry > time.time())
+        return curator(request) is not None
 
     def require_admin(request: Request):
         if not is_admin(request):
@@ -465,6 +486,8 @@ def create_app() -> FastAPI:
             if entry:  # saved but not registered: don't leave an orphan file behind
                 (config.UPLOADS_DIR / entry["upload"]).unlink(missing_ok=True)
             ctx["error"] = str(exc) if isinstance(exc, ValueError) else "The upload could not be saved. Please try again later."
+        else:
+            _record("public", "work_submitted", work.id, f"by {contributor.strip()[:100] or 'anonymous'}")
         return render(request, "contribute.html", **ctx)
 
     # ------------------------------------------------------------------ admin
@@ -475,13 +498,24 @@ def create_app() -> FastAPI:
 
     @app.post("/admin/login")
     def login(request: Request, token: str = Form(...)):
-        if not token_ok(token, admin_token):
+        client_key = request.client.host if request.client else ""
+        if not login_failures.has_room(client_key):
+            return render(request, "login.html", error="Too many failed logins. Try again later.")
+        try:
+            name = curators.identify(token, admin_token)
+        except ValueError as exc:  # a broken curators file: keep the detail out of the public page
+            print(f"  curator registry error: {exc}")
+            return render(request, "login.html", error="The curator registry is unavailable; ask the operator.")
+        if name is None:
+            login_failures.allow(client_key)
+            _record("public", "login_failed", "", client_key)  # never the token itself
             return render(request, "login.html", error="Invalid token.")
         now = time.time()
-        for old in [s for s, expiry in sessions.items() if expiry <= now]:
+        for old in [s for s, (expiry, _) in sessions.items() if expiry <= now]:
             del sessions[old]
         sid = secrets.token_urlsafe(32)
-        sessions[sid] = now + SESSION_TTL
+        sessions[sid] = (now + SESSION_TTL, name)
+        _record(name, "login")
         resp = RedirectResponse("/admin", status_code=303)
         resp.set_cookie(SESSION_COOKIE, sid, httponly=True, samesite="strict", max_age=SESSION_TTL,
                         secure=request.url.scheme == "https")
@@ -489,6 +523,8 @@ def create_app() -> FastAPI:
 
     @app.post("/admin/logout")
     def logout(request: Request):
+        if name := curator(request):
+            _record(name, "logout")
         sessions.pop(request.cookies.get(SESSION_COOKIE, ""), None)
         resp = RedirectResponse("/", status_code=303)
         resp.delete_cookie(SESSION_COOKIE)
@@ -505,7 +541,8 @@ def create_app() -> FastAPI:
         gz_text = config.gazetteer_file().read_text(encoding="utf-8")
         return render(request, "admin.html", works=works, counts=counts, job=job.snapshot(), kinds=KINDS,
                       parsers=sorted(PARSERS), gazetteer_text=gz_text,
-                      gazetteer_custom=config.USER_GAZETTEER_FILE.exists(), message=message, error=error)
+                      gazetteer_custom=config.USER_GAZETTEER_FILE.exists(), message=message, error=error,
+                      curator=curator(request), provenance=curators.recent(30))
 
     @app.get("/admin", response_class=HTMLResponse, dependencies=[Depends(require_admin)])
     def admin(request: Request):
@@ -520,9 +557,10 @@ def create_app() -> FastAPI:
         try:
             work = sources.add_user_work(title.strip(), translator.strip(), year.strip(),
                                          [{"gutenberg": gutenberg_id}], parser=parser, kind=kind,
-                                         submitted_by="admin", status="approved")
+                                         submitted_by=curator(request), status="approved")
         except ValueError as exc:
             return admin_page(request, error=str(exc))
+        _record(curator(request), "work_added", work.id, f"Gutenberg #{gutenberg_id}, approved")
         return admin_page(request, message=f"Added '{work.title}' (Gutenberg #{gutenberg_id}). "
                                            "It is downloaded on the next rebuild.")
 
@@ -535,9 +573,10 @@ def create_app() -> FastAPI:
             entry = sources.save_upload(filename, content)
             work = sources.add_user_work(title.strip(), author.strip(), year.strip(), [entry],
                                          kind=kind if kind in KINDS else "narrative",
-                                         submitted_by="admin", status="approved", screening=verdict)
+                                         submitted_by=curator(request), status="approved", screening=verdict)
         except ValueError as exc:
             return admin_page(request, error=str(exc))
+        _record(curator(request), "work_added", work.id, f"upload {entry.get('original_name', '')}, approved")
         return admin_page(request, message=f"Uploaded '{work.title}'. Rebuild to include it.")
 
     @app.post("/admin/works/{work_id}/status", response_class=HTMLResponse, dependencies=[Depends(require_admin)])
@@ -546,12 +585,14 @@ def create_app() -> FastAPI:
             work = sources.set_status(work_id, status)
         except (KeyError, ValueError) as exc:
             return admin_page(request, error=str(exc))
+        _record(curator(request), "work_status", work_id, status)
         return admin_page(request, message=f"'{work.title}' is now {status}. Rebuild to apply.")
 
     @app.post("/admin/gazetteer", response_class=HTMLResponse, dependencies=[Depends(require_admin)])
     def save_gazetteer(request: Request, yaml_text: str = Form(...), action: str = Form("save")):
         if action == "reset":
             config.USER_GAZETTEER_FILE.unlink(missing_ok=True)
+            _record(curator(request), "gazetteer_reset")
             return admin_page(request, message="Gazetteer reset to the bundled version. Rebuild to apply.")
         try:
             gz = Gazetteer.from_yaml(yaml_text)
@@ -559,11 +600,19 @@ def create_app() -> FastAPI:
             return admin_page(request, error=f"Gazetteer not saved: {exc}")
         config.USER_GAZETTEER_FILE.parent.mkdir(parents=True, exist_ok=True)
         config.USER_GAZETTEER_FILE.write_text(yaml_text, encoding="utf-8")
+        _record(curator(request), "gazetteer_saved", "",
+                        f"{len(gz.entities)} entities, sha256 {hashlib.sha256(yaml_text.encode()).hexdigest()[:12]}")
         return admin_page(request, message=f"Gazetteer saved ({len(gz.entities)} entities). Rebuild to apply.")
 
     @app.post("/admin/rebuild", dependencies=[Depends(require_admin)])
     def rebuild(request: Request):
-        started = job.start(on_success=reload_runtime)
+        who = curator(request)
+
+        def finished(state: str, error: str):
+            _record(who, f"rebuild_{state}", "", error)
+
+        started = job.start(on_success=reload_runtime, on_finish=finished,
+                            on_start=lambda: _record(who, "rebuild_started"))
         return admin_page(request, message="Rebuild started." if started else "",
                           error="" if started else "A rebuild is already running.")
 

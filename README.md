@@ -60,8 +60,11 @@ Search, the graph explorer, analysis and the retrieval evaluation work without o
 | `/contribute` | contributors | Upload `.txt`, `.md` or `.pdf` material (papers, book chapters, lecture transcripts, translations). Submissions wait in a review queue. |
 | `/admin` | admin | Approve or reject submissions; add a Project Gutenberg text by ebook number; upload files directly; edit the gazetteer (entities, aliases, renderings) with validation; **Rebuild** the graph in the background with a live log. |
 
-**Access control.** Admin login uses the `IKG_ADMIN_TOKEN` environment variable. If it is unset,
-a random token is printed at startup. Set `IKG_CONTRIBUTOR_TOKEN` to require a token for
+**Access control.** Admin login uses the `IKG_ADMIN_TOKEN` environment variable (logged in as
+"admin"; if it is unset, a random token is printed at startup), or a named curator's token from
+`ikg curator add <name>`. Every admin action and public submission is recorded with who did it in
+an append-only provenance log, shown on the admin page and by `ikg provenance`. Failed logins are
+recorded and limited per client. Set `IKG_CONTRIBUTOR_TOKEN` to require a token for
 uploads too. Cited answers cost API credits, so Ask runs only when the form is submitted on this site
 (never on a GET, and not from other sites), repeated questions are answered from a cache at no cost, all Ask calls stop for the day
 at `IKG_ASK_BUDGET_USD` (default $5), and visitors who are not logged in as admin get
@@ -237,7 +240,7 @@ pytest
 ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-117 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+127 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
 matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
 (checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
 citation handling, model choice and cost with a mocked Claude client, and the web app end to end: contribute, review,

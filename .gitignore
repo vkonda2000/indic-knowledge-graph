@@ -7,6 +7,8 @@ data/processed/
 data/uploads/
 data/works.yaml
 data/gazetteer.yaml
+data/curators.yaml
+data/provenance.jsonl
 eval/results/
 
 # Local secrets and settings
