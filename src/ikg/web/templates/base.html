@@ -23,6 +23,7 @@
     </nav>
   </header>
   <main>
+    {% if registry_error %}<div class="notice error">{{ registry_error }}</div>{% endif %}
     {% if not corpus_ready %}
       <div class="notice warn">The corpus has not been built yet{% if corpus_error %} ({{ corpus_error }}){% endif %}.
         An admin can run <strong>Rebuild</strong> from the admin page, or run <code>ikg build</code>.</div>

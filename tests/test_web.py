@@ -353,3 +353,20 @@ def test_long_question_is_truncated(client, monkeypatch):
     build_sample(client)
     client.post("/", data={"q": "dharma " * 1000, "mode": "ask"})
     assert len(seen[0]) == 2000
+
+
+@pytest.mark.parametrize("text", [
+    "works:\n  - {id: x, title: T, translator: X, year: '1', parser: generic, work: nowhere}\n",
+    "works:\n  - {id: x, title: T, translator: X, year: '1', parser: generic, colour: red}\n",  # unknown field
+    "works:\n  - {id: x, translator: X, year: '1', parser: generic}\n",                        # missing title
+    "works:\n  - {id: x\n",                                                                    # bad YAML
+    "works:\n  x: {}\n",                                                                       # not a list
+])
+def test_broken_registry_shows_a_notice_not_a_500(client, text):
+    config.USER_WORKS_FILE.write_text(text, encoding="utf-8")
+    for path in ("/", "/contribute"):
+        r = client.get(path)
+        assert r.status_code == 200 and "The work registry is invalid" in r.text
+    login(client)
+    assert "The work registry is invalid" in client.get("/admin").text
+    assert client.post("/admin/gutenberg", data={"gutenberg_id": "1", "title": "T"}).status_code == 200

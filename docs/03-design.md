@@ -89,7 +89,9 @@ an optional `iast` name, and four kinds of surface form:
 matches only in the Ramayana, because in the Mahabharata "Bharata" is usually a form of
 address meaning "descendant of Bharata".
 
-`Gazetteer.from_yaml()` checks the structure, unknown fields and duplicate IDs, and raises
+`Gazetteer.from_yaml()` checks the structure, unknown fields, duplicate IDs and field types
+(`type` is one of `ENTITY_TYPES`; alias, rendering and works fields are lists of non-empty
+strings, so `aliases: krishna` can't become one alias per letter), and raises
 `ValueError` with the position of the bad entry. Building the lookup tables also rejects a
 surface form claimed by two different entities (§4.2). The admin editor uses it so that an invalid
 gazetteer is never saved.
@@ -340,7 +342,7 @@ eval set grows, update the baseline in the same PR and explain why.
 
 ## 12. Testing
 
-`pytest` runs 79 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 92 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer

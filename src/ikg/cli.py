@@ -19,7 +19,10 @@ from ikg.sources import fetch, load_works  # noqa: E402
 
 
 def _select_works(names: list[str] | None):
-    works = load_works()
+    try:
+        works = load_works()
+    except ValueError as exc:
+        sys.exit(f"Registry error: {exc}")
     if names:
         works = [w for w in works if w.id in names]
     return works
