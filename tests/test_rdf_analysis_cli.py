@@ -278,3 +278,12 @@ def test_eval_reciprocal_rank(gazetteer):
     rr = {r["id"]: r["reciprocal_rank"] for r in result["rows"]}
     assert rr["a"] == 1.0 and rr["c"] == 0.0 and 0 < rr["b"] <= 1.0
     assert result["summary"]["retrieval_mrr"] == round(sum(rr.values()) / 3, 3)
+
+
+def test_eval_breaks_results_down_by_question_type(gazetteer):
+    from ikg.evaluate import EvalItem, run
+    items = [EvalItem("skt-1", "retrieval", "Sita forest", ["ram.b01"]),
+             EvalItem("spk-1", "retrieval", "Sita forest", ["vp.b9"])]
+    by_type = run(items, BM25Index(PASSAGES), gazetteer, None, k=3)["summary"]["retrieval_by_type"]
+    assert by_type == {"skt": {"n": 1, "hit_at_1": 1.0, "hit_at_k": 1.0, "mrr": 1.0},
+                       "spk": {"n": 1, "hit_at_1": 0.0, "hit_at_k": 0.0, "mrr": 0.0}}

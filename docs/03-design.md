@@ -319,6 +319,7 @@ a hit, not commentary on it; a long discourse is listed section by section (Bhis
 |---|---|---|
 | `retrieval_hit_at_1` / `hit_at_k` | Offline | Top-1 / any of top-k passage IDs start with an expected prefix |
 | `retrieval_mrr` | Offline | Mean over items of 1 / rank of the first matching passage in the top k (0 if none) |
+| `retrieval_by_type` | Offline | hit@1, hit@k and MRR per question type, from the item ID prefix (`skt`, `spk`, `xw`, ...) |
 | `cites_expected` | `--llm` | At least one citation matches an expected prefix |
 | `citation_precision` | `--llm` | Share of citations that match expected prefixes |
 | `has_citations` | `--llm` | The answer has at least one citation |
@@ -339,7 +340,7 @@ eval set grows, update the baseline in the same PR and explain why.
 
 ## 12. Testing
 
-`pytest` runs 78 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 79 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer

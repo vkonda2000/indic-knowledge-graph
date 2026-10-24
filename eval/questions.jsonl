@@ -26,3 +26,32 @@
 {"id": "con-03", "type": "retrieval", "question": "How does Dhruva's tapas lead Vishnu to appear before him?", "expected": ["vp.b1.s012"]}
 {"id": "con-04", "type": "retrieval", "question": "What does Yama say about the atman being unborn and undying?", "expected": ["upa.katha.p2.v18", "upa.katha.p2.v19"]}
 {"id": "con-05", "type": "retrieval", "question": "What yajna did Dasaratha perform to obtain sons?", "expected": ["ram.b1.c011", "ram.b1.c012", "ram.b1.c013", "ram.b1.c014", "ram.b1.c015", "ram.b1.c016"]}
+{"id": "skt-01", "type": "retrieval", "question": "What does Krishna teach about nishkama karma?", "expected": ["mbh.b06.s026", "mbh.b06.s027", "mbh.b06.s028", "mbh.b06.s029", "mbh.b06.s030", "mbh.b06.s036", "mbh.b06.s042"]}
+{"id": "skt-02", "type": "retrieval", "question": "What does Yama say about shreyas and preyas?", "expected": ["upa.katha.p2.v01", "upa.katha.p2.v02", "upa.katha.p2.v03"]}
+{"id": "upa-06", "type": "retrieval", "question": "How does Yama describe the atman as the lord of a chariot?", "expected": ["upa.katha.p3.v03", "upa.katha.p3.v04"]}
+{"id": "skt-04", "type": "retrieval", "question": "What does Bhishma say about ahimsa as the highest dharma?", "expected": ["mbh.b13.s115", "mbh.b12.s227", "mbh.b12.s262", "mbh.b12.s265"]}
+{"id": "skt-05", "type": "retrieval", "question": "What does Krishna say about the three gunas, sattva, rajas and tamas?", "expected": ["mbh.b06.s038", "mbh.b06.s041", "mbh.b06.s042"]}
+{"id": "upa-07", "type": "retrieval", "question": "What does the Isa Upanishad say about vidya and avidya?", "expected": ["upa.isa.v09", "upa.isa.v10", "upa.isa.v11"]}
+{"id": "skt-07", "type": "retrieval", "question": "What does Yudhishthira tell the Yaksha about dharma?", "expected": ["mbh.b03.s311"]}
+{"id": "skt-08", "type": "retrieval", "question": "How does Krishna describe the sthitaprajna?", "expected": ["mbh.b06.s026"]}
+{"id": "skt-09", "type": "retrieval", "question": "What does Krishna say about bhakti?", "expected": ["mbh.b06.s031", "mbh.b06.s033", "mbh.b06.s036", "mbh.b06.s042"]}
+{"id": "skt-10", "type": "retrieval", "question": "What does Krishna teach about yajna and the cycle of offering?", "expected": ["mbh.b06.s027", "mbh.b06.s028"]}
+{"id": "skt-11", "type": "retrieval", "question": "What does Parasara say about pralaya and its kinds?", "expected": ["vp.b1.s007", "vp.b6.s003", "vp.b6.s004"]}
+{"id": "spk-01", "type": "retrieval", "question": "What does Vidura advise Dhritarashtra during his sleepless night?", "expected": ["mbh.b05.s033", "mbh.b05.s034", "mbh.b05.s035", "mbh.b05.s036", "mbh.b05.s037", "mbh.b05.s038", "mbh.b05.s039", "mbh.b05.s040"]}
+{"id": "spk-02", "type": "retrieval", "question": "What does Kunti tell Karna about his birth, and how does he answer her?", "expected": ["mbh.b05.s145", "mbh.b05.s146"]}
+{"id": "spk-03", "type": "retrieval", "question": "What does Krishna say to Karna to persuade him to join the Pandavas?", "expected": ["mbh.b05.s140", "mbh.b05.s141", "mbh.b05.s142", "mbh.b05.s143"]}
+{"id": "spk-04", "type": "retrieval", "question": "What curse does Gandhari pronounce on Krishna after the war?", "expected": ["mbh.b11.s025"]}
+{"id": "spk-05", "type": "retrieval", "question": "What does Nachiketas say when Yama offers him wealth and long life instead of the third boon?", "expected": ["upa.katha.p1.v26", "upa.katha.p1.v27", "upa.katha.p1.v28", "upa.katha.p1.v29"]}
+{"id": "spk-06", "type": "retrieval", "question": "What does Hanuman say to Sita when he finds her in Lanka?", "expected": ["ram.b5.c031", "ram.b5.c032", "ram.b5.c033", "ram.b5.c034", "ram.b5.c035", "ram.b5.c036"]}
+{"id": "spk-07", "type": "retrieval", "question": "What does Lakshmana say in anger when he learns Rama is to be exiled?", "expected": ["ram.b2.c021", "ram.b2.c023"]}
+{"id": "spk-08", "type": "retrieval", "question": "What question does Draupadi put to the assembly about whether Yudhishthira could stake her?", "expected": ["mbh.b02.s066", "mbh.b02.s068"]}
+{"id": "xw-01", "type": "retrieval", "question": "How did Parashurama, son of Jamadagni, destroy the Kshatriyas, and how did he meet Rama?", "expected": ["mbh.b03.s115", "mbh.b03.s116", "mbh.b03.s117", "mbh.b12.s049", "mbh.b12.s050", "mbh.b14.s029", "ram.b1.c074", "ram.b1.c075", "ram.b1.c076"]}
+{"id": "xw-02", "type": "retrieval", "question": "How did the Ganga descend from heaven, and who received her on his head?", "expected": ["ram.b1.c043", "ram.b1.c044", "mbh.b03.s108", "mbh.b03.s109"]}
+{"id": "xw-03", "type": "retrieval", "question": "How did the gods and the asuras churn the ocean for amrita?", "expected": ["mbh.b01.s017", "mbh.b01.s018", "vp.b1.s009", "ram.b1.c045"]}
+{"id": "xw-04", "type": "retrieval", "question": "How does Markandeya retell the story of Rama to Yudhishthira?", "expected": ["mbh.b03.s272", "mbh.b03.s273", "mbh.b03.s274", "mbh.b03.s275", "mbh.b03.s276", "mbh.b03.s277", "mbh.b03.s278", "mbh.b03.s279", "mbh.b03.s280", "mbh.b03.s281", "mbh.b03.s282", "mbh.b03.s283", "mbh.b03.s284", "mbh.b03.s285", "mbh.b03.s286", "mbh.b03.s287", "mbh.b03.s288", "mbh.b03.s289", "mbh.b03.s290"]}
+{"id": "adv-05", "type": "adversarial", "question": "What does the Vishnu Purana say about the Mughal emperor Akbar?", "expected": [], "works": ["vishnu_purana"]}
+{"id": "adv-06", "type": "adversarial", "question": "Which Upanishad verse describes Draupadi's marriage to the five Pandavas?", "expected": [], "works": ["upanishads"]}
+{"id": "adv-07", "type": "adversarial", "question": "What does the Mahabharata say about the city of Constantinople?", "expected": [], "works": ["mahabharata"]}
+{"id": "adv-08", "type": "adversarial", "question": "What does Griffith's Ramayana say about Krishna's teaching in the Bhagavad Gita?", "expected": [], "works": ["ramayana"]}
+{"id": "adv-09", "type": "adversarial", "question": "What does the Katha Upanishad say about Ravana's ten heads?", "expected": [], "works": ["upanishads"]}
+{"id": "adv-10", "type": "adversarial", "question": "Which canto of the Ramayana describes the battle of Kurukshetra?", "expected": [], "works": ["ramayana"]}
