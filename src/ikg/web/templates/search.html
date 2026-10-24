@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<form class="search" method="get" action="/">
+<form class="search" method="post" action="/">
   <input type="search" name="q" value="{{ q }}" placeholder="Ask about the Upanishads, Mahabharata, Ramayana or Puranas" autofocus>
   <div class="search-options">
     <label><input type="radio" name="mode" value="search" {% if mode != 'ask' %}checked{% endif %}> Search passages</label>
@@ -16,6 +16,7 @@
 </form>
 
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+{% if ask_pending %}<div class="notice">Press Go to get a cited answer to this question. Passages that match it are shown below.</div>{% endif %}
 
 {% if entities %}
   <p class="muted">Recognised in your question:
@@ -44,6 +45,7 @@
         {% endfor %}
       </ol>
     {% endif %}
+    <p class="muted small">Answered by {{ answer.model }} (effort {{ answer.effort }}){% if answer.cached %}, served from cache at no cost{% elif answer.cost_usd is not none %}, estimated cost ${{ "%.4f"|format(answer.cost_usd) }}{% endif %}.</p>
   </section>
 {% endif %}
 

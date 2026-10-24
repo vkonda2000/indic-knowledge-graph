@@ -49,6 +49,12 @@ They are recorded as D9–D12 in [02 §6](../02-architecture.md#6-key-decisions)
 namespace, `edition` separate from `work`, today's IDs frozen as v1 plus a `locator` field,
 and named curator tokens with a provenance log before Phase 2.
 
+## Fix status
+
+A2, A3 and A8 were fixed on 2026-10-23 (branch `fix/answer-cost-and-grounding`), together with
+the `max_tokens` and `primary_only` parts of A10. A1, A4–A7 (A7 done in PR #8), A9 and the rest
+of A10 are tracked in 06 §2.
+
 ## Reviewer's suggested first steps
 
 1. Stop the grounding leak and the spend hole (A2, A3, A8).

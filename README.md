@@ -42,7 +42,7 @@ ikg build                         # segment, extract entities, index, build grap
 ikg serve                         # web app at http://127.0.0.1:8000
 ```
 
-Cited answers call Claude (`claude-opus-5-5`) and need an API key. Copy `.env.example` to `.env`
+Cited answers call Claude (Haiku 5.5 by default, about $0.001 a question) and need an API key. Copy `.env.example` to `.env`
 and set `ANTHROPIC_API_KEY` and `IKG_ADMIN_TOKEN` there; `ikg` loads it from the current
 directory, and `.env` is git-ignored. Variables set in the shell take precedence.
 Search, the graph explorer, analysis and the retrieval evaluation work without one.
@@ -59,7 +59,9 @@ Search, the graph explorer, analysis and the retrieval evaluation work without o
 
 **Access control.** Admin login uses the `IKG_ADMIN_TOKEN` environment variable. If it is unset,
 a random token is printed at startup. Set `IKG_CONTRIBUTOR_TOKEN` to require a token for
-uploads too. Cited answers cost API credits, so visitors who are not logged in as admin get
+uploads too. Cited answers cost API credits, so Ask runs only when the form is submitted on this site
+(never on a GET, and not from other sites), repeated questions are answered from a cache at no cost, all Ask calls stop for the day
+at `IKG_ASK_BUDGET_USD` (default $5), and visitors who are not logged in as admin get
 `IKG_ASK_LIMIT` questions per hour per client address (default 20; `0` restricts Ask to admins).
 Behind a reverse proxy the client address comes from `X-Forwarded-For`, which uvicorn trusts
 only from 127.0.0.1; for a proxy on another host, set `FORWARDED_ALLOW_IPS` to its address. Sessions are `HttpOnly`, `SameSite=Strict` cookies, marked `Secure`
@@ -165,9 +167,18 @@ What this shows so far:
 - **One known failure, kept deliberately.** `con-02` asks about a kshatriya's dharma "according
   to Krishna". The Bhagavad Gita (Bhishma Parva, sections 25–42) loses to Santi Parva passages on
   kingship.
-- **Answer-level metrics not yet measured.** `ikg eval --llm` measures citation precision,
-  citation presence, false abstention and abstention on adversarial questions. It has not been
-  run yet because it needs an API key.
+- **Answers: Haiku 5.5 matches Opus 5.5 here at 1/44 of the cost.** `ikg eval --llm` on the
+  28 items:
+
+  | Model, effort | Cites right book | Citation precision | Abstains when it should | False abstentions | Cost / question |
+  |---|---|---|---|---|---|
+  | Opus 5.5, high | 0.917 | 0.702 | 1.0 | 0.167 | $0.051 |
+  | Haiku 5.5, medium | 0.917 | 0.735 | 1.0 | 0.083 | $0.0013 |
+  | **Haiku 5.5, low (default)** | 0.917 | 0.747 | 1.0 | 0.083 | **$0.0012** |
+
+  One run each, and the set is small and checks books rather than exact passages, and it doesn't yet test
+  fidelity to schools of thought. The comparison will be re-run when that benchmark exists.
+  The default row is [eval/baseline-llm.json](eval/baseline-llm.json).
 - **Retrieval is guarded in CI.** The row with gazetteer expansion is committed as
   [eval/baseline.json](eval/baseline.json), and a pull request that lowers either number fails.
 
@@ -205,11 +216,12 @@ pytest
 ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-56 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+69 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
 matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
 (checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
-citation handling with a mocked Claude client, and the web app end to end: contribute, review,
-rebuild, search, graph, and auth, upload validation and HTML escaping. No test needs a network
+citation handling, model choice and cost with a mocked Claude client, and the web app end to end: contribute, review,
+rebuild, search, graph, auth, upload validation, HTML escaping, the answer cache, the daily
+budget, and that Ask never runs on a GET. No test needs a network
 connection or an API key.
 
 **Continuous integration.** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml))
@@ -221,7 +233,7 @@ and runs the eval check above. Every PR also gets an independent review by a Fab
 ## Technology
 
 Python 3.10+, a BM25 index implemented in the project, a curated YAML gazetteer, networkx,
-rdflib (OWL, RDF, SPARQL), Claude (`claude-opus-5-5`) with native citations for answers,
+rdflib (OWL, RDF, SPARQL), Claude (Haiku 5.5 by default) with native citations for answers,
 a local Ollama model for screening uploads, FastAPI with Jinja2, Cytoscape.js, pytest, and
 GitHub Actions. Data is stored as files, with no database. The full table with versions and
 where each technology is used is in [docs/02 §7](docs/02-architecture.md#7-technology-stack).

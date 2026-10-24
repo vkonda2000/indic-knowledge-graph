@@ -24,7 +24,7 @@ Rules:
 - Each document's context says its kind. "verse" and "narrative" are the translated primary text. "commentary" and "introduction" are the translator's own explanation. "secondary" is modern scholarship (books, papers, lectures). Never present commentary or scholarship as what the text itself says; attribute it ("the translator comments...", "<author> argues...").
 - These are 19th and early-20th century English translations. When a passage uses an English word for a Sanskrit concept (e.g. "righteousness" for dharma, "Self" for atman), you may name the Sanskrit term, but do not attribute the translator's wording to the original.
 - Represent each speaker, text and school of thought on its own terms. If passages disagree or come from different works, say so and keep the views separate instead of blending them.
-- The knowledge-graph summary shows co-occurrence statistics only. Use it for orientation; never cite it as evidence of what a text says.
+- A knowledge-graph summary may follow the documents. It shows co-occurrence statistics only and is not a source: use it for orientation, and never state anything that only the summary supports.
 - If the passages do not contain enough to answer, reply with exactly {NOT_IN_SOURCES} on the first line, then one sentence on what is missing.
 - Be concise. Prefer quoting short phrases from the passages over paraphrasing at length."""
 
@@ -45,10 +45,26 @@ class Answer:
     entities: list[str] = field(default_factory=list)
     abstained: bool = False
     refused: bool = False
+    truncated: bool = False
     model: str = ""
+    effort: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0  # includes thinking tokens, which are billed as output
+    cost_usd: float | None = None
+    cached: bool = False  # served from the web app's answer cache; no API call was made
 
 
-def _documents(hits: list[Hit], kg_summary: str) -> list[dict]:
+def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    """Estimated USD cost from first-party list prices; None for a model without a known price."""
+    price = config.PRICES.get(model)
+    if price is None:
+        return None
+    if input_tokens > 100_000 and model in config.PRICES_LONG_PROMPT:
+        price = config.PRICES_LONG_PROMPT[model]
+    return (input_tokens * price[0] + output_tokens * price[1]) / 1_000_000
+
+
+def _documents(hits: list[Hit]) -> list[dict]:
     docs = []
     for h in hits:
         p = h.passage
@@ -59,15 +75,17 @@ def _documents(hits: list[Hit], kg_summary: str) -> list[dict]:
             "context": f"passage_id={p.id}; work={p.work}; kind={p.kind}; translator={p.translator}",
             "citations": {"enabled": True},
         })
-    if kg_summary:
-        docs.append({
-            "type": "document",
-            "source": {"type": "text", "media_type": "text/plain", "data": kg_summary},
-            "title": "Knowledge-graph summary (co-occurrence statistics, not a source)",
-            "context": "kind=graph",
-            "citations": {"enabled": True},
-        })
     return docs
+
+
+def _question_blocks(question: str, kg_summary: str) -> list[dict]:
+    # The summary is plain text, not a document: citations must be on for every document or
+    # none, and a sentence drawn from a citable summary would lose its citation and look grounded.
+    blocks = []
+    if kg_summary:
+        blocks.append({"type": "text",
+                       "text": f"Knowledge-graph summary (co-occurrence statistics, not a source):\n{kg_summary}"})
+    return blocks + [{"type": "text", "text": question}]
 
 
 def ask(
@@ -80,31 +98,39 @@ def ask(
     works: list[str] | None = None,
     primary_only: bool = False,
     client: anthropic.Anthropic | None = None,
-    model: str = config.MODEL,
+    model: str | None = None,
+    effort: str | None = None,
 ) -> Answer:
+    model, effort = model or config.MODEL, effort or config.EFFORT
+    if effort not in config.EFFORTS:
+        raise ValueError(f"effort must be one of {', '.join(config.EFFORTS)}, not {effort!r}")
     hits = search(index, gazetteer, question, k=k, works=works, primary_only=primary_only,
                   passage_entities=passage_entities)
     entities = gazetteer.entities_in(question)
     kg = graph_context(graph, entities, gazetteer) if graph is not None else ""
-    answer = Answer(question=question, text="", hits=hits, entities=entities, model=model)
+    answer = Answer(question=question, text="", hits=hits, entities=entities, model=model, effort=effort)
     if not hits:
         answer.text, answer.abstained = f"{NOT_IN_SOURCES}\nNo passages matched the question.", True
+        answer.cost_usd = 0.0  # no API call was made
         return answer
 
     client = client or anthropic.Anthropic()
+    fallback = ({"betas": ["server-side-fallback-2026-07-01"], "extra_body": {"fallbacks": "default"}}
+                if model in config.FALLBACK_MODELS else {})
     response = client.beta.messages.create(
         model=model,
         max_tokens=16000,
         system=SYSTEM_PROMPT,
-        output_config={"effort": "high"},
-        betas=["server-side-fallback-2026-07-01"],
-        extra_body={"fallbacks": "default"},
-        messages=[{
-            "role": "user",
-            "content": _documents(hits, kg) + [{"type": "text", "text": question}],
-        }],
+        output_config={"effort": effort},
+        messages=[{"role": "user", "content": _documents(hits) + _question_blocks(question, kg)}],
+        **fallback,
     )
     answer.model = response.model
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        answer.input_tokens, answer.output_tokens = usage.input_tokens, usage.output_tokens
+        answer.cost_usd = estimate_cost(response.model, usage.input_tokens, usage.output_tokens)
+    answer.truncated = response.stop_reason == "max_tokens"
     if response.stop_reason == "refusal":
         answer.refused = True
         return answer
@@ -118,7 +144,7 @@ def ask(
         for c in block.citations or []:
             idx = getattr(c, "document_index", None)
             if idx is None or idx >= len(hits):
-                continue  # citation of the graph summary, or an unexpected shape
+                continue  # an unexpected shape; only passages are documents
             p = hits[idx].passage
             if p.id not in numbering:
                 numbering[p.id] = len(numbering) + 1
@@ -128,6 +154,8 @@ def ask(
             pieces.append("".join(f"[{n}]" for n in sorted(set(markers))))
     body = "".join(pieces).strip()
     answer.abstained = body.startswith(NOT_IN_SOURCES)
+    if answer.truncated:
+        body += "\n\n[The answer was cut off at the length limit and may be incomplete.]"
     refs = "\n".join(f"[{numbering[c.passage_id]}] {c.ref} - {c.passage_id}" for c in answer.citations)
     answer.text = f"{body}\n\nSources:\n{refs}" if refs else body
     return answer

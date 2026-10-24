@@ -11,17 +11,21 @@ Admin login uses the IKG_ADMIN_TOKEN environment variable. If it is unset, a ran
 token is generated and printed at startup. Set IKG_CONTRIBUTOR_TOKEN to require a
 token for contributor uploads as well.
 
-Cited answers call the Claude API, so non-admin visitors are limited to IKG_ASK_LIMIT
-questions per hour per client address (default 20; 0 restricts Ask to admins).
+Cited answers call the Claude API, so they run only on POST (never on a link or a crawler's
+GET), non-admin visitors are limited to IKG_ASK_LIMIT questions per hour per client address
+(default 20; 0 restricts Ask to admins), and all Ask calls together stop for the rest of the
+UTC day once their estimated cost reaches IKG_ASK_BUDGET_USD (default 5).
 """
 
+import dataclasses
 import os
 import secrets
 import threading
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from pathlib import Path
 
+import anthropic
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -40,6 +44,7 @@ SESSION_COOKIE = "ikg_admin"
 SESSION_TTL = 12 * 3600
 MAX_SEARCH_K = 50
 MAX_ASK_K = 20
+MAX_QUESTION_CHARS = 2000
 
 
 class RateLimiter:
@@ -49,10 +54,15 @@ class RateLimiter:
         self.per_hour = per_hour
         self.lock = threading.Lock()
         self.events: dict[str, deque] = {}
+        self.calls = 0
 
     def allow(self, key: str) -> bool:
         now = time.time()
         with self.lock:
+            self.calls += 1
+            if self.calls % 256 == 0:  # forget clients idle for an hour, so memory stays bounded
+                for idle in [k for k, q in self.events.items() if not q or q[-1] <= now - 3600]:
+                    del self.events[idle]
             q = self.events.setdefault(key, deque())
             while q and q[0] <= now - 3600:
                 q.popleft()
@@ -60,6 +70,89 @@ class RateLimiter:
                 return False
             q.append(now)
             return True
+
+
+class SpendBudget:
+    """Estimated Claude spend per UTC day, shared by every visitor, kept in memory."""
+
+    UNKNOWN_COST = 0.25  # charged when an answer reports no cost (unpriced model, or an error)
+
+    def __init__(self, usd_per_day: float):
+        self.limit = usd_per_day
+        self.lock = threading.Lock()
+        self.day, self.spent = "", 0.0
+
+    def _roll(self):
+        today = time.strftime("%Y-%m-%d", time.gmtime())
+        if today != self.day:
+            self.day, self.spent = today, 0.0
+
+    def available(self) -> bool:
+        with self.lock:
+            self._roll()
+            return self.spent < self.limit
+
+    def charge(self, usd: float | None):
+        with self.lock:
+            self._roll()
+            self.spent += self.UNKNOWN_COST if usd is None else usd
+
+
+class AnswerCache:
+    """Recent answers by question and settings, so a repeated question makes no API call.
+
+    Cleared whenever the corpus is reloaded, because an answer is only valid for the passages
+    it was built from. Keys also carry the build generation, so an answer that finishes after a
+    rebuild is never served. Truncated or refused answers and errors are never stored.
+    """
+
+    def __init__(self, size: int):
+        self.size = size
+        self.lock = threading.Lock()
+        self.items: OrderedDict = OrderedDict()
+
+    @staticmethod
+    def key(q: str, k: int, works, primary_only: bool, generation: int) -> tuple:
+        return (" ".join(q.casefold().split()), k, tuple(sorted(works or [])), primary_only,
+                config.MODEL, config.EFFORT, generation)
+
+    def get(self, key):
+        with self.lock:
+            if key not in self.items:
+                return None
+            self.items.move_to_end(key)
+            return dataclasses.replace(self.items[key], cached=True, cost_usd=0.0)
+
+    def put(self, key, answer):
+        if self.size <= 0 or answer.truncated or answer.refused:
+            return
+        with self.lock:
+            self.items[key] = answer
+            self.items.move_to_end(key)
+            while len(self.items) > self.size:
+                self.items.popitem(last=False)
+
+    def clear(self):
+        with self.lock:
+            self.items.clear()
+
+
+def same_origin(request: Request) -> bool:
+    """False for a browser request sent from another site (an auto-submitted form or a fetch),
+    which would spend the visitor's quota and the shared budget. Clients that send neither
+    header, such as curl or scripts, are allowed and still limited per address."""
+    site = request.headers.get("sec-fetch-site")
+    if site is not None:
+        return site in ("same-origin", "none")
+    origin = request.headers.get("origin")
+    if origin is None:
+        return True
+    return origin.split("://", 1)[-1] == request.headers.get("host", "")
+
+
+def token_ok(given: str, expected: str) -> bool:
+    # compare_digest on str rejects non-ASCII input with TypeError; bytes accept anything.
+    return secrets.compare_digest(given.encode(), expected.encode())
 
 
 class BuildJob:
@@ -148,14 +241,20 @@ def create_app() -> FastAPI:
     contributor_token = os.environ.get("IKG_CONTRIBUTOR_TOKEN", "")
     sessions: dict[str, float] = {}
     ask_limiter = RateLimiter(int(os.environ.get("IKG_ASK_LIMIT", "20")))
+    budget = SpendBudget(config.ASK_BUDGET_USD)
+    app.state.budget = budget
+    answer_cache = AnswerCache(config.ANSWER_CACHE_SIZE)
+    app.state.answer_cache = answer_cache
     job = BuildJob()
-    state = {"runtime": None, "error": ""}
+    state = {"runtime": None, "error": "", "generation": 0}
 
     def reload_runtime():
+        state["generation"] += 1
         try:
             state["runtime"], state["error"] = Runtime.load(), ""
         except Exception as exc:
             state["runtime"], state["error"] = None, str(exc)
+        answer_cache.clear()  # cached answers cite passages of the previous build
 
     reload_runtime()
 
@@ -173,8 +272,39 @@ def create_app() -> FastAPI:
         if not is_admin(request):
             raise HTTPException(303, headers={"Location": "/admin/login"})
 
-    def ask_allowed(request: Request) -> bool:
-        return is_admin(request) or ask_limiter.allow(request.client.host if request.client else "")
+    def ask_refusal(request: Request) -> str:
+        """Why this Ask may not call the API now; empty if it may."""
+        if not same_origin(request):
+            return "Cited answers can only be requested from this site."
+        if not budget.available():
+            return "The daily budget for cited answers has been used up. Search still works."
+        if not (is_admin(request) or ask_limiter.allow(request.client.host if request.client else "")):
+            return "Question limit reached for this hour. Search still works."
+        return ""
+
+    def cached(q: str, k: int, works, primary_only: bool):
+        return answer_cache.get(AnswerCache.key(q, k, works, primary_only, state["generation"]))
+
+    def answer(request: Request, q: str, k: int, works, primary_only: bool):
+        rt = runtime()
+        from ikg.qa import ask
+        generation = state["generation"]
+        try:
+            ans = ask(q, rt.index, rt.gazetteer, graph=rt.graph, passage_entities=rt.passage_entities,
+                      k=k, works=works, primary_only=primary_only)
+        except anthropic.APITimeoutError:  # a subclass of APIConnectionError, but may have been billed
+            budget.charge(None)
+            raise
+        except (ValueError, anthropic.BadRequestError, anthropic.AuthenticationError,
+                anthropic.PermissionDeniedError, anthropic.NotFoundError, anthropic.APIConnectionError):
+            raise  # rejected or never sent: not billed
+        except Exception:
+            budget.charge(None)  # e.g. a server error: the request may still have been billed
+            raise
+        budget.charge(ans.cost_usd)
+        if state["generation"] == generation:  # a rebuild during the call makes this answer stale
+            answer_cache.put(AnswerCache.key(q, k, works, primary_only, generation), ans)
+        return ans
 
     def render(request: Request, name: str, **ctx):
         rt = state["runtime"]
@@ -187,20 +317,33 @@ def create_app() -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request, q: str = "", mode: str = "search", primary_only: bool = False, k: int = 8):
-        works = request.query_params.getlist("works") or None
+        # A GET never calls the API (links, previews and crawlers would spend credits);
+        # an Ask link only fills in the form, and submitting it POSTs.
+        return results(request, q, mode, primary_only, k, request.query_params.getlist("works"), post=False)
+
+    @app.post("/", response_class=HTMLResponse)
+    async def home_post(request: Request):
+        form = await request.form()
+        return await run_in_threadpool(
+            results, request, str(form.get("q", "")), str(form.get("mode", "search")),
+            form.get("primary_only") == "true", form.get("k", 8), form.getlist("works"), True)
+
+    def results(request: Request, q: str, mode: str, primary_only: bool, k, works: list[str], post: bool):
+        q, works = q[:MAX_QUESTION_CHARS], works or None
         k = clamp_k(k, MAX_ASK_K if mode == "ask" else MAX_SEARCH_K)
         ctx = {"q": q, "mode": mode, "primary_only": primary_only, "k": k, "selected_works": works or [],
-               "hits": [], "answer": None, "error": ""}
+               "hits": [], "answer": None, "error": "", "ask_pending": mode == "ask" and q and not post}
         if q and state["runtime"] is not None:
             rt = runtime()
-            if mode == "ask" and not ask_allowed(request):
-                ctx["error"] = "Question limit reached for this hour. Search still works."
-            elif mode == "ask":
+            hit = cached(q, k, works, primary_only) if mode == "ask" and post else None
+            refusal = ask_refusal(request) if mode == "ask" and post and hit is None else ""
+            if hit is not None:
+                ctx["answer"] = hit  # free: no API call, no budget or rate-limit use
+            elif refusal:
+                ctx["error"] = refusal
+            elif mode == "ask" and post:
                 try:
-                    from ikg.qa import ask
-                    ctx["answer"] = ask(q, rt.index, rt.gazetteer, graph=rt.graph,
-                                        passage_entities=rt.passage_entities, k=k, works=works,
-                                        primary_only=primary_only)
+                    ctx["answer"] = answer(request, q, k, works, primary_only)
                 except Exception as exc:  # missing API key, network, rate limit...
                     ctx["error"] = (f"Answering failed: {exc}. Cited answers need Claude API credentials "
                                     "(set ANTHROPIC_API_KEY before starting the server). Search still works.")
@@ -244,7 +387,7 @@ def create_app() -> FastAPI:
                          year: str = Form(""), kind: str = Form("secondary"), contributor: str = Form(""),
                          notes: str = Form(""), token: str = Form(""), file: UploadFile = File(...)):
         ctx = {"kinds": KINDS, "needs_token": bool(contributor_token), "message": "", "error": ""}
-        if contributor_token and not secrets.compare_digest(token, contributor_token):
+        if contributor_token and not token_ok(token, contributor_token):
             ctx["error"] = "Invalid contributor token."
             return render(request, "contribute.html", **ctx)
         try:
@@ -268,7 +411,7 @@ def create_app() -> FastAPI:
 
     @app.post("/admin/login")
     def login(request: Request, token: str = Form(...)):
-        if not secrets.compare_digest(token, admin_token):
+        if not token_ok(token, admin_token):
             return render(request, "login.html", error="Invalid token.")
         now = time.time()
         for old in [s for s, expiry in sessions.items() if expiry <= now]:
@@ -382,18 +525,24 @@ def create_app() -> FastAPI:
         works = body.get("works")
         if works is not None and not (isinstance(works, list) and all(isinstance(w, str) for w in works)):
             raise HTTPException(400, "'works' must be a list of work ids")
+        primary_only = body.get("primary_only", False)
+        if not isinstance(primary_only, bool):  # the string "false" would otherwise read as true
+            raise HTTPException(400, "'primary_only' must be true or false")
         k = clamp_k(body.get("k", 8), MAX_ASK_K)
-        rt = runtime()
-        if not ask_allowed(request):
-            raise HTTPException(429, "Question limit reached for this hour")
-        from ikg.qa import ask
+        runtime()
+        question = str(body["question"])[:MAX_QUESTION_CHARS]
+        ans = cached(question, k, works or None, primary_only)
+        refusal = "" if ans is not None else ask_refusal(request)
+        if refusal:
+            raise HTTPException(429, refusal)
         try:
-            ans = ask(str(body["question"])[:2000], rt.index, rt.gazetteer, graph=rt.graph,
-                      passage_entities=rt.passage_entities, k=k, works=works or None,
-                      primary_only=bool(body.get("primary_only")))
+            # The Claude call blocks for seconds; keep it off the event loop.
+            if ans is None:
+                ans = await run_in_threadpool(answer, request, question, k, works or None, primary_only)
         except Exception as exc:  # missing API key, network, rate limit...
             raise HTTPException(503, f"Answering failed: {exc}") from None
         return {"answer": ans.text, "abstained": ans.abstained, "refused": ans.refused,
+                "truncated": ans.truncated, "model": ans.model, "cached": ans.cached,
                 "citations": [c.__dict__ for c in ans.citations],
                 "retrieved": [h.passage.id for h in ans.hits]}
 

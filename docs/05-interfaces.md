@@ -4,7 +4,8 @@
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| GET | `/` | public | Search or Ask. Query params: `q`, `mode` (`search`\|`ask`), `works` (repeatable), `primary_only`, `k` (search ≤ 50, ask ≤ 20) |
+| GET | `/` | public | Search. Query params: `q`, `mode` (`search`\|`ask`), `works` (repeatable), `primary_only`, `k` (search ≤ 50, ask ≤ 20). With `mode=ask` it only fills in the form; it never calls the API |
+| POST | `/` | public; Ask is budget- and rate-limited | The search form. Same fields as form data. `mode=ask` gives a cited answer (from the answer cache when possible) |
 | GET | `/graph` | public | Graph explorer |
 | GET | `/entity/{id}` | public | Entity profile; 404 if the ID is unknown |
 | GET | `/passage/{id}` | public | Passage with entities and previous/next; 404 if the ID is unknown |
@@ -25,7 +26,7 @@
 | Method | Path | Access | Request | Response |
 |---|---|---|---|---|
 | GET | `/api/search` | public | `q`*, `k` (1–50, default 8), `works` (repeatable), `primary_only` | `{query, entities: [id], results: [{id, ref, kind, score, text}]}` |
-| POST | `/api/ask` | public, rate-limited | `{"question"*: str, "k": int ≤ 20, "works": [str], "primary_only": bool}` | `{answer, abstained, refused, citations: [{passage_id, ref, cited_text}], retrieved: [id]}` |
+| POST | `/api/ask` | public; budget- and rate-limited; cache hits are free | `{"question"*: str, "k": int ≤ 20, "works": [str], "primary_only": bool}` (`primary_only` must be a JSON boolean) | `{answer, abstained, refused, truncated, model, cached, citations: [{passage_id, ref, cited_text}], retrieved: [id]}`; 429 when the daily budget or the hourly limit is reached, or for a browser request from another site |
 | GET | `/api/graph` | public | `work`, `types` (comma-separated), `min_weight` (default 5), `max_nodes` (≤ 300, default 80) | Cytoscape elements: `{nodes: [{data: {id, label, type, mentions}}], edges: [{data: {id, source, target, weight}}]}` |
 | GET | `/api/entity/{id}` | public | none | `{id, label, type, iast, aliases, renderings, mentions, works, surface_forms, neighbours, passages}` (10 passages) |
 | GET | `/api/build/status` | admin | none | `{state: idle\|running\|done\|error, log: [str], stats, error, started, finished}` |
@@ -56,9 +57,9 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | `ikg build` | Segment, extract, index, graph, RDF | `--works ID...`, `--with-passages` (passages in RDF) | raw texts |
 | `ikg stats` | Passages per work and kind | none | built corpus |
 | `ikg search "Q"` | Ranked passages, no API call | `-k`, `--works`, `--primary-only` | built corpus |
-| `ikg ask "Q"` | Cited answer | `-k`, `--works`, `--primary-only`, `--show-retrieval` | `ANTHROPIC_API_KEY` |
+| `ikg ask "Q"` | Cited answer, then the model, tokens and estimated cost | `-k`, `--works`, `--primary-only`, `--show-retrieval`, `--model`, `--effort` | `ANTHROPIC_API_KEY` |
 | `ikg analyze` | Write `reports/corpus-analysis.md` | none | built corpus |
-| `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand`, `--check BASELINE` (exit 1 if any baseline metric got worse; used by CI) | built corpus (+ API key with `--llm`) |
+| `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand`, `--model`, `--effort` (with `--llm`), `--check BASELINE` (exit 1 if any baseline metric got worse; used by CI) | built corpus (+ API key with `--llm`) |
 | `ikg sparql "QUERY"` | Query `processed/ikg.ttl` | none | built corpus |
 | `ikg serve` | Run the web app | `--host` (127.0.0.1), `--port` (8000) | `[web]` extras |
 
@@ -77,6 +78,10 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_CONTRIBUTOR_TOKEN` | unset (open uploads) | Token required on `/contribute` |
 | `IKG_ASK_LIMIT` | `20` | Ask requests per hour per client IP for non-admins; `0` = admins only |
 | `ANTHROPIC_API_KEY` | none | Claude API key for Ask |
+| `IKG_ANSWER_MODEL` | `claude-haiku-5-5` | Claude model for cited answers (D13) |
+| `IKG_ANSWER_EFFORT` | `low` | `low`, `medium`, `high`, `xhigh` or `max` |
+| `IKG_ASK_BUDGET_USD` | `5` | Estimated Ask spend per UTC day, all visitors together, before Ask stops |
+| `IKG_ANSWER_CACHE_SIZE` | `1000` | Answers kept in memory for repeated questions; `0` disables the cache |
 | `IKG_SCREEN` | `on` | `off`/`0`/`false`/`no` disables upload screening |
 | `IKG_SCREEN_MODEL` | `qwen3.5:9B` | Ollama model for screening |
 | `OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama server URL |

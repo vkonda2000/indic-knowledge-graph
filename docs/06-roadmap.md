@@ -14,7 +14,23 @@ Offline retrieval evaluation, 28 questions (24 retrieval, 4 adversarial), `k = 8
 | BM25 + gazetteer expansion + entity boost (default) | 0.625 | 0.958 |
 | BM25 only (`ikg eval --no-expand`) | 0.625 | 0.958 |
 
-The default row is committed as `eval/baseline.json`. CI rebuilds the corpus on every pull
+**Answers** (`ikg eval --llm`, same 28 items, k = 8, 2026-10-23; total spend $1.50):
+
+| Model, effort | cites_expected | citation_precision | adversarial_abstain | false_abstain | Output tokens | Cost / question |
+|---|---|---|---|---|---|---|
+| Opus 5.5, high | 0.917 | 0.702 | 1.0 | 0.167 | 1,140 | $0.051 |
+| Haiku 5.5, medium | 0.917 | 0.735 | 1.0 | 0.083 | 1,166 | $0.0013 |
+| **Haiku 5.5, low (default, D13)** | 0.917 | 0.747 | 1.0 | 0.083 | 925 | **$0.0012** |
+
+Every question sends about 7,000 input tokens (eight passages). Haiku 5.5 at low effort met
+the agreed bar (citation metrics within 5 points of Opus 5.5 high, adversarial abstention no
+lower, false abstentions no higher), so it is the default (D13); its row is
+`eval/baseline-llm.json`. One run per setting: the differences are 1–2 items. Caveats: the set is small, checks books rather
+than passages, and doesn't test SOT fidelity; re-run when the fidelity benchmark exists.
+Retrieval with k = 4 still reaches hit@k 0.958 (k = 3: 0.917), so fewer passages could halve
+input cost; that needs an `--llm` run before changing `k` (Phase 0 row "Send fewer passages").
+
+The default retrieval row is committed as `eval/baseline.json`. CI rebuilds the corpus on every pull
 request and fails if either number drops ([03 §11](03-design.md#11-evaluation-evaluatepy)).
 
 What this shows:
@@ -68,17 +84,19 @@ so hit@8 measures "a passage from the right book", not the right passage.
 | # | Limitation | Effect | Where |
 |---|---|---|---|
 | L19 | Builds are not self-describing or atomic: the runtime loads the current gazetteer, not the build's; artefacts are written in place; CLI and web builds don't share a lock (A1, A6) | A gazetteer edit without a rebuild, or a crash mid-build, makes pages and Ask fail with `KeyError` | `pipeline.py` |
-| L20 | The graph summary is sent to Claude as a citable document; its citations are dropped but the sentence stays (A2) | An unsupported, unmarked sentence can appear in an answer (NFR-1) | `qa.py` |
-| L21 | API spend is limited per client address only; Ask runs on GET; limiter keys never expire (A3) | NFR-5 is not met for a public deployment | `web/app.py` |
+| L20 | The graph summary was sent to Claude as a citable document (A2) | **Resolved (Oct 2026):** it is now a plain text block labelled not-a-source, and the prompt forbids stating anything only it supports. Sentence-level verification (Phase 3) is still needed to prove it | `qa.py` |
+| L21 | API spend was limited per client address only; Ask ran on GET (A3) | **Resolved (Oct 2026):** POST-only Ask, an answer cache, a daily budget across all visitors, idle limiter keys expire, and a 44× cheaper default model. Spend state is in memory, so a restart resets the day's total (L10) | `web/app.py`, `qa.py` |
 | L22 | The gazetteer validator doesn't check field types or the `type` value (A4) | A one-character YAML slip can corrupt the whole graph | `entities.py` |
 | L23 | Uploads have no rate limit; PDFs are parsed in the web worker (A5) | Resource exhaustion from crafted or repeated uploads | `web/app.py`, `screen.py` |
 | L24 | Source downloads are not pinned by checksum (A7) | **Resolved (Oct 2026):** bundled texts carry a `sha256` in `sources.yaml`, verified by `fetch` and `build`; downloads retry. Admin-added Gutenberg texts are not pinned yet | `sources.py` |
-| L25 | Non-ASCII tokens crash the login and contribute checks (A8) | 500 error instead of "Invalid token" | `web/app.py` |
-| L26 | Small robustness gaps: API redirect on expired session, unflagged `max_tokens` truncation, string `"false"` read as true, Gutenberg marker edge case (A9, A10) | Silent misbehaviour in edge cases | `web/app.py`, `qa.py`, `sources.py` |
+| L25 | Non-ASCII tokens crashed the login and contribute checks (A8) | **Resolved (Oct 2026):** tokens are compared as bytes | `web/app.py` |
+| L26 | Small robustness gaps (A9, A10) | **Partly resolved (Oct 2026):** truncated answers are flagged and `primary_only` must be a boolean. Still open: the API redirect on an expired session and the Gutenberg marker edge case | `web/app.py`, `sources.py` |
 | L27 | Work and edition are not separated in the data model (B1) | Parallel translations and C2 can't be modelled; must be decided before Phase 1 | `Passage`, IRIs, gazetteer |
 | L28 | Passage IDs include a chunk ordinal that depends on chunking parameters (B2) | Changing the chunker renumbers IDs used by eval items; pages and timestamps don't fit | `segment.py` |
 | L29 | The RDF shape lacks passages by default, `Section` instances, per-edition renderings and `ordinal` (B4) | Claims curated in Phase 2 would point at IRIs that later change | `graph.py`, ontology |
 | L30 | Curation provenance and copyrighted ingestion are planned before identity and roles (B5) | "Who approved" can't be recorded correctly with one shared token | Phases 1, 2, 4 |
+| L31 | When a refusal fallback answers (Opus or Sonnet only), cost is estimated from the final model's usage alone; the declined attempt (`usage.iterations`) is not added, and an unpriced fallback model is charged a flat $0.25 | Budget under- or over-estimates in rare cases; not relevant to the Haiku default | `qa.py`, `config.PRICES` |
+| L32 | The daily budget is checked before a call and charged after it | Concurrent requests can overshoot the budget by their combined cost (about $0.001 each on Haiku) | `web/app.py` |
 
 ## 3. Status against the target responsibilities
 
@@ -91,7 +109,7 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 
 ### 3.1 Done
 
-- [x] **LLM answering**: Claude (`claude-opus-5-5`) with native citations (`qa.py`)
+- [x] **LLM answering**: Claude with native citations (`qa.py`); Haiku 5.5 by default, Opus 5.5 or Sonnet 5.5 selectable
 - [x] **RAG**: BM25 retrieval, then an answer written from the retrieved passages only (`retrieve.py`, `qa.py`)
 - [x] **Traceable answers**: every citation maps to a passage ID, edition and translator (T6)
 - [x] **Primary text, commentary and scholarship kept apart** in passages and in answers (T7)
@@ -107,6 +125,8 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 - [x] **Continuous integration**: GitHub Actions runs `pytest` on Python 3.10 and 3.12 on every PR (`.github/workflows/ci.yml`) (L15)
 - [x] **Offline regression gate**: CI builds the corpus and runs `ikg eval --check eval/baseline.json`; a drop in hit@1 or hit@8 fails the PR (T10)
 - [x] **Tests for the RDF export, analysis report and CLI** `search`/`stats`, including a check that the export uses only terms declared in the ontology (L15)
+- [x] **Cost control for answers**: configurable model and effort, per-answer token and cost tracking, answer cache, daily budget, POST-only Ask; Haiku 5.5 at low effort is the default after an eval comparison with Opus 5.5 (D13, NFR-5)
+- [x] **Answer-level baseline**: `ikg eval --llm` recorded for three model settings ([§1](#1-measured-baseline), `eval/baseline-llm.json`)
 - [x] **Independent review practice**: each PR is reviewed by a Fable subagent (`.claude/agents/fable-reviewer.md`) and the findings are summarised in the PR
 
 ### 3.2 Partial
@@ -180,20 +200,21 @@ flowchart LR
 | Grow the eval set to about 150 items: about 30 phrased in Sanskrit where the translation uses renderings, about 20 speaker-specific, about 20 cross-work, about 20 adversarial (false premises, misattributions, out-of-corpus) | L1, T10 | `eval/questions.jsonl` | Not started (28 items) |
 | **Multi-turn eval items**: conversations whose follow-ups depend on earlier turns ("and how does Shankara read that verse?") | T10 | new `type: multiturn` in `evaluate.py` | Not started |
 | **Fidelity benchmark (C1)**: SME-approved items and the four rates from [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) (attribution, separation, own terms, debate position), using a rubric-guided LLM judge checked against SME labels. Run against a plain model with no retrieval as well as this system, and report both | T7, T10 | `eval/fidelity/items.jsonl`, new `type: fidelity` and a `--baseline` switch in `evaluate.py` | 10 draft items awaiting SME review; evaluator not started |
-| Record the first `ikg eval --llm` baseline and commit the summary | §1 | add the answer metrics to `eval/baseline.json` | Not started |
+| Record the first `ikg eval --llm` baseline and commit the summary | §1 | `eval/baseline-llm.json`, §1 | **Done**; model comparison led to D13 |
 | GitHub Actions: `pytest` plus an offline eval regression gate on every PR | L15, T10 | `.github/workflows/ci.yml`, `ikg eval --check`, `eval/baseline.json` | **Done** |
 | Tests for `to_rdf`, `analysis.write_report`, CLI `search`/`stats` | L15 | `tests/test_rdf_analysis_cli.py` | **Done**; also fixed a crash in `ikg analyze` when the gazetteer lacks one of its fixed concepts |
 | Reject duplicate surface forms across entities in the gazetteer validator | L5 | `entities.py` | **Done** |
 | Measure rendering precision on a sample of 100 mentions per ambiguous rendering; scope or drop noisy ones | L6 | `gazetteer.yaml`, `analysis.py` | Not started |
 | Choose a permanent namespace; widen the `renders` range | L13, L14 | `graph.py`, ontology | Not started |
 | Dockerfile (app + optional Ollama sidecar) | Deployment | repo root | Not started |
-| **Review fixes, urgent**: stop citations to the graph summary; POST-only Ask, a global spend budget and limiter eviction; byte-wise token comparison | L20, L21, L25 | `qa.py`, `web/app.py` | Not started (proposed for the next PR) |
+| **Review fixes, urgent**: stop citations to the graph summary; POST-only Ask, a global spend budget and limiter eviction; byte-wise token comparison | L20, L21, L25 | `qa.py`, `web/app.py` | **Done**, plus an answer cache and a configurable answering model |
 | **Self-describing, atomic builds**: build manifest (gazetteer hash, works, source checksums, chunking parameters), gazetteer snapshot, build into a temporary directory and rename, shared lock | L19, L24 | `pipeline.py`, `sources.py`, `sources.yaml` | Source checksums **done**; the rest not started |
 | **Data-model decisions before eval growth**: edition on passages, v1 ID and locator scheme, per-edition renderings, permanent namespace | L27, L28, L29, L13 | [02 §6](02-architecture.md#6-key-decisions) D9–D11 | **Decided** 2026-10-23 |
 | Implement D10 and D11: `edition` and `locator` on `Passage`, editions in the registry, per-edition renderings, frozen chunking parameters recorded in the build | L27, L28, L29 | `segment.py`, `sources.py`, `graph.py`, ontology | Not started |
 | Implement D9: register `https://w3id.org/ikg/` (PR to perma-id/w3id.org), switch the ontology and export, add `owl:versionIRI` | L13 | `ontology/ikg.ttl`, `graph.py`, `cli.py` | Not started; registration needs a maintainer |
 | Section-level eval expectations and MRR | L1 (B3) | `evaluate.py`, `eval/questions.jsonl` | Not started |
 | Gazetteer schema validation (field types, `type` value) | L22 | `entities.py` | Not started |
+| **Send fewer passages per answer (k = 8 → 4)**: retrieval finds the right book as often with 4 passages as with 8 (hit@k 0.958 for both; k = 3 drops to 0.917), which would roughly halve input tokens (~7,000 → ~3,500) and answer cost. Run `ikg eval --llm -k 4` (about $0.02 on Haiku 5.5) and compare with `eval/baseline-llm.json` on the agreed bar before changing the default `k` in the CLI, web form and API | Cost (NFR-5) | `cli.py`, `web/app.py`, `search.html`, `eval/baseline-llm.json` | Not started; needs one answer-quality run |
 
 **Exit criteria:** CI is green; baselines for retrieval, citations, abstention and SOT fidelity
 are committed. As of October 2026, CI and the retrieval baseline are in place; the citation,

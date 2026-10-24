@@ -107,7 +107,7 @@ systems tend to blur three distinctions that this system keeps:
 | NFR-2 Reproducibility | A build from the same sources and gazetteer produces the same passages, IDs and mentions | Met: segmentation and extraction are deterministic, with no model in the build |
 | NFR-3 Build time | A full rebuild of ~3.1M words runs in seconds on a laptop | About 10 s |
 | NFR-4 Query latency | Search responds interactively | Pages and search in under 15 ms locally. Ask is bound by the Claude API |
-| NFR-5 Cost control | The public cannot run up unbounded API spend | Ask is rate-limited per client (`IKG_ASK_LIMIT`); `k` is capped at 20 |
+| NFR-5 Cost control | The public cannot run up unbounded API spend | Ask runs only on POST; repeated questions come from an answer cache; a daily budget across all visitors (`IKG_ASK_BUDGET_USD`) and a per-client hourly limit (`IKG_ASK_LIMIT`); `k` is capped at 20; the default model is the cheapest that held quality on the eval (D13) |
 | NFR-6 Privacy of uploads | Upload content is not sent to third parties for screening | Screening runs on a local Ollama model |
 | NFR-7 Security | Uploads are never executed, admin actions need a session, output is HTML-escaped, the admin cookie is `HttpOnly` and `SameSite=Strict`, and `Secure` over HTTPS | Met for a single-admin deployment; see the limits in 06 |
 | NFR-8 Offline operation | Search, graph, analysis and retrieval evaluation work without network access or API keys, once the texts are fetched | Met |

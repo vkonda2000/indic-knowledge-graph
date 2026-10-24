@@ -19,7 +19,7 @@ flowchart LR
     app <--> data
     cli <--> data
     app -->|screen uploads| ollama
-    app -->|cited answers| claude[Claude API<br/>claude-opus-5-5]
+    app -->|cited answers| claude[Claude API<br/>claude-haiku-5-5 by default]
     cli -->|ask, eval --llm| claude
     app -->|rebuild: fetch texts| gutenberg[Project Gutenberg]
     cli -->|fetch| gutenberg
@@ -120,16 +120,18 @@ sequenceDiagram
     participant R as retrieve.search
     participant Q as qa.ask
     participant C as Claude API
-    U->>W: GET /?q=...&mode=ask
-    W->>W: clamp k, check rate limit
+    U->>W: POST / (q, mode=ask)
+    W->>W: clamp k; answer cache hit? return it
+    W->>W: check daily budget and rate limit
     W->>Q: ask(question, Runtime)
     Q->>R: search (BM25 + expansion + entity boost + filters)
     R-->>Q: top-k passages
     Q->>Q: graph_context(entities in question)
-    Q->>C: documents (passages + graph summary) + question
+    Q->>C: passage documents + graph summary (text) + question
     C-->>Q: text blocks with citations
     Q->>Q: map document_index -> passage id, number refs, detect NOT_IN_SOURCES
-    Q-->>W: Answer(text, citations, hits)
+    Q-->>W: Answer(text, citations, hits, tokens, cost)
+    W->>W: charge budget, store in answer cache
     W-->>U: answer + passages given to the model
 ```
 
@@ -168,7 +170,9 @@ sequenceDiagram
 | Gazetteer override | `data/gazetteer.yaml` | Persistent | Falls back to the bundled `src/ikg/data/gazetteer.yaml` |
 | Uploaded files | `data/uploads/<uuid>.<ext>` | Persistent | |
 | Admin sessions | Process memory (dict) | 12 h, lost on restart | |
-| Ask rate-limit windows | Process memory | 1 h sliding window | Per client IP |
+| Ask rate-limit windows | Process memory | 1 h sliding window | Per client IP; idle clients forgotten |
+| Ask spend | Process memory | Current UTC day, lost on restart | Estimated USD, all visitors |
+| Answer cache | Process memory | Until the next corpus reload or restart | Up to 1,000 answers |
 | Build job state and log | Process memory | Current process | One build at a time (non-blocking lock) |
 
 **Consequence:** the web app must run as a **single process with a single worker**. More
@@ -229,6 +233,12 @@ that row is done, the code still works as described in the rest of this document
 | D11 | **Freeze today's passage IDs as v1, and add a locator.** Existing IDs stay exactly as they are; the chunking parameters that produce them (`MAX_CHARS = 1500`, the sentence splitter) are frozen and recorded. New editions get edition-qualified IDs. A structured `locator` field holds book/section/verse, page, or timestamp for citations | No migration of the 28 eval items or the fidelity drafts; IDs no longer depend on accidental chunker changes; pages and timestamps fit (Phase 1) | Changing the chunker for an existing edition needs an explicit ID migration map. Eval expectations move to section level using the locator (B3) |
 | D12 | **Named curator tokens and an append-only provenance log before Phase 2.** Each curator gets a named token in place of the single admin token; every approval, edit and rejection is appended to a log with who, when, what and the supporting passage | Curation provenance ("who proposed, who approved") is correct from the first record | OIDC and roles still come in Phase 4 and replace the tokens; the log format carries over |
 
+### Decided and implemented (2026-10-23)
+
+| # | Decision | Why | Trade-off |
+|---|---|---|---|
+| D13 | **Answer with Claude Haiku 5.5 at effort `low` by default**; Opus 5.5 and Sonnet 5.5 stay selectable (`IKG_ANSWER_MODEL`, `IKG_ANSWER_EFFORT`) | The agreed bar for a cheaper default: citation metrics within 5 points of Opus 5.5 at effort `high`, adversarial abstention no lower, false abstentions no higher. On the 28-item eval (one run each) Haiku met it: citing the right book 0.917 vs 0.917, citation precision 0.747 vs 0.702, abstaining on unanswerable questions 1.0 vs 1.0, false abstentions 0.083 vs 0.167 (2 vs 4 of 24), at $0.0012 instead of $0.051 a question | One run per setting, and the differences are 1–2 items; Opus was tried only at `high`. The eval checks books, not exact passages, and doesn't yet measure SOT fidelity (C1), where a larger model may matter. Re-run the comparison, several times, when the fidelity benchmark exists. Haiku has no server-side refusal fallback |
+
 ## 7. Technology stack
 
 What the project uses today. Anything not listed here is not used. Planned technologies
@@ -245,13 +255,13 @@ and are not part of the system until they appear in this table.
 | Retrieval | BM25 implemented in the project (k1 = 1.5, b = 0.75), stored as a pickle | none (no search library) | `retrieve.py` | Gazetteer query expansion and entity boost; no embeddings or vector store |
 | Knowledge graph | networkx co-occurrence graph, saved as GraphML | networkx ≥ 3.0 | `graph.py` | Not a graph database |
 | Ontology and linked data | OWL ontology in Turtle; RDF export and SPARQL with rdflib | rdflib ≥ 7.0 | `ontology/ikg.ttl`, `graph.to_rdf`, `ikg sparql` | Namespace is the placeholder `https://example.org/ikg#` (L13) |
-| Answer generation | Claude API through the `anthropic` SDK, native document citations | model `claude-opus-5-5` | `qa.py` | Needs `ANTHROPIC_API_KEY`; the only hosted model |
+| Answer generation | Claude API through the `anthropic` SDK, native document citations | `claude-haiku-5-5` at effort `low` by default (D13); configurable | `qa.py`, `config.py` | Needs `ANTHROPIC_API_KEY`; the only paid call. Cost estimated per answer from `config.PRICES` |
 | Upload screening | Ollama (local) over HTTP | default model `qwen3.5:9B` | `screen.py` | Runs on the host; uploads are rejected if Ollama is unreachable |
 | Web app | FastAPI, served by uvicorn; Jinja2 templates; python-multipart for forms | FastAPI ≥ 0.110, uvicorn ≥ 0.29, Jinja2 ≥ 3.1 | `web/app.py`, `web/templates/` | `[web]` extra. Sessions, rate limits and the build job live in process memory |
 | Graph explorer | Cytoscape.js from the jsDelivr CDN | 3.30.2 | `web/templates/graph.html`, `web/static/graph.js` | Only browser dependency |
 | Storage | Files on disk: JSONL, YAML, pickle, GraphML, Turtle | none | `data/` (D6) | No database |
 | Tests | pytest; httpx for FastAPI's `TestClient` | pytest ≥ 7.0, httpx ≥ 0.27 | `tests/` | Models and HTTP are faked; no network or key needed |
-| Evaluation | `ikg eval` with a committed baseline | `eval/baseline.json` | `evaluate.py` | `--check` is the CI regression gate |
+| Evaluation | `ikg eval` with committed baselines | `eval/baseline.json` (offline, CI), `eval/baseline-llm.json` (answers, by hand) | `evaluate.py` | `--check` is the regression gate |
 | CI | GitHub Actions | `actions/checkout@v4`, `setup-python@v5`, `cache/restore@v4`, `cache/save@v4` | `.github/workflows/ci.yml` | See §5 |
 | Code review | Independent review by a Fable subagent before each PR | `.claude/agents/fable-reviewer.md` | PR template | See ONBOARDING §7 |
 | Docs and diagrams | Markdown with Mermaid | none | `docs/` | Render on GitHub |
