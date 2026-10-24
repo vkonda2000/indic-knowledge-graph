@@ -43,6 +43,12 @@ PRICES_LONG_PROMPT = {"claude-haiku-5-5": (0.50, 2.50)}  # prompts over 100K tok
 # Models that accept the server-side refusal fallback (`fallbacks: "default"`). Haiku 5.5 has none.
 FALLBACK_MODELS = {"claude-opus-5-5", "claude-sonnet-5-5"}
 
+# Judge for the fidelity benchmark (ikg eval --fidelity). Its verdicts are checked against expert
+# labels before rates are reported (eval/fidelity/README.md).
+JUDGE_MODEL = os.environ.get("IKG_JUDGE_MODEL", "claude-opus-5-5")
+JUDGE_EFFORT = os.environ.get("IKG_JUDGE_EFFORT", "medium")
+FIDELITY_FILE = Path("eval") / "fidelity" / "items.jsonl"
+
 # Spend cap for Ask in the web app, across all visitors, per UTC day (admins included).
 ASK_BUDGET_USD = float(os.environ.get("IKG_ASK_BUDGET_USD", "5"))
 # Answers the web app keeps in memory for repeated questions (0 disables the cache).

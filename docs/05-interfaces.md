@@ -60,6 +60,7 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | `ikg ask "Q"` | Cited answer, then the model, tokens and estimated cost | `-k`, `--works`, `--primary-only`, `--show-retrieval`, `--model`, `--effort` | `ANTHROPIC_API_KEY` |
 | `ikg analyze` | Write `reports/corpus-analysis.md` | none | built corpus |
 | `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand`, `--model`, `--effort` (with `--llm`), `--check BASELINE` (exit 1 if any baseline metric got worse; used by CI) | built corpus (+ API key with `--llm`) |
+| `ikg eval --fidelity` | SOT-fidelity benchmark: pass/fail per item and check, rates per property | `--baseline` (plain model, no retrieval), `--include-drafts`, `--judge-model`, `--model`, `--effort`, `-k`; not combinable with `--check`, `--llm`, `--no-expand` | API key; built corpus unless `--baseline`; at least one approved item |
 | `ikg sparql "QUERY"` | Query `processed/ikg.ttl` | none | built corpus |
 | `ikg serve` | Run the web app | `--host` (127.0.0.1), `--port` (8000) | `[web]` extras |
 
@@ -82,6 +83,8 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_ANSWER_EFFORT` | `low` | `low`, `medium`, `high`, `xhigh` or `max` |
 | `IKG_ASK_BUDGET_USD` | `5` | Estimated Ask spend per UTC day, all visitors together, before Ask stops |
 | `IKG_ANSWER_CACHE_SIZE` | `1000` | Answers kept in memory for repeated questions; `0` disables the cache |
+| `IKG_JUDGE_MODEL` | `claude-opus-5-5` | Judge for `ikg eval --fidelity` |
+| `IKG_JUDGE_EFFORT` | `medium` | Judge effort |
 | `IKG_SCREEN` | `on` | `off`/`0`/`false`/`no` disables upload screening |
 | `IKG_SCREEN_MODEL` | `qwen3.5:9B` | Ollama model for screening |
 | `OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama server URL |

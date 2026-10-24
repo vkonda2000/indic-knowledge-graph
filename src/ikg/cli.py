@@ -101,7 +101,32 @@ def cmd_analyze(args):
     print(f"Wrote {path}")
 
 
+def cmd_fidelity(args):
+    from ikg import fidelity
+    if args.check or args.llm or args.no_expand:
+        sys.exit("--fidelity can't be combined with --check, --llm or --no-expand.")
+    if config.JUDGE_EFFORT not in config.EFFORTS:
+        sys.exit(f"IKG_JUDGE_EFFORT must be one of {', '.join(config.EFFORTS)}, not {config.JUDGE_EFFORT!r}.")
+    try:
+        items = fidelity.load_items(config.FIDELITY_FILE)
+    except (OSError, ValueError) as exc:
+        sys.exit(f"Fidelity items: {exc}")
+    if not any(i.status == "approved" for i in items) and not args.include_drafts:
+        sys.exit("No fidelity item is approved by a subject expert yet (eval/fidelity/README.md). "
+                 "Use --include-drafts to try the drafts; those results are not reportable.")
+    result = fidelity.run(items, runtime=None if args.baseline else _runtime(), baseline=args.baseline,
+                          include_drafts=args.include_drafts, judge_model=args.judge_model, model=args.model,
+                          effort=args.effort, k=args.k, out_dir=config.EVAL_RESULTS_DIR)
+    for row in result["rows"]:
+        failed = [c["check"] for c in row["checks"] if not c["passed"]]
+        print(f"{'PASS' if row['passed'] else 'FAIL'}  {row['id']} ({row['property']})"
+              + (f": {'; '.join(failed)}" if failed else ""))
+    print(json.dumps(result["summary"], indent=2))
+
+
 def cmd_eval(args):
+    if args.fidelity:
+        return cmd_fidelity(args)
     from ikg.evaluate import load_items, regressions, run
     baseline = None
     if args.check:
@@ -191,6 +216,13 @@ def main(argv=None):
     p.add_argument("--llm", action="store_true", help="also evaluate answers and citations (calls Claude)")
     p.add_argument("--no-expand", action="store_true", help="ablation: disable knowledge-graph query expansion")
     _model_args(p)
+    p.add_argument("--fidelity", action="store_true",
+                   help="run the SOT-fidelity benchmark instead (calls Claude to answer and to judge)")
+    p.add_argument("--baseline", action="store_true",
+                   help="with --fidelity: answer with the plain model and no retrieval, for comparison")
+    p.add_argument("--include-drafts", action="store_true",
+                   help="with --fidelity: also score items no expert has approved yet (not reportable)")
+    p.add_argument("--judge-model", help=f"with --fidelity: judge model (default {config.JUDGE_MODEL}; env IKG_JUDGE_MODEL)")
     p.add_argument("--check", type=Path, metavar="BASELINE",
                    help="exit non-zero if any metric in this baseline JSON got worse (CI gate)")
     p.set_defaults(func=cmd_eval)

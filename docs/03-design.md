@@ -342,9 +342,22 @@ pass. A metric missing from the run, or a non-numeric baseline value, also fails
 ([02 §5](02-architecture.md#5-deployment)). When a change legitimately moves a number, or the
 eval set grows, update the baseline in the same PR and explain why.
 
+### 11.1 Fidelity benchmark (`fidelity.py`)
+
+`ikg eval --fidelity` scores the items in `eval/fidelity/items.jsonl` on the four properties of
+[07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement). Each answer comes from
+this system (`qa.ask`, with citations) or, with `--baseline`, from the same model with no
+retrieval and a neutral prompt; a judge model grades it against the item's `must` and
+`must_not` checks with structured JSON output. The judge is blind to the mode (citation markers
+and the source list are removed, and the prompt is the same), and sourcing is scored
+mechanically for the system as `source_coverage`. Missing, truncated or invalid verdicts fail;
+empty or abstained answers fail without a judge call; results are written even if a run stops. Only
+expert-approved, current-corpus items are scored; the command refuses to run otherwise unless
+`--include-drafts` is given. Format, procedure and calibration rule: `eval/fidelity/README.md`.
+
 ## 12. Testing
 
-`pytest` runs 97 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 109 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer

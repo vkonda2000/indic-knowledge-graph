@@ -286,6 +286,7 @@ and are not part of the system until they appear in this table.
 | Storage | Files on disk: JSONL, YAML, pickle, GraphML, Turtle, JSON (build manifest) | none | `data/` (D6) | No database |
 | Tests | pytest; httpx for FastAPI's `TestClient` | pytest ≥ 7.0, httpx ≥ 0.27 | `tests/` | Models and HTTP are faked; no network or key needed |
 | Evaluation | `ikg eval` with committed baselines | `eval/baseline.json` (offline, CI), `eval/baseline-llm.json` (answers, by hand) | `evaluate.py` | `--check` is the regression gate |
+| Fidelity judge | Claude through the `anthropic` SDK with structured JSON output (`output_config.format`) | `claude-opus-5-5` at effort `medium` by default | `fidelity.py` | `ikg eval --fidelity` only; grades answers against expert-written checks |
 | CI | GitHub Actions | `actions/checkout@v4`, `setup-python@v5`, `cache/restore@v4`, `cache/save@v4` | `.github/workflows/ci.yml` | See §5 |
 | Code review | Independent review by a Fable subagent before each PR | `.claude/agents/fable-reviewer.md` | PR template | See ONBOARDING §7 |
 | Docs and diagrams | Markdown with Mermaid | none | `docs/` | Render on GitHub |
