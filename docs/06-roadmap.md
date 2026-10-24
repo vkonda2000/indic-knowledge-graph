@@ -68,10 +68,12 @@ $0.063; `eval/baseline-llm.json`):
 |---|---|---|---|---|---|
 | 0.660 | 0.463 | 0.787 | 0.277 | 1.0 | $0.0011 |
 
-`cites_expected` equals retrieval hit@8: the model cites the answering passage whenever
-retrieval puts it in the top 8. When retrieval misses, the model mostly abstains rather than
-answering from the wrong passages (13 of 47 answerable items), so retrieval is the bottleneck,
-not answering.
+`cites_expected` tracks retrieval hit@8 (both 31 of 47): 30 of the 31 retrieval hits were cited
+(`upa-03` abstained), and one miss (`upa-01`) counted because the model cited commentary on the
+expected verse, which the retrieval metric excludes. Of the 16 retrieval misses, 10 abstained
+and 5 answered citing only wrong passages (`vp-01`, `con-04`, `skt-05`, `spk-05`, `spk-06`). The 13
+false abstentions are those 10 plus 3 items where retrieval had hit (`upa-02`, `upa-03`, `xw-04`).
+Retrieval is the bottleneck; answering from wrong passages on a miss is the next problem (L37).
 Measured with the earlier book-level expectations: retrieval with k = 4 still reached hit@k 0.958 (k = 3: 0.917), but answers got worse: with
 k = 4, cites_expected fell to 0.833 and false abstentions rose to 0.167, at $0.00079 a question.
 k stays 8 (Phase 0 row "Send fewer passages"). Book-level hit@k can't tell whether the model
@@ -148,6 +150,7 @@ are now section- or verse-level, and MRR is reported.
 | L34 | Registry validation is partial: a duplicate edition ID in a hand-edited `works.yaml` makes every page fail; `work:` is not checked against known works | **Resolved (Oct 2026):** duplicate registry and edition ids and unknown `work:` references are rejected; the web app shows a registry error as a notice instead of failing every page, and the build and CLI report it cleanly | `sources.py`, `web/app.py` |
 | L35 | A `bm25.pkl` built before D10 loads without complaint; its passages have no `edition` or `locator` | **Resolved (Oct 2026):** a build without artefact checksums is refused with a message to rebuild | `pipeline.Runtime.load` (see L19) |
 | L36 | For Upanishad questions, the translator's commentary outranks the verse it explains (commentary is longer) | Retrieval returns commentary where the question asks what the text says; `upa-01` misses its verses entirely | `retrieve.py`; Phase 3 re-ranking or a kind-aware boost |
+| L37 | Answer metrics: on 5 of 16 retrieval misses the model answered from wrong passages instead of abstaining; the abstention flag also fires on hedged answers that still cite the right passage (`upa-02`, `xw-04`, `skt-11`); and `cites_expected` counts commentary on an expected verse while retrieval hit@k does not | False-abstain and citation numbers are slightly off; wrong-passage answers are a grounding risk | `qa.py` (abstention detection, prompt), `evaluate.py` |
 
 ## 3. Status against the target responsibilities
 

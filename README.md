@@ -196,9 +196,9 @@ What this shows so far:
   doesn't yet test fidelity to schools of thought. The comparison will be re-run when that
   benchmark exists.
 - **Current answer baseline** (57 items, section level, [eval/baseline-llm.json](eval/baseline-llm.json)):
-  the default cites the answering passage for 66% of answerable questions (exactly when retrieval
-  finds it) and abstains on the rest rather than answering from the wrong passages; it abstains
-  on every unanswerable question. Retrieval is the bottleneck.
+  the default cites the answering passage for 66% of answerable questions, matching retrieval
+  hit@8. On retrieval misses it usually abstains (10 of 16) but answered from the wrong passages
+  5 times; it abstains on all 10 unanswerable questions. Retrieval is the bottleneck.
 - **Retrieval is guarded in CI.** The row with gazetteer expansion is committed as
   [eval/baseline.json](eval/baseline.json), and a pull request that lowers either number fails.
 
