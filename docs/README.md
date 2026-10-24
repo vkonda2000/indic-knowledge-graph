@@ -11,7 +11,7 @@ and the document is out of date. Please fix the document in the same pull reques
 | [03 Design](03-design.md) | How each module works: segmentation, entity extraction, retrieval scoring, cited answering, graph and RDF export, web app, upload screening, evaluation |
 | [04 Data model](04-data-model.md) | The ontology, every on-disk file format, identifier schemes, and how the source and gazetteer registries are structured |
 | [05 Interfaces](05-interfaces.md) | Every HTTP route, JSON API, CLI command and environment variable |
-| [06 Roadmap](06-roadmap.md) | Measured limitations of the current system and a phased plan toward the target system, with extension points for each change |
+| [06 Roadmap](06-roadmap.md) | Measured limitations of the current system, a done / partial / not-started checklist against the target with candidate use cases, the project's original contributions, and a phased plan toward the target system, with extension points for each change |
 | [07 Target alignment](07-target-alignment.md) | The target (an ontology-based civilizational knowledge system), a capability-by-capability gap analysis, the SOT-fidelity definition, and the ontology extensions and constraints the target adds |
 
 **Scope.** The project's scope is the target system described in [01 §0](01-specification.md#0-target-system-and-this-prototype).
