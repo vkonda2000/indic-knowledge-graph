@@ -4,7 +4,11 @@ Question types (eval/questions.jsonl):
   retrieval    - answer must come from passages whose id starts with one of `expected`
   adversarial  - the corpus does not support an answer; the system must abstain
 
-Offline metrics (no API calls): retrieval hit@k for retrieval questions.
+Offline metrics (no API calls): retrieval hit@1, hit@k and MRR (mean reciprocal rank of the
+first correct passage within the top k) for retrieval questions. `expected` holds passage-ID
+prefixes at section or verse level (e.g. `mbh.b08.s090`, `upa.katha.p2.v18`), so a hit means
+the answering part of the text was found, not just the right book. Only primary text (verse,
+narrative) counts as a hit; commentary on an expected verse does not.
 With --llm: citation precision against `expected`, citation presence, and abstention
 on adversarial questions. Results are written to eval/results/ (git-ignored).
 
@@ -18,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ikg.retrieve import search
+from ikg.segment import PRIMARY_KINDS
 
 
 @dataclass
@@ -38,6 +43,12 @@ def _matches(pid: str, prefixes: list[str]) -> bool:
     return any(pid.startswith(p) for p in prefixes)
 
 
+def _answers(passage, prefixes: list[str]) -> bool:
+    """A retrieved passage answers the item if it is primary text in an expected section or verse.
+    Commentary on an expected verse doesn't count: the question asks what the text says (rule 2)."""
+    return passage.kind in PRIMARY_KINDS and _matches(passage.id, prefixes)
+
+
 def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False,
         graph=None, out_dir: Path | None = None, expand: bool = True,
         model: str | None = None, effort: str | None = None) -> dict:
@@ -50,8 +61,10 @@ def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False
         row = {"id": item.id, "type": item.type,
                "retrieved": [h.passage.id for h in hits]}
         if item.type == "retrieval":
-            row["hit_at_k"] = any(_matches(pid, item.expected) for pid in row["retrieved"])
-            row["hit_at_1"] = bool(hits) and _matches(hits[0].passage.id, item.expected)
+            row["hit_at_k"] = any(_answers(h.passage, item.expected) for h in hits)
+            row["hit_at_1"] = bool(hits) and _answers(hits[0].passage, item.expected)
+            rank = next((i for i, h in enumerate(hits, 1) if _answers(h.passage, item.expected)), None)
+            row["reciprocal_rank"] = 1 / rank if rank else 0.0
         if llm:
             from ikg.qa import ask
             ans = ask(item.question, index, gazetteer, graph=graph,
@@ -106,7 +119,8 @@ def summarize(rows: list[dict]) -> dict:
     adversarial = [r for r in rows if r["type"] == "adversarial"]
     summary = {"n_retrieval": len(retrieval), "n_adversarial": len(adversarial),
                "retrieval_hit_at_1": rate(retrieval, "hit_at_1"),
-               "retrieval_hit_at_k": rate(retrieval, "hit_at_k")}
+               "retrieval_hit_at_k": rate(retrieval, "hit_at_k"),
+               "retrieval_mrr": rate(retrieval, "reciprocal_rank")}
     if any("answer" in r for r in rows):
         summary.update(
             cites_expected=rate(retrieval, "cites_expected"),

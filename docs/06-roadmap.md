@@ -7,12 +7,29 @@ Each phase lists the extension points in the code, so the work can be scoped fro
 
 ## 1. Measured baseline
 
-Offline retrieval evaluation, 28 questions (24 retrieval, 4 adversarial), `k = 8`:
+Offline retrieval evaluation, 28 questions (24 retrieval, 4 adversarial), `k = 8`. Since
+2026-10-23 each item's `expected` names the section or verse that answers it, checked by reading
+the passages and reviewed independently; only primary text (verse, narrative) counts as a hit,
+not commentary on it. Before, `expected` named only the book:
 
-| Configuration | hit@1 | hit@8 |
-|---|---|---|
-| BM25 + gazetteer expansion + entity boost (default) | 0.625 | 0.958 |
-| BM25 only (`ikg eval --no-expand`) | 0.625 | 0.958 |
+| Configuration | hit@1 | hit@8 | MRR | Book-level hit@1 / hit@8 (old) |
+|---|---|---|---|---|
+| BM25 + gazetteer expansion + entity boost (default) | 0.292 | 0.792 | 0.502 | 0.625 / 0.958 |
+| BM25 only (`ikg eval --no-expand`) | 0.292 | 0.833 | 0.494 | 0.625 / 0.958 |
+
+What this shows:
+
+- **Finding the answering passage is much harder than finding the right book.** Retrieval misses
+  5 of 24 items entirely (`upa-01`, `upa-05`, `vp-01`, `con-02`, `con-04`) and ranks the answer
+  first in 7.
+- **For the Upanishads, commentary outranks the verse** (L36). Paramananda's commentary is
+  longer and wordier than the verse it explains, so BM25 ranks it higher: all of `upa-01`'s top
+  results are commentary.
+- **Gazetteer expansion is mixed, not a clear gain** (D3): MRR +0.008, hit@8 −0.04 (it pushes
+  `upa-01`'s verse out of the top 8). The set is too small to decide; Phase 3 hybrid retrieval and
+  re-ranking are measured against these numbers.
+- The Gutenberg source itself lacks a few section headings (Sabha Parva LXVII; Shanti Parva
+  XXXIV–XXXV and CCCLXIV), so those numbers don't exist in the corpus.
 
 **Answers** (`ikg eval --llm`, same 28 items, k = 8, 2026-10-23; total spend $1.50):
 
@@ -25,9 +42,12 @@ Offline retrieval evaluation, 28 questions (24 retrieval, 4 adversarial), `k = 8
 Every question sends about 7,000 input tokens (eight passages). Haiku 5.5 at low effort met
 the agreed bar (citation metrics within 5 points of Opus 5.5 high, adversarial abstention no
 lower, false abstentions no higher), so it is the default (D13); its row is
-`eval/baseline-llm.json`. One run per setting: the differences are 1–2 items. Caveats: the set is small, checks books rather
-than passages, and doesn't test SOT fidelity; re-run when the fidelity benchmark exists.
-Retrieval with k = 4 still reaches hit@k 0.958 (k = 3: 0.917), but answers got worse: with
+`eval/baseline-llm.json`. One run per setting: the differences are 1–2 items. Caveats: the set
+is small, these runs used the old book-level expectations (so `cites_expected` and
+`citation_precision` are not comparable with section-level runs; `eval/baseline-llm.json` must
+be re-recorded, about $0.04), and it doesn't test SOT fidelity; re-run when the fidelity
+benchmark exists.
+Measured with the earlier book-level expectations: retrieval with k = 4 still reached hit@k 0.958 (k = 3: 0.917), but answers got worse: with
 k = 4, cites_expected fell to 0.833 and false abstentions rose to 0.167, at $0.00079 a question.
 k stays 8 (Phase 0 row "Send fewer passages"). Book-level hit@k can't tell whether the model
 has enough supporting passages to answer.
@@ -51,9 +71,9 @@ What this shows:
 - **Answer-level metrics have never been recorded.** `ikg eval --llm` exists, but there is no
   baseline for citation precision or abstention.
 
-Graph structure: 75 entities with 1,921 edges, a **density of 0.69**. Passages of up to 1,500
+Graph structure: 75 entities with 1,903 edges, a **density of 0.69**. Passages of up to 1,500
 characters are large enough that most major figures co-occur somewhere, so an edge alone
-carries little information. Only 356 edges have weight ≥ 50. The explorer works around this
+carries little information. Only 344 edges have weight ≥ 50. The explorer works around this
 by starting at a minimum of 10 shared passages (the API default is 5).
 
 ## 2. Known limitations
@@ -80,8 +100,8 @@ by starting at a minimum of 10 shared passages (the API default is 5).
 | L18 | Gutenberg texts added by an admin are not screened | Depends on admin judgement | `/admin/gutenberg` |
 
 L19–L30 come from the [2026-10-23 architecture review](reviews/2026-10-23-architecture-review.md)
-(IDs A1–A10, B1–B7 there). L1 is also widened by B3: expectations are book-level prefixes,
-so hit@8 measures "a passage from the right book", not the right passage.
+(IDs A1–A10, B1–B7 there). B3 (book-level expectations) was fixed on 2026-10-23: expectations
+are now section- or verse-level, and MRR is reported.
 
 | # | Limitation | Effect | Where |
 |---|---|---|---|
@@ -102,6 +122,7 @@ so hit@8 measures "a passage from the right book", not the right passage.
 | L33 | `ikg analyze` reports per work only: its Translator column takes one edition's translator and concept densities merge editions | Wrong once a text has two editions; the per-edition comparison D10 enables is not in the report yet (SPARQL has it) | `analysis.py` |
 | L34 | Registry validation is partial: a duplicate edition ID in a hand-edited `works.yaml` makes every page fail; `work:` is not checked against known works | A typo creates an unlabelled new work; a collision takes the site down until fixed | `sources.py`, `web/app.py` |
 | L35 | A `bm25.pkl` built before D10 loads without complaint; its passages have no `edition` or `locator` | Editions fall back to the work id until the next rebuild | `pipeline.Runtime.load` (see L19) |
+| L36 | For Upanishad questions, the translator's commentary outranks the verse it explains (commentary is longer) | Retrieval returns commentary where the question asks what the text says; `upa-01` misses its verses entirely | `retrieve.py`; Phase 3 re-ranking or a kind-aware boost |
 
 ## 3. Status against the target responsibilities
 
@@ -128,7 +149,7 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 - [x] **Adversarial eval items**: 4 questions the corpus cannot answer (T10)
 - [x] **SME tooling, first step**: admin gazetteer editor with validation, including rejection of a surface form shared by two entities (T11, L5)
 - [x] **Continuous integration**: GitHub Actions runs `pytest` on Python 3.10 and 3.12 on every PR (`.github/workflows/ci.yml`) (L15)
-- [x] **Offline regression gate**: CI builds the corpus and runs `ikg eval --check eval/baseline.json`; a drop in hit@1 or hit@8 fails the PR (T10)
+- [x] **Offline regression gate**: CI builds the corpus and runs `ikg eval --check eval/baseline.json`; a drop in hit@1, hit@8 or MRR, or fewer items, fails the PR (T10)
 - [x] **Tests for the RDF export, analysis report and CLI** `search`/`stats`, including a check that the export uses only terms declared in the ontology (L15)
 - [x] **Cost control for answers**: configurable model and effort, per-answer token and cost tracking, answer cache, daily budget, POST-only Ask; Haiku 5.5 at low effort is the default after an eval comparison with Opus 5.5 (D13, NFR-5)
 - [x] **Answer-level baseline**: `ikg eval --llm` recorded for three model settings ([§1](#1-measured-baseline), `eval/baseline-llm.json`)
@@ -171,7 +192,7 @@ soon they can produce a result. Each is placed in the phases of §5.
 | # | Contribution | Why it is original | First deliverable | Phase |
 |---|---|---|---|---|
 | C1 | **Fidelity benchmark for Indic traditions** | We know of no public benchmark that tests whether AI answers attribute views correctly, keep schools apart, use Sanskrit concepts on their own terms and respect debate roles. The four properties are defined in [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) | 40–100 SME-approved items in [`eval/fidelity/`](../eval/fidelity/README.md), scored for a plain model with no retrieval and for this system. The gap between them is the headline result | 0 |
-| C2 | **Sanskrit concepts as the unit of meaning** | The corpus analysis already shows the problem: Ganguli uses "dharma" 372 times and its English renderings 2,986 times, so a search for the Sanskrit term alone finds about 11% of the material. Few systems model renderings explicitly | Align passages to Sanskrit originals (GRETIL, Digital Corpus of Sanskrit) and show the Sanskrit term behind each rendering. Compare translators verse by verse. Flag answers that substitute an English approximation | 1, 3 |
+| C2 | **Sanskrit concepts as the unit of meaning** | The corpus analysis already shows the problem: Ganguli uses "dharma" 340 times and its English renderings 2,832 times, so a search for the Sanskrit term alone finds about 11% of the material. Few systems model renderings explicitly | Align passages to Sanskrit originals (GRETIL, Digital Corpus of Sanskrit) and show the Sanskrit term behind each rendering. Compare translators verse by verse. Flag answers that substitute an English approximation | 1, 3 |
 | C3 | **A graph of the debates, not only of concepts** | Indian philosophy argues in a fixed form: the opponent's view (*pūrvapakṣa*), its refutation, the conclusion (*siddhānta*). Typical knowledge graphs only record that X relates to Y | Claims with holders, `critiques`/`respondsTo`/`interprets`, and debate roles on passages. Answers to "what did Ramanuja object to in Shankara's view of *maya*, and how did Advaitins reply?" | 2 |
 | C4 | **A research instrument, not only a chatbot** | Gaps, unsupported sentences and expert corrections are reported to researchers instead of being discarded | Gap report by concept, SOT and work; sentence-level citation checks with a tracked unsupported-claim rate; SME corrections turned into eval items | 3 |
 
@@ -218,9 +239,9 @@ flowchart LR
 | **Data-model decisions before eval growth**: edition on passages, v1 ID and locator scheme, per-edition renderings, permanent namespace | L27, L28, L29, L13 | [02 §6](02-architecture.md#6-key-decisions) D9–D11 | **Decided** 2026-10-23 |
 | Implement D10 and D11: `edition` and `locator` on `Passage`, editions in the registry, per-edition renderings, frozen chunking parameters recorded in the build | L27, L28, L29 | `segment.py`, `sources.py`, `graph.py`, ontology | **Done**: also a build manifest (`processed/manifest.json`) and per-edition renderings in RDF |
 | Implement D9: register `https://w3id.org/ikg/` (PR to perma-id/w3id.org), switch the ontology and export, add `owl:versionIRI` | L13 | `ontology/ikg.ttl`, `graph.py`, `cli.py` | Not started; registration needs a maintainer |
-| Section-level eval expectations and MRR | L1 (B3) | `evaluate.py`, `eval/questions.jsonl` | Not started |
+| Section-level eval expectations and MRR | L1 (B3) | `evaluate.py`, `eval/questions.jsonl` | **Done**: hit@1 0.292, hit@8 0.792, MRR 0.502 (§1); also fixed two segmentation defects it exposed (footnotes inside sections, Kena Part 4 missing). `eval/baseline-llm.json` needs re-recording (~$0.04) |
 | Gazetteer schema validation (field types, `type` value) | L22 | `entities.py` | Not started |
-| **Send fewer passages per answer (k = 8 → 4)**: retrieval finds the right book as often with 4 passages as with 8 (hit@k 0.958 for both; k = 3 drops to 0.917), which would roughly halve input tokens (~7,000 → ~3,500) and answer cost. Run `ikg eval --llm -k 4` (about $0.02 on Haiku 5.5) and compare with `eval/baseline-llm.json` on the agreed bar before changing the default `k` in the CLI, web form and API | Cost (NFR-5) | `cli.py`, `web/app.py`, `search.html`, `eval/baseline-llm.json` | **Measured 2026-10-23: rejected; k stays 8.** Haiku 5.5 low at k = 4: cites_expected 0.833 (−8 pts, fails the 5-point bar), citation_precision 0.722, false_abstain 0.167 (worse), adversarial 1.0, $0.00079 a question (−32%, not −50%: the system prompt, graph summary and question are fixed overhead). `ram-01` and `vp-01` abstained with 4 passages. Revisit with re-ranking (Phase 3), which could put the best passages in a smaller k |
+| **Send fewer passages per answer (k = 8 → 4)**: with the earlier book-level expectations, retrieval found the right book as often with 4 passages as with 8 (hit@k 0.958 for both; k = 3 drops to 0.917), which would roughly halve input tokens (~7,000 → ~3,500) and answer cost. Run `ikg eval --llm -k 4` (about $0.02 on Haiku 5.5) and compare with `eval/baseline-llm.json` on the agreed bar before changing the default `k` in the CLI, web form and API | Cost (NFR-5) | `cli.py`, `web/app.py`, `search.html`, `eval/baseline-llm.json` | **Measured 2026-10-23: rejected; k stays 8.** Haiku 5.5 low at k = 4: cites_expected 0.833 (−8 pts, fails the 5-point bar), citation_precision 0.722, false_abstain 0.167 (worse), adversarial 1.0, $0.00079 a question (−32%, not −50%: the system prompt, graph summary and question are fixed overhead). `ram-01` and `vp-01` abstained with 4 passages. Revisit with re-ranking (Phase 3), which could put the best passages in a smaller k |
 
 **Exit criteria:** CI is green; baselines for retrieval, citations, abstention and SOT fidelity
 are committed. As of October 2026, CI and the retrieval baseline are in place; the citation,
@@ -255,7 +276,7 @@ evidence-backed relations, built together with SMEs.
 | **Curator identity and provenance (D12)**: named curator tokens replacing the single admin token, and an append-only provenance log. Prerequisite for everything else in this phase | Before the first curation queue | `web/app.py`, new `provenance.py` |
 | **SME curation workflow** | Review queues for proposed entities, relations, claims and classifications, with approve/edit/reject and provenance (who proposed, who approved). Ontology change proposals | `web/app.py`, new `curation.py`, data files replayed in the build |
 | Claim extraction | A model proposes claims ("X holds that Y", grounded in passage P, attributed to thinker or SOT S); SMEs approve | new `claims.py`, `claims.yaml` |
-| **Speaker attribution** (Mahabharata first) | Deterministic. Ganguli marks speakers as `"X said,"`: 3,599 markers in 2,904 of 12,561 passages (23%). Carry the last speaker forward within a section | `segment.py`, `Passage` (+ `speaker`, `addressee`) |
+| **Speaker attribution** (Mahabharata first) | Deterministic. Ganguli marks speakers as `"X said,"`: about 3,600 markers in about 2,900 of 11,916 passages (24%). Carry the last speaker forward within a section | `segment.py`, `Passage` (+ `speaker`, `addressee`) |
 | **Debate-role tagging** | Mark *pūrvapakṣa* vs. *siddhānta* in commentarial and scholarly texts (model proposes, SME approves) | `Passage` or `Claim` attribute |
 | Gazetteer growth with review | Mine candidate names; a local model suggests type and aliases; queue for approval. Add epithets and patronymics (Partha, Kaunteya, Vasudeva...) | `ikg suggest-entities`, admin queue |
 | Better edge weights | Sentence-window co-occurrence with PMI weighting. Target: density well below 0.69 | `build_cooccurrence` |

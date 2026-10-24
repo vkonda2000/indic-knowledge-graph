@@ -266,3 +266,15 @@ def test_build_manifest_records_id_scheme_and_editions(tmp_path, monkeypatch):
     assert m["chunking"]["sentence_end"]  # the splitter pattern is recorded too
     assert m["editions"][0]["edition"] == "ganguli-1883" and m["editions"][0]["work"] == "mahabharata"
     assert m["editions"][0]["passages"] == 1 and m["editions"][0]["sources"][0]["sha256"] == "ab" * 32
+
+
+def test_eval_reciprocal_rank(gazetteer):
+    from ikg.evaluate import EvalItem, run
+    index = BM25Index(PASSAGES)
+    items = [EvalItem("a", "retrieval", "Sita forest", ["ram.b01"]),          # found first
+             EvalItem("b", "retrieval", "Krishna dharma Self", ["mbh.b01.s001.p02"]),
+             EvalItem("c", "retrieval", "Sita forest", ["vp.b9"])]           # never found
+    result = run(items, index, gazetteer, None, k=3)
+    rr = {r["id"]: r["reciprocal_rank"] for r in result["rows"]}
+    assert rr["a"] == 1.0 and rr["c"] == 0.0 and 0 < rr["b"] <= 1.0
+    assert result["summary"]["retrieval_mrr"] == round(sum(rr.values()) / 3, 3)

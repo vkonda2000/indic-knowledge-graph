@@ -224,3 +224,21 @@ def test_chunking_v1_snapshot():
     chunks = chunk(SNAPSHOT_PARAS)
     assert [len(c) for c in chunks] == SNAPSHOT_LENGTHS
     assert _SENTENCE_END_RE.pattern == SNAPSHOT_PATTERN
+
+
+def test_mahabharata_footnotes_are_not_part_of_a_section():
+    text = (
+        "BOOK 12\n\nSECTION I\n\nThe last real paragraph of the parva.\n\n"
+        "FOOTNOTES\n\n1. A translator's note.\n\n2\n\n3. Another note, after a bare number.\n\n"
+        "SECTION II\n\nThe next section's text.\n")
+    ps = parse_mahabharata(text, make_work("mahabharata"), "url")
+    assert [p.id for p in ps] == ["mbh.b12.s001.p01", "mbh.b12.s002.p01"]
+    assert "translator's note" not in " ".join(p.text for p in ps)
+    assert ps[0].text.strip() == "The last real paragraph of the parva."
+
+
+def test_upanishad_part_heading_is_case_insensitive():
+    text = UPA + "\n                           Part fourth\n\nI\n\nShe (Uma) said: It is Brahman.\n"
+    ps = {p.id: p for p in parse_upanishads(text, make_work("upanishads"), "url")}
+    assert ps["upa.kena.p4.v01"].text == "She (Uma) said: It is Brahman."
+    assert ps["upa.kena.p4.v01"].locator == {"upanishad": "kena", "part": 4, "verse": 1}

@@ -22,7 +22,7 @@ Specification, architecture, design, data model, interfaces and roadmap are in [
 | Work | Edition | Passages |
 |---|---|---|
 | Upanishads (Isa, Katha, Kena) | Swami Paramananda, 1919 (Gutenberg #3283) | 268 (165 verse, 92 commentary, 11 introduction) |
-| Mahabharata, all 18 books | Kisari Mohan Ganguli, 1883–96 (Gutenberg #15474–15477) | 12,561 |
+| Mahabharata, all 18 books | Kisari Mohan Ganguli, 1883–96 (Gutenberg #15474–15477) | 11,916 |
 | Ramayana, books 1–6 | Ralph T. H. Griffith, 1870–74 (Gutenberg #24869) | 1,687 |
 | Vishnu Purana, parts 1–6 | M. N. Dutt after H. H. Wilson, 1896 (Gutenberg #66208) | 741 |
 
@@ -152,18 +152,25 @@ Gutenberg / uploads ──► segment ──► passages (id, work, book, sectio
 `eval/questions.jsonl` has 24 retrieval questions across all four works and 4 adversarial
 questions the corpus cannot answer (for example, Hanuman in the Katha Upanishad).
 
-| Retrieval (k = 8) | hit@1 | hit@8 |
-|---|---|---|
-| With gazetteer expansion | 62.5% | 95.8% |
-| Without (`--no-expand`) | 62.5% | 95.8% |
+Each retrieval item names the section or verse that answers it (checked by reading the
+passages), e.g. `mbh.b08.s090` for Karna's death or `upa.katha.p2.v18` for the unborn Self.
+
+Only primary text counts as a hit, not commentary on the expected verse.
+
+| Retrieval (k = 8) | hit@1 | hit@8 | MRR |
+|---|---|---|---|
+| With gazetteer expansion | 29.2% | 79.2% | 0.502 |
+| Without (`--no-expand`) | 29.2% | 83.3% | 0.494 |
 
 What this shows so far:
 
-- **No net gain from expansion on this set.** On the 5 questions phrased with Sanskrit terms
-  where the translations use English words (`con-*`), expansion improves hit@1 from 1/5 to 2/5
-  and hit@3 from 3/5 to 4/5. On the questions phrased in the translators' own words, it costs
-  one hit@1. The set is too small to call either way; a larger set written by subject experts
-  is the next step.
+- **Finding the right passage is much harder than finding the right book.** With book-level
+  expectations the same system scored 62.5% / 95.8%. Retrieval misses 5 of 24 items entirely.
+  Hybrid retrieval and re-ranking (Phase 3) are measured against these numbers.
+- **For the Upanishads, the translator's commentary outranks the verse itself**, because it is
+  longer and wordier.
+- **Gazetteer expansion is mixed here:** slightly better MRR, slightly worse hit@8. The set is
+  still small; a larger set written by subject experts is the next step.
 - **One known failure, kept deliberately.** `con-02` asks about a kshatriya's dharma "according
   to Krishna". The Bhagavad Gita (Bhishma Parva, sections 25–42) loses to Santi Parva passages on
   kingship.
@@ -176,7 +183,7 @@ What this shows so far:
   | Haiku 5.5, medium | 0.917 | 0.735 | 1.0 | 0.083 | $0.0013 |
   | **Haiku 5.5, low (default)** | 0.917 | 0.747 | 1.0 | 0.083 | **$0.0012** |
 
-  One run each, and the set is small and checks books rather than exact passages, and it doesn't yet test
+  One run each, with the earlier book-level expectations (to be re-run at section level), and the set is small; it doesn't yet test
   fidelity to schools of thought. The comparison will be re-run when that benchmark exists.
   The default row is [eval/baseline-llm.json](eval/baseline-llm.json).
 - **Retrieval is guarded in CI.** The row with gazetteer expansion is committed as
@@ -187,11 +194,11 @@ What this shows so far:
 `ikg analyze` writes [reports/corpus-analysis.md](reports/corpus-analysis.md). Findings include:
 
 - **Translators mostly render dharma in English.** In Ganguli's Mahabharata, "dharma" appears
-  372 times, against 2,986 English renderings ("duties", "righteousness", "duty"). In Griffith's
+  340 times, against 2,832 English renderings ("duties", "righteousness", "duty"). In Griffith's
   Ramayana the Sanskrit word never appears. Searching for the Sanskrit term alone misses most of
   the material.
-- **Dharma vocabulary is densest in the didactic books.** It peaks in the Santi Parva (28.2 per
-  10,000 words), the Svargarohanika Parva (25.2) and the Anusasana Parva (22.6), against 2.5–5
+- **Dharma vocabulary is densest in the didactic books.** It peaks in the Santi Parva (30.3 per
+  10,000 words), the Svargarohanika Parva (25.2) and the Anusasana Parva (23.2), against 2.5–5
   in the battle and narrative books.
 - **The character graph splits into two communities.** Mahabharata figures cluster around
   Arjuna and Krishna, Ramayana figures around Rama. Narada, Vasishtha, Vishvamitra and the
@@ -216,7 +223,7 @@ pytest
 ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-75 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+78 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
 matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
 (checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
 citation handling, model choice and cost with a mocked Claude client, and the web app end to end: contribute, review,

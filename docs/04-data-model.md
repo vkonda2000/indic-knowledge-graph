@@ -68,6 +68,14 @@ generic parser, the entry's `id`. A second edition of a bundled text must set it
 collide silently. Where a passage sits in its edition, for citations, is in its `locator`
 (§4), not parsed from the ID.
 
+**v1 errata.** Corrections of segmentation defects change IDs only where the old ones were
+wrong, and are listed here:
+
+| Date | Change | IDs |
+|---|---|---|
+| 2026-10-23 | Translator footnotes at the end of 11 Mahabharata parvas had been chunked into the parva's last section; they are no longer passages. The last real chunk of each such section lost the footnote text appended to it | 656 removed: `mbh.b12.s365.p05`–`p377`, `mbh.b13.s168.p05`–`p107`, `mbh.b06.s124.p06`–`p66`, `mbh.b14.s092.p10`–`p48`, `mbh.b07.s203.p02`–`p25`, `mbh.b03.s313.p04`–`p20`, `mbh.b15.s039.p06`–`p15`, `mbh.b05.s199.p05`–`p13`, `mbh.b04.s072.p07`–`p14`, `mbh.b02.s080.p06` |
+| 2026-10-23 | The Kena's "Part fourth" heading was not recognised, so Part 4 was missing and its commentaries were filed under Part 3 verses | Added `upa.kena.p4.v01`–`v09` and their commentaries (16 passages); removed the 13 misfiled `upa.kena.p3.v01.c2`…`p3.v09.c*` commentaries |
+
 ## 3. Files on disk
 
 All paths are under `IKG_DATA` (default `data/`) unless noted.
@@ -181,7 +189,7 @@ form listed under two entities, unless their `works` scopes are disjoint ([03 §
 ### Evaluation item (`eval/questions.jsonl`)
 
 ```json
-{"id": "mbh-04", "type": "retrieval", "question": "How did Karna die when the wheel of his chariot sank into the earth?", "expected": ["mbh.b08"]}
+{"id": "mbh-04", "type": "retrieval", "question": "How did Karna die when the wheel of his chariot sank into the earth?", "expected": ["mbh.b08.s090", "mbh.b08.s091"]}
 {"id": "adv-02", "type": "adversarial", "question": "What does the Kena Upanishad say about the battle of Kurukshetra?", "expected": [], "works": ["upanishads"]}
 ```
 
@@ -193,7 +201,8 @@ every key under `metrics` must not get worse, item counts included. `description
 
 ```json
 {"description": "...", "recorded": "2026-10-23", "k": 8,
- "metrics": {"n_retrieval": 24, "n_adversarial": 4, "retrieval_hit_at_1": 0.625, "retrieval_hit_at_k": 0.958}}
+ "metrics": {"n_retrieval": 24, "n_adversarial": 4, "retrieval_hit_at_1": 0.292, "retrieval_hit_at_k": 0.792,
+             "retrieval_mrr": 0.502}}
 ```
 
 ## 5. Example SPARQL
@@ -206,8 +215,8 @@ SELECT ?concept ?edition ?word ?n WHERE {
 } ORDER BY ?concept DESC(?n)
 ```
 
-For *dharma*: Ganguli's Mahabharata uses "duties" 1,374 times, "righteousness" 962 and "duty"
-650; Griffith's Ramayana "duty" 214; Dutt's Vishnu Purana "duties" 37 and "duty" 18.
+For *dharma*: Ganguli's Mahabharata uses "duties" 1,302 times, "righteousness" 913 and "duty"
+617; Griffith's Ramayana "duty" 214; Dutt's Vishnu Purana "duties" 37 and "duty" 18.
 
 ```sparql
 # Books where Dharma is mentioned through a rendering, most first
@@ -218,7 +227,7 @@ SELECT ?book ?n WHERE {
 } ORDER BY DESC(?n)
 ```
 
-Top results: Book 12 (Santi Parva) 1,438, Book 13 (Anusasana Parva) 671.
+Top results: Book 12 (Santi Parva) 1,324, Book 13 (Anusasana Parva) 636.
 
 `ikg sparql` adds the `ikg:` and `rdfs:` prefixes automatically when a query does not start
 with `PREFIX`. Instance IRIs contain `/`, which is not allowed in a SPARQL prefixed name, so

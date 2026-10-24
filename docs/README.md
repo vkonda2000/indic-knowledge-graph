@@ -28,5 +28,5 @@ module, and to 06 when you plan new work.
 - File references are relative to the repository root, for example `src/ikg/retrieve.py`.
 - Requirement identifiers (`FR-…`, `NFR-…`) are defined in 01 and cited elsewhere.
 - Numbers come from the current build of the four bundled works unless stated otherwise:
-  15,257 passages, 68,901 entity mentions, 75 entities in the graph, 1,921 co-occurrence edges.
+  14,617 passages, 66,411 entity mentions, 75 entities in the graph, 1,903 co-occurrence edges.
 - Diagrams are Mermaid and render on GitHub.
