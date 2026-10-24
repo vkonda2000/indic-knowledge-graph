@@ -149,8 +149,11 @@ Gutenberg / uploads ──► segment ──► passages (id, work, book, sectio
 
 ## Evaluation
 
-`eval/questions.jsonl` has 24 retrieval questions across all four works and 4 adversarial
-questions the corpus cannot answer (for example, Hanuman in the Katha Upanishad).
+`eval/questions.jsonl` has 47 retrieval questions across all four works and 10 adversarial
+questions the corpus cannot answer (for example, Hanuman in the Katha Upanishad). Retrieval
+questions include ones phrased with the Sanskrit term where the translation uses an English
+word (`skt-`), ones about what a named speaker says (`spk-`), and stories told in more than one
+work (`xw-`).
 
 Each retrieval item names the section or verse that answers it (checked by reading the
 passages), e.g. `mbh.b08.s090` for Karna's death or `upa.katha.p2.v18` for the unborn Self.
@@ -159,23 +162,25 @@ Only primary text counts as a hit, not commentary on the expected verse.
 
 | Retrieval (k = 8) | hit@1 | hit@8 | MRR |
 |---|---|---|---|
-| With gazetteer expansion | 29.2% | 79.2% | 0.502 |
-| Without (`--no-expand`) | 29.2% | 83.3% | 0.494 |
+| With gazetteer expansion | 29.8% | 66.0% | 0.450 |
+| Without (`--no-expand`) | 31.9% | 63.8% | 0.444 |
 
 What this shows so far:
 
-- **Finding the right passage is much harder than finding the right book.** With book-level
-  expectations the same system scored 62.5% / 95.8%. Retrieval misses 5 of 24 items entirely.
+- **Finding the right passage is much harder than finding the right book.** On the original 24 items
+  with book-level expectations the same system scored 62.5% / 95.8%. Retrieval misses 16 of 47
+  items entirely; questions phrased with Sanskrit terms (6 of 9 miss) and questions about what a
+  named speaker says (5 of 8 miss) are the weakest.
   Hybrid retrieval and re-ranking (Phase 3) are measured against these numbers.
 - **For the Upanishads, the translator's commentary outranks the verse itself**, because it is
   longer and wordier.
-- **Gazetteer expansion is mixed here:** slightly better MRR, slightly worse hit@8. The set is
+- **Gazetteer expansion is mixed here:** slightly better hit@8 and MRR, slightly worse hit@1. The set is
   still small; a larger set written by subject experts is the next step.
 - **One known failure, kept deliberately.** `con-02` asks about a kshatriya's dharma "according
   to Krishna". The Bhagavad Gita (Bhishma Parva, sections 25–42) loses to Santi Parva passages on
   kingship.
 - **Answers: Haiku 5.5 matches Opus 5.5 here at 1/44 of the cost.** `ikg eval --llm` on the
-  28 items:
+  original 28 items:
 
   | Model, effort | Cites right book | Citation precision | Abstains when it should | False abstentions | Cost / question |
   |---|---|---|---|---|---|
@@ -223,7 +228,7 @@ pytest
 ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-78 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+79 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
 matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
 (checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
 citation handling, model choice and cost with a mocked Claude client, and the web app end to end: contribute, review,

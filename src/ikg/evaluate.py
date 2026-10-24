@@ -121,6 +121,13 @@ def summarize(rows: list[dict]) -> dict:
                "retrieval_hit_at_1": rate(retrieval, "hit_at_1"),
                "retrieval_hit_at_k": rate(retrieval, "hit_at_k"),
                "retrieval_mrr": rate(retrieval, "reciprocal_rank")}
+    # Per question type, from the item id prefix (upa-, skt-, spk-, xw-, ...), to see where retrieval is weak.
+    by_type: dict[str, list] = {}
+    for r in retrieval:
+        by_type.setdefault(r["id"].split("-")[0], []).append(r)
+    summary["retrieval_by_type"] = {
+        t: {"n": len(rs), "hit_at_1": rate(rs, "hit_at_1"), "hit_at_k": rate(rs, "hit_at_k"),
+            "mrr": rate(rs, "reciprocal_rank")} for t, rs in sorted(by_type.items())}
     if any("answer" in r for r in rows):
         summary.update(
             cites_expected=rate(retrieval, "cites_expected"),

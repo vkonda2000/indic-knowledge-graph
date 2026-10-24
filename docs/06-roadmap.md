@@ -7,31 +7,47 @@ Each phase lists the extension points in the code, so the work can be scoped fro
 
 ## 1. Measured baseline
 
-Offline retrieval evaluation, 28 questions (24 retrieval, 4 adversarial), `k = 8`. Since
-2026-10-23 each item's `expected` names the section or verse that answers it, checked by reading
-the passages and reviewed independently; only primary text (verse, narrative) counts as a hit,
-not commentary on it. Before, `expected` named only the book:
+Offline retrieval evaluation, 57 questions (47 retrieval, 10 adversarial), `k = 8`. Each item's
+`expected` names the section or verse that answers it, checked by reading the passages and
+reviewed independently; only primary text (verse, narrative) counts as a hit, not commentary on
+it. Before 2026-10-23, `expected` named only the book, and the set had 28 items.
 
-| Configuration | hit@1 | hit@8 | MRR | Book-level hit@1 / hit@8 (old) |
+| Configuration | hit@1 | hit@8 | MRR |
+|---|---|---|---|
+| BM25 + gazetteer expansion + entity boost (default) | 0.298 | 0.660 | 0.450 |
+| BM25 only (`ikg eval --no-expand`) | 0.319 | 0.638 | 0.444 |
+| *Original 24 items, book-level (old)* | *0.625* | *0.958* | – |
+
+By question type (default configuration; `ikg eval` prints this as `retrieval_by_type`):
+
+| Type | Items | hit@1 | hit@8 | MRR |
 |---|---|---|---|---|
-| BM25 + gazetteer expansion + entity boost (default) | 0.292 | 0.792 | 0.502 | 0.625 / 0.958 |
-| BM25 only (`ikg eval --no-expand`) | 0.292 | 0.833 | 0.494 | 0.625 / 0.958 |
+| `xw` same story in two or three works | 4 | 0.75 | 1.00 | 0.88 |
+| `mbh` Mahabharata episodes | 6 | 0.50 | 1.00 | 0.75 |
+| `ram` Ramayana episodes | 4 | 0.25 | 1.00 | 0.53 |
+| `upa` Upanishads | 7 | 0.29 | 0.71 | 0.50 |
+| `vp` Vishnu Purana | 4 | 0.25 | 0.75 | 0.46 |
+| `con` concepts | 5 | 0.20 | 0.60 | 0.32 |
+| `spk` what a named speaker says | 8 | 0.25 | 0.38 | 0.31 |
+| `skt` phrased with the Sanskrit term the translation renders in English | 9 | 0.11 | 0.33 | 0.18 |
 
 What this shows:
 
-- **Finding the answering passage is much harder than finding the right book.** Retrieval misses
-  5 of 24 items entirely (`upa-01`, `upa-05`, `vp-01`, `con-02`, `con-04`) and ranks the answer
-  first in 7.
-- **For the Upanishads, commentary outranks the verse** (L36). Paramananda's commentary is
-  longer and wordier than the verse it explains, so BM25 ranks it higher: all of `upa-01`'s top
-  results are commentary.
-- **Gazetteer expansion is mixed, not a clear gain** (D3): MRR +0.008, hit@8 −0.04 (it pushes
-  `upa-01`'s verse out of the top 8). The set is too small to decide; Phase 3 hybrid retrieval and
-  re-ranking are measured against these numbers.
+- **Finding the answering passage is much harder than finding the right book**, and narrative
+  episodes are the easy case. Retrieval misses 16 of 47 items entirely.
+- **Sanskrit-phrased questions are the weakest** (C2): 6 of 9 miss. Gazetteer expansion is what
+  finds the other 3 (without it, 1 of 9); overall it helps hit@8 and MRR a little and costs
+  hit@1 (D3). The evidence for semantic retrieval (Phase 3) is now concrete. `skt` items carry no
+  English gloss, and a term the translator keeps in Sanskrit (Paramananda's "Atman", "Vidya")
+  makes a `upa` item, not a `skt` one.
+- **Speaker questions miss most** (5 of 8): without speaker attribution (L2), "what does Kunti
+  tell Karna" retrieves battle passages that name Karna.
+- **For the Upanishads, commentary outranks the verse** (L36): Paramananda's commentary is longer
+  and wordier than the verse, so BM25 ranks it higher.
 - The Gutenberg source itself lacks a few section headings (Sabha Parva LXVII; Shanti Parva
   XXXIV–XXXV and CCCLXIV), so those numbers don't exist in the corpus.
 
-**Answers** (`ikg eval --llm`, same 28 items, k = 8, 2026-10-23; total spend $1.50):
+**Answers** (`ikg eval --llm`, the original 28 items with book-level expectations, k = 8, 2026-10-23; total spend $1.50):
 
 | Model, effort | cites_expected | citation_precision | adversarial_abstain | false_abstain | Output tokens | Cost / question |
 |---|---|---|---|---|---|---|
@@ -80,7 +96,7 @@ by starting at a minimum of 10 shared passages (the API default is 5).
 
 | # | Limitation | Effect | Where |
 |---|---|---|---|
-| L1 | Eval set is small (28) and has no rendering-targeted questions | Retrieval changes cannot be judged | `eval/questions.jsonl` |
+| L1 | Eval set is still small (57 items; target about 150) and written without SMEs | Small retrieval changes move the rates by one item (about 2 points) and can't be judged; no gold answers yet. Rendering-targeted, speaker and cross-work items now exist (batch 1, 2026-10-23) | `eval/questions.jsonl` |
 | L2 | No speaker attribution | Questions like "according to Krishna" can't be answered precisely; answers can't say who said what | `segment.py`, `Passage` |
 | L3 | Small gazetteer: 76 entities, a fraction of the named figures | Low extraction recall; most minor figures are invisible to the graph | `gazetteer.yaml` |
 | L4 | No epithet or pronoun resolution beyond listed aliases | "the son of Pritha", "he" are not linked | `entities.py` |
@@ -168,7 +184,7 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 | Pipelines that classify and connect content (T5) | Relevance screening, generic section parser | Classification by topic, SOT and work discussed; links from scholarship to the verses it cites; EPUB, DOCX, audio, video; incremental builds | A researcher uploads a chapter quoting Katha 1.2.18, and the verse's page then shows that chapter | 1 |
 | Representation without distortion (T7) | Kinds, renderings, per-work separation, prompt forbids blending | SOT-level attribution, debate roles (*pūrvapakṣa* vs. *siddhānta*) | A commentary states an opposing view in order to refute it; the answer must not report it as the commentary's conclusion | 2–3 |
 | Minimise hallucinations (T8) | Grounding, native citations, abstention, refusal handling | Checking each sentence against its citation; unsupported-claim rate | A five-sentence answer where one sentence is not supported by its passage; that sentence is flagged and counted | 3 |
-| Evaluation datasets (T10) | 28 items; citation precision and abstention metrics in `--llm` | `--llm` baseline never recorded; SME gold answers; about 150 items | Record the first citation-precision baseline, then grow the set with speaker-specific and Sanskrit-phrased questions | 0 |
+| Evaluation datasets (T10) | 57 items (47 retrieval at section level, 10 adversarial); citation precision and abstention metrics in `--llm` | `--llm` baseline never recorded; SME gold answers; about 150 items | Record the first citation-precision baseline, then grow the set with speaker-specific and Sanskrit-phrased questions | 0 |
 | Regression checks in CI (T10) | Offline gate on hit@1 and hit@8 against `eval/baseline.json` | Answer-level metrics (citation precision, abstention) and SOT fidelity are not gated: they call the Claude API | A pull request that lowers citation precision fails its checks | 0 |
 | Collaboration with researchers and SMEs (T11) | Gazetteer editor, upload review queue | Curation of relations and claims with provenance; correcting answers | An SME marks an answer that blends two schools; the correction becomes an eval item | 2, 4 |
 
@@ -224,7 +240,7 @@ flowchart LR
 
 | Deliverable | Addresses | Extension point | Status |
 |---|---|---|---|
-| Grow the eval set to about 150 items: about 30 phrased in Sanskrit where the translation uses renderings, about 20 speaker-specific, about 20 cross-work, about 20 adversarial (false premises, misattributions, out-of-corpus) | L1, T10 | `eval/questions.jsonl` | Not started (28 items) |
+| Grow the eval set to about 150 items: about 30 phrased in Sanskrit where the translation uses renderings, about 20 speaker-specific, about 20 cross-work, about 20 adversarial (false premises, misattributions, out-of-corpus) | L1, T10 | `eval/questions.jsonl` | **In progress**: 57 items after batch 1 (9 Sanskrit-phrased, 8 speaker, 4 cross-work, 2 Upanishad, 6 adversarial added) |
 | **Multi-turn eval items**: conversations whose follow-ups depend on earlier turns ("and how does Shankara read that verse?") | T10 | new `type: multiturn` in `evaluate.py` | Not started |
 | **Fidelity benchmark (C1)**: SME-approved items and the four rates from [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) (attribution, separation, own terms, debate position), using a rubric-guided LLM judge checked against SME labels. Run against a plain model with no retrieval as well as this system, and report both | T7, T10 | `eval/fidelity/items.jsonl`, new `type: fidelity` and a `--baseline` switch in `evaluate.py` | 10 draft items awaiting SME review; evaluator not started |
 | Record the first `ikg eval --llm` baseline and commit the summary | §1 | `eval/baseline-llm.json`, §1 | **Done**; model comparison led to D13 |
