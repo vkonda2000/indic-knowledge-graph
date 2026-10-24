@@ -49,6 +49,16 @@ JUDGE_MODEL = os.environ.get("IKG_JUDGE_MODEL", "claude-opus-5-5")
 JUDGE_EFFORT = os.environ.get("IKG_JUDGE_EFFORT", "medium")
 FIDELITY_FILE = Path("eval") / "fidelity" / "items.jsonl"
 
+# PDFs are parsed in a child process with these limits (ikg.pdftext).
+PDF_MAX_PAGES = int(os.environ.get("IKG_PDF_MAX_PAGES", "2000"))
+PDF_TIMEOUT = float(os.environ.get("IKG_PDF_TIMEOUT", "120"))
+PDF_MAX_CHARS = int(os.environ.get("IKG_PDF_MAX_CHARS", "50000000"))  # a 1,000-page book is about 6 million
+PDF_MAX_MEMORY_MB = int(os.environ.get("IKG_PDF_MAX_MEMORY_MB", "2048"))  # POSIX only
+PDF_MAX_PARALLEL = int(os.environ.get("IKG_PDF_MAX_PARALLEL", "2"))
+# Contributor uploads per hour, per client address and across all clients (admins excluded).
+UPLOAD_LIMIT = int(os.environ.get("IKG_UPLOAD_LIMIT", "10"))
+UPLOAD_GLOBAL_LIMIT = int(os.environ.get("IKG_UPLOAD_GLOBAL_LIMIT", "100"))
+
 # Spend cap for Ask in the web app, across all visitors, per UTC day (admins included).
 ASK_BUDGET_USD = float(os.environ.get("IKG_ASK_BUDGET_USD", "5"))
 # Answers the web app keeps in memory for repeated questions (0 disables the cache).

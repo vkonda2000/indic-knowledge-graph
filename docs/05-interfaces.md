@@ -36,9 +36,11 @@
 | Status | When |
 |---|---|
 | 400 | Malformed `/api/ask` body or a non-integer `k` |
+| 401 | An admin `/api/` route without a valid admin session (HTML admin pages redirect to the login page instead) |
 | 404 | Unknown entity or passage |
 | 422 | FastAPI parameter validation failed |
-| 429 | Ask limit reached |
+| 413 | Upload larger than 20 MB (refused before the body is read) |
+| 429 | Ask limit or upload limit reached |
 | 503 | Corpus not built, or the Claude call failed |
 
 ### Example
@@ -85,6 +87,13 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_ANSWER_CACHE_SIZE` | `1000` | Answers kept in memory for repeated questions; `0` disables the cache |
 | `IKG_JUDGE_MODEL` | `claude-opus-5-5` | Judge for `ikg eval --fidelity` |
 | `IKG_JUDGE_EFFORT` | `medium` | Judge effort |
+| `IKG_UPLOAD_LIMIT` | `10` | Contributor uploads per hour per client address (admins are not limited) |
+| `IKG_UPLOAD_GLOBAL_LIMIT` | `100` | Contributor uploads per hour across all clients |
+| `IKG_PDF_MAX_PAGES` | `2000` | PDFs with more pages are rejected |
+| `IKG_PDF_TIMEOUT` | `120` | Seconds a PDF may take to read before it is rejected |
+| `IKG_PDF_MAX_CHARS` | `50000000` | PDFs with more text are rejected |
+| `IKG_PDF_MAX_MEMORY_MB` | `2048` | Memory cap for the PDF reader process (POSIX only) |
+| `IKG_PDF_MAX_PARALLEL` | `2` | PDFs read at the same time |
 | `IKG_SCREEN` | `on` | `off`/`0`/`false`/`no` disables upload screening |
 | `IKG_SCREEN_MODEL` | `qwen3.5:9B` | Ollama model for screening |
 | `OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama server URL |

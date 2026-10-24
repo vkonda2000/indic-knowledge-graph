@@ -248,7 +248,8 @@ def strip_gutenberg(text: str) -> str:
     """Return only the ebook body, without the Project Gutenberg header and license."""
     start = text.find(START_MARK)
     if start != -1:
-        text = text[text.index("\n", start) + 1:]
+        line_end = text.find("\n", start)
+        text = text[line_end + 1:] if line_end != -1 else ""
     end = text.find(END_MARK)
     if end != -1:
         text = text[:end]

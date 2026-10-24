@@ -419,8 +419,8 @@ PARSERS = {
 
 def read_source(path: Path) -> str:
     if path.suffix.lower() == ".pdf":
-        from pypdf import PdfReader
-        return "\n\n".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
+        from ikg.pdftext import pdf_text
+        return pdf_text(path.read_bytes())
     return strip_gutenberg(path.read_text(encoding="utf-8", errors="replace"))
 
 

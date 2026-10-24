@@ -68,8 +68,9 @@ at `IKG_ASK_BUDGET_USD` (default $5), and visitors who are not logged in as admi
 `IKG_ASK_LIMIT` questions per hour per client address (default 20; `0` restricts Ask to admins).
 Behind a reverse proxy the client address comes from `X-Forwarded-For`, which uvicorn trusts
 only from 127.0.0.1; for a proxy on another host, set `FORWARDED_ALLOW_IPS` to its address. Sessions are `HttpOnly`, `SameSite=Strict` cookies, marked `Secure`
-when served over HTTPS. Uploads are limited to 20 MB,
-stored under random names, never executed, and never enter the corpus without admin approval.
+when served over HTTPS. Uploads are limited to 20 MB and to
+`IKG_UPLOAD_LIMIT` per hour per client (10; 100 per hour in total), PDFs are read in a separate
+process with time, page and text limits and no access to secrets, and uploads are stored under random names, never executed, and never enter the corpus without admin approval.
 For a public deployment, put the app behind HTTPS and a real identity provider.
 
 **Relevance screening.** Before an upload is stored, a local model served by
@@ -231,7 +232,7 @@ pytest
 ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-109 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+117 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
 matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
 (checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
 citation handling, model choice and cost with a mocked Claude client, and the web app end to end: contribute, review,

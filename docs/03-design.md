@@ -287,6 +287,21 @@ including two prompt-injection attempts.
   thread so it does not block other requests.
 - **Bounds.** `k` is clamped to 1–20 for Ask and 1–50 for search. Uploads are read in 1 MB
   chunks and stop at 20 MB. Contributor text fields are truncated (title 200, notes 2000).
+  Non-admin uploads are limited per client address (`IKG_UPLOAD_LIMIT`, 10 an hour) and in total
+  (`IKG_UPLOAD_GLOBAL_LIMIT`, 100 an hour). The limits and a `Content-Length` over 21 MB are
+  checked in a middleware before the body is received (a route only runs after the framework has
+  spooled the whole multipart body); an upload is counted only when both limits have room. A
+  saved upload whose registration fails is deleted.
+- **PDFs** are read by `ikg.pdftext` in a child Python process with a minimal environment (no API
+  key or tokens), at most two at a time. The child is killed after `IKG_PDF_TIMEOUT` (120 s) and
+  refuses more than `IKG_PDF_MAX_PAGES` (2,000) pages or `IKG_PDF_MAX_CHARS` (50 million)
+  characters of text, so the parent never receives unbounded output. On POSIX its memory is
+  capped at `IKG_PDF_MAX_MEMORY_MB` (2,048); on Windows memory is bounded only by pypdf 6's
+  per-stream decompression limits and the text cap. On upload this runs off the event loop. The
+  same limits apply in the build: an approved PDF over them fails the build, naming the work (a
+  multi-volume compilation in one file may need a higher `IKG_PDF_MAX_PAGES`).
+- **Admin `/api/` routes** answer a missing session with a JSON 401; admin HTML pages redirect to
+  the login page. The admin page's build poller sends the admin to the login page on a 401.
 - **Background rebuild.** `BuildJob` uses a non-blocking lock, so only one rebuild runs at a
   time. It runs `build()` in a daemon thread, appends log lines to a list that the admin page
   polls through `/api/build/status`, and on success swaps in a new `Runtime`. Requests in
@@ -357,7 +372,7 @@ expert-approved, current-corpus items are scored; the command refuses to run oth
 
 ## 12. Testing
 
-`pytest` runs 109 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 117 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer

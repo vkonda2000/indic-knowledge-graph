@@ -76,7 +76,7 @@ def test_parse_generic_markdown_headings():
 def test_admin_requires_login(client):
     assert client.get("/admin", follow_redirects=False).headers["location"] == "/admin/login"
     assert "Invalid token" in client.post("/admin/login", data={"token": "wrong"}).text
-    assert client.get("/api/build/status", follow_redirects=False).status_code == 303
+    assert client.get("/api/build/status", follow_redirects=False).status_code == 401
 
 
 def test_contribute_review_rebuild_search_graph(client):
@@ -441,3 +441,53 @@ def test_a_build_that_cannot_be_loaded_keeps_the_previous_one_serving(client, mo
     job = _rebuild_and_wait(client)
     assert job.state == "error" and "still serving the previous one" in job.error
     assert "Arjuna" in client.get("/api/search", params={"q": "Arjuna"}).text
+
+
+def test_uploads_are_rate_limited_per_client(client):
+    client.app_ref.state.upload_limiter.per_hour = 2
+    for i in range(2):
+        r = client.post("/contribute", data={"title": f"Notes {i}"}, files={"file": ("n.md", MATERIAL, "text/markdown")})
+        assert "waiting for admin review" in r.text
+    r = client.post("/contribute", data={"title": "Notes 3"}, files={"file": ("n.md", MATERIAL, "text/markdown")})
+    assert "Too many uploads" in r.text
+    login(client)  # admins are not limited
+    r = client.post("/contribute", data={"title": "Notes 4"}, files={"file": ("n.md", MATERIAL, "text/markdown")})
+    assert "waiting for admin review" in r.text
+
+
+def test_failed_registration_leaves_no_orphan_upload(client, monkeypatch):
+    def broken(*args, **kwargs):
+        raise ValueError("registry is broken")
+
+    monkeypatch.setattr(sources, "add_user_work", broken)
+    r = client.post("/contribute", data={"title": "Notes"}, files={"file": ("n.md", MATERIAL, "text/markdown")})
+    assert "registry is broken" in r.text
+    assert not config.UPLOADS_DIR.exists() or not any(config.UPLOADS_DIR.iterdir())
+
+
+def test_api_routes_answer_401_not_a_redirect(client):
+    r = client.get("/api/build/status", follow_redirects=False)
+    assert r.status_code == 401 and r.json()["detail"] == "Admin login required"
+
+
+def test_upload_limits_apply_before_the_body_is_read(client):
+    client.app_ref.state.upload_global.per_hour = 1
+    ok = client.post("/contribute", data={"title": "A"}, files={"file": ("n.md", MATERIAL, "text/markdown")})
+    assert "waiting for admin review" in ok.text
+    r = client.post("/contribute", data={"title": "B"}, files={"file": ("n.md", MATERIAL, "text/markdown")})
+    assert r.status_code == 429 and "Too many uploads" in r.text
+    # A refused request doesn't burn the client's own quota.
+    assert len(client.app_ref.state.upload_limiter.events.get("testclient", [])) == 1
+    r = client.post("/contribute", content=b"x", headers={"content-length": str(50 << 20),
+                                                          "content-type": "multipart/form-data; boundary=x"})
+    assert r.status_code == 413 and "larger than 20 MB" in r.text
+
+
+def test_upload_disk_error_leaves_no_orphan(client, monkeypatch):
+    def full(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(sources, "add_user_work", full)
+    r = client.post("/contribute", data={"title": "Notes"}, files={"file": ("n.md", MATERIAL, "text/markdown")})
+    assert "could not be saved" in r.text
+    assert not config.UPLOADS_DIR.exists() or not any(config.UPLOADS_DIR.iterdir())

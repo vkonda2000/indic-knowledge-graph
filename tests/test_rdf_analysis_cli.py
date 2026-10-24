@@ -359,3 +359,39 @@ def test_registry_rejects_unknown_work_and_duplicate_ids(tmp_path, monkeypatch):
 def test_gazetteer_blank_optional_fields_mean_unset():
     gz = Gazetteer.from_yaml("entities:\n  - id: k\n    type: Person\n    label: K\n    iast:\n    works:\n")
     assert gz.entities["k"].iast == "" and gz.entities["k"].works == []
+
+
+def test_pdf_text_runs_in_a_child_process_with_limits():
+    import io
+    from pypdf import PdfWriter
+    from ikg.pdftext import pdf_text
+    writer = PdfWriter()
+    for _ in range(3):
+        writer.add_blank_page(width=72, height=72)
+    buf = io.BytesIO()
+    writer.write(buf)
+    assert pdf_text(buf.getvalue()).strip() == ""
+    with pytest.raises(ValueError, match="has 3 pages; the limit is 2"):
+        pdf_text(buf.getvalue(), max_pages=2)
+    with pytest.raises(ValueError, match="could not read the PDF"):
+        pdf_text(b"not a pdf")
+
+
+def test_gutenberg_start_marker_on_the_last_line():
+    assert sources.strip_gutenberg("header\n*** START OF THE PROJECT GUTENBERG EBOOK X ***") == ""
+
+
+def test_pdf_text_limits_output_time_and_environment(monkeypatch):
+    import io
+    from pypdf import PdfWriter
+    from ikg import pdftext
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    buf = io.BytesIO()
+    writer.write(buf)
+    with pytest.raises(ValueError, match="longer than the limit of 1 characters"):
+        pdftext.pdf_text(buf.getvalue(), max_chars=1)
+    with pytest.raises(ValueError, match="took longer than"):
+        pdftext.pdf_text(buf.getvalue(), timeout=0.001)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
+    assert "ANTHROPIC_API_KEY" not in pdftext._child_env()
