@@ -128,12 +128,15 @@ MBH_BOOK_RE = re.compile(r"^BOOK (\d+)\s*$")
 MBH_PARVA_RE = re.compile(r"^([A-Z][A-Z\- ]*PARVA|[A-Z][A-Za-z]*(?:-[A-Za-z]+)*-parva)\s*$")
 MBH_SECTION_RE = re.compile(r"^SECTION ([IVXLC]+)\s*$")
 MBH_ARABIC_SECTION_RE = re.compile(r"^(\d{1,3})\s*$")
+# The translator's notes for a parva follow its last section; they are not part of any section.
+MBH_FOOTNOTES_RE = re.compile(r"^FOOTNOTES\s*$")
 MBH_SKIP_RE = re.compile(r"^(THE MAHABHARATA|The [Ee]nd of .*)\s*$")
 
 
 def parse_mahabharata(text: str, work: Work, source_url: str) -> list[Passage]:
     passages: list[Passage] = []
     book, parva, section, buf = 0, "", 0, []
+    in_notes = False
 
     def flush():
         if book and section and buf:
@@ -148,6 +151,13 @@ def parse_mahabharata(text: str, work: Work, source_url: str) -> list[Passage]:
 
     for line in text.split("\n"):
         stripped = line.strip()
+        if MBH_FOOTNOTES_RE.match(stripped):
+            flush()
+            buf, in_notes = [], True
+            continue
+        if in_notes and not (MBH_BOOK_RE.match(stripped) or MBH_SECTION_RE.match(stripped)):
+            continue  # numbered notes would otherwise look like arabic section numbers
+        in_notes = False
         if m := MBH_BOOK_RE.match(stripped):
             flush()
             book, parva, section, buf = int(m.group(1)), "", 0, []
@@ -219,7 +229,8 @@ def parse_ramayana(text: str, work: Work, source_url: str) -> list[Passage]:
 
 UPA_NAME_RE = re.compile(r"^\s*(ISA|KATHA|KENA)-UPANISHAD\s*$", re.IGNORECASE)
 UPA_INTRO_RE = re.compile(r"^\s{5,}Introduction\s*$")
-UPA_PART_RE = re.compile(r"^\s*Part (First|Second|Third|Fourth|Fifth|Sixth)\s*$")
+# Case-insensitive: the Kena's last heading is "Part fourth".
+UPA_PART_RE = re.compile(r"^\s*Part (First|Second|Third|Fourth|Fifth|Sixth)\s*$", re.IGNORECASE)
 UPA_VERSE_RE = re.compile(r"^\s*([IVXL]+)\s*$")
 UPA_PEACE_RE = re.compile(r"^\s*Peace Chant\s*$")
 ORDINALS = {"First": 1, "Second": 2, "Third": 3, "Fourth": 4, "Fifth": 5, "Sixth": 6}
@@ -246,7 +257,7 @@ def parse_upanishads(text: str, work: Work, source_url: str) -> list[Passage]:
             continue
         if mode == "text":
             if m := UPA_PART_RE.match(line):
-                part, verse = ORDINALS[m.group(1)], ""
+                part, verse = ORDINALS[m.group(1).title()], ""
                 continue
             if UPA_PEACE_RE.match(line):
                 verse = "peace" if not any(k[0] == name and k[3] == "peace" for k in order) else "peace-close"

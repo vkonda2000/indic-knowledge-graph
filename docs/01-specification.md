@@ -118,12 +118,12 @@ systems tend to blur three distinctions that this system keeps:
 
 ### 5.1 Prototype: implemented
 
-- **Corpus:** four works, about 3.1 million words, 15,257 passages.
+- **Corpus:** four works, about 3.1 million words, 14,617 passages.
 
   | Work | Edition | Passages |
   |---|---|---|
   | Upanishads (Isa, Katha, Kena) | Swami Paramananda, 1919 | 268 (165 verse, 92 commentary, 11 introduction) |
-  | Mahabharata, 18 books | K. M. Ganguli, 1883–96 | 12,561 |
+  | Mahabharata, 18 books | K. M. Ganguli, 1883–96 | 11,916 |
   | Ramayana, books 1–6 | R. T. H. Griffith, 1870–74 | 1,687 |
   | Vishnu Purana, parts 1–6 | M. N. Dutt after H. H. Wilson, 1896 | 741 |
 

@@ -7,9 +7,9 @@ so every number can be traced to specific surface forms in specific passages.
 
 | Work | Translator | Words | Passages | Passage kinds |
 |---|---|---|---|---|
-| Mahabharata | Kisari Mohan Ganguli | 2,579,969 | 12561 | narrative: 12561 |
+| Mahabharata | Kisari Mohan Ganguli | 2,434,902 | 11916 | narrative: 11916 |
 | Ramayana | Ralph T. H. Griffith | 342,289 | 1687 | verse: 1687 |
-| Upanishads | Swami Paramananda | 17,210 | 268 | commentary: 92, introduction: 11, verse: 165 |
+| Upanishads | Swami Paramananda | 17,208 | 273 | commentary: 88, introduction: 11, verse: 174 |
 | Vishnu Purana | Manmatha Nath Dutt (after H. H. Wilson) | 143,874 | 741 | narrative: 741 |
 
 ## 1. Concept density per 10,000 words
@@ -20,43 +20,43 @@ which keyword search on the Sanskrit term alone would miss.
 
 | Concept | Mahabharata | Ramayana | Upanishads | Vishnu Purana |
 |---|---|---|---|---|
-| Atman (ātman) | 9.8 (103/2430) | 9.8 (0/336) | 87.2 (126/24) | 7.4 (1/106) |
+| Atman (ātman) | 8.7 (75/2053) | 9.8 (0/336) | 87.2 (126/24) | 7.4 (1/106) |
 | Brahman (brahman) | 0.0 (0/0) | 0.0 (0/0) | 52.9 (81/10) | 4.4 (62/1) |
-| Yajna (yajña) | 11.8 (7/3040) | 1.4 (0/47) | 11.0 (0/19) | 12.7 (4/179) |
-| Dharma (dharma) | 13.0 (372/2986) | 6.8 (0/232) | 1.7 (0/3) | 5.9 (15/70) |
-| Tapas (tapas) | 7.9 (6/2029) | 2.5 (0/85) | 1.7 (2/1) | 4.4 (2/62) |
-| Karma (karma) | 1.0 (80/169) | 0.0 (0/0) | 7.6 (4/9) | 3.5 (0/50) |
-| Moksha (mokṣa) | 2.9 (37/715) | 0.0 (0/0) | 1.2 (0/2) | 5.1 (0/73) |
-| Bhakti (bhakti) | 1.3 (0/339) | 0.4 (0/13) | 0.6 (0/1) | 4.4 (0/64) |
-| Yoga (yoga) | 2.4 (628/0) | 0.0 (0/0) | 2.3 (4/0) | 0.3 (4/0) |
-| Om (oṃ) | 0.3 (78/0) | 0.0 (1/0) | 4.1 (7/0) | 0.6 (8/0) |
-| Samsara (saṃsāra) | 0.5 (3/134) | 0.0 (0/1) | 3.5 (1/5) | 0.3 (0/5) |
-| Maya (māyā) | 1.3 (79/265) | 0.3 (7/3) | 0.0 (0/0) | 1.0 (1/13) |
-| Guna (guṇa) | 1.3 (345/0) | 0.0 (0/0) | 0.0 (0/0) | 0.3 (5/0) |
-| Samkhya (sāṃkhya) | 0.5 (130/0) | 0.0 (0/0) | 0.0 (0/0) | 0.1 (1/0) |
-| Ahimsa (ahiṃsā) | 0.4 (0/93) | 0.0 (0/0) | 0.0 (0/0) | 0.0 (0/0) |
-| Avatara (avatāra) | 0.1 (0/24) | 0.0 (0/0) | 0.0 (0/0) | 0.3 (0/5) |
+| Yajna (yajña) | 11.5 (1/2802) | 1.4 (0/47) | 11.0 (0/19) | 12.7 (4/179) |
+| Dharma (dharma) | 13.0 (340/2832) | 6.8 (0/232) | 1.7 (0/3) | 5.9 (15/70) |
+| Tapas (tapas) | 8.0 (3/1955) | 2.5 (0/85) | 1.7 (2/1) | 4.4 (2/62) |
+| Karma (karma) | 0.8 (46/146) | 0.0 (0/0) | 7.6 (4/9) | 3.5 (0/50) |
+| Moksha (mokṣa) | 2.4 (20/553) | 0.0 (0/0) | 1.2 (0/2) | 5.1 (0/73) |
+| Bhakti (bhakti) | 1.3 (0/322) | 0.4 (0/13) | 0.6 (0/1) | 4.4 (0/64) |
+| Om (oṃ) | 0.3 (67/0) | 0.0 (1/0) | 4.1 (7/0) | 0.6 (8/0) |
+| Yoga (yoga) | 2.0 (496/0) | 0.0 (0/0) | 2.3 (4/0) | 0.3 (4/0) |
+| Samsara (saṃsāra) | 0.4 (0/108) | 0.0 (0/1) | 3.5 (1/5) | 0.3 (0/5) |
+| Maya (māyā) | 1.3 (63/256) | 0.3 (7/3) | 0.0 (0/0) | 1.0 (1/13) |
+| Guna (guṇa) | 1.2 (281/0) | 0.0 (0/0) | 0.0 (0/0) | 0.3 (5/0) |
+| Samkhya (sāṃkhya) | 0.4 (108/0) | 0.0 (0/0) | 0.0 (0/0) | 0.1 (1/0) |
+| Avatara (avatāra) | 0.1 (0/19) | 0.0 (0/0) | 0.0 (0/0) | 0.3 (0/5) |
+| Ahimsa (ahiṃsā) | 0.3 (0/84) | 0.0 (0/0) | 0.0 (0/0) | 0.0 (0/0) |
 | Advaita (advaita) | 0.0 (0/0) | 0.0 (0/0) | 0.0 (0/0) | 0.0 (0/0) |
 
 ## 2. Concepts across the 18 books of the Mahabharata (mentions per 10,000 words)
 
 | Book | Words | Dharma | Moksha | Yajna | Tapas | Yoga |
 |---|---|---|---|---|---|---|
-| Book 1 (Adi Parva) | 230,722 | 5.1 | 1.0 | 12.4 | 8.3 | 0.5 |
-| Book 2 (Sabha Parva) | 75,470 | 4.8 | 1.2 | 20.8 | 1.7 | 0.3 |
-| Book 3 (Vana Parva) | 329,659 | 5.6 | 1.4 | 11.7 | 10.1 | 0.8 |
-| Book 4 (Virata Parva) | 63,888 | 2.5 | 0.0 | 2.0 | 0.3 | 0.0 |
-| Book 5 (Udyoga Parva) | 192,506 | 7.6 | 1.9 | 6.0 | 7.2 | 0.2 |
-| Book 6 (Bhishma Parva) | 164,957 | 5.7 | 1.0 | 5.0 | 2.6 | 2.4 |
-| Book 7 (Drona Parva) | 256,077 | 5.1 | 0.3 | 5.4 | 1.8 | 0.6 |
+| Book 1 (Adi Parva) | 230,709 | 5.1 | 1.0 | 12.4 | 8.3 | 0.5 |
+| Book 2 (Sabha Parva) | 75,455 | 4.8 | 1.2 | 20.8 | 1.7 | 0.3 |
+| Book 3 (Vana Parva) | 325,994 | 5.6 | 1.3 | 11.3 | 10.2 | 0.7 |
+| Book 4 (Virata Parva) | 62,044 | 2.6 | 0.0 | 1.9 | 0.3 | 0.0 |
+| Book 5 (Udyoga Parva) | 190,841 | 7.6 | 1.4 | 5.8 | 7.1 | 0.2 |
+| Book 6 (Bhishma Parva) | 150,865 | 6.1 | 0.5 | 4.3 | 2.7 | 2.2 |
+| Book 7 (Drona Parva) | 250,232 | 5.2 | 0.2 | 5.2 | 1.8 | 0.6 |
 | Book 8 (Karna Parva) | 140,814 | 4.4 | 0.0 | 2.1 | 1.2 | 0.1 |
 | Book 9 (Shalya Parva) | 92,750 | 7.1 | 0.6 | 10.4 | 9.3 | 1.5 |
 | Book 10 (Sauptika Parva) | 21,611 | 10.2 | 0.0 | 11.6 | 5.1 | 0.0 |
 | Book 11 (Stri Parva) | 22,098 | 14.9 | 0.9 | 3.2 | 1.8 | 0.0 |
-| Book 12 (Santi Parva) | 542,698 | 28.2 | 9.0 | 16.5 | 10.8 | 6.9 |
-| Book 13 (Anusasana Parva) | 302,922 | 22.6 | 2.2 | 18.2 | 13.1 | 2.6 |
-| Book 14 (Aswamedha Parva) | 90,555 | 15.8 | 4.6 | 26.6 | 9.8 | 4.6 |
-| Book 15 (Asramavasika Parva) | 33,220 | 19.0 | 0.9 | 4.5 | 20.8 | 1.2 |
+| Book 12 (Santi Parva) | 459,535 | 30.3 | 7.7 | 16.3 | 11.9 | 6.0 |
+| Book 13 (Anusasana Parva) | 279,358 | 23.2 | 2.0 | 18.3 | 13.5 | 2.4 |
+| Book 14 (Aswamedha Parva) | 81,820 | 17.2 | 4.2 | 27.9 | 10.0 | 3.8 |
+| Book 15 (Asramavasika Parva) | 30,754 | 18.9 | 0.3 | 4.6 | 21.5 | 1.0 |
 | Book 16 (Mausala Parva) | 8,181 | 3.7 | 0.0 | 0.0 | 4.9 | 9.8 |
 | Book 17 (Mahaprasthanika Parva) | 3,095 | 16.2 | 0.0 | 3.2 | 6.5 | 16.2 |
 | Book 18 (Svargarohanika Parva) | 8,746 | 25.2 | 4.6 | 11.4 | 4.6 | 2.3 |
@@ -70,31 +70,31 @@ Patronymics inflate some counts: "son of Pandu" names the Pandavas, not Pandu hi
 
 | Figure | Co-occurrence strength | Distinct co-mentioned figures |
 |---|---|---|
-| Arjuna | 7774 | 44 |
-| Yudhishthira | 6493 | 45 |
-| Bhima | 5437 | 45 |
-| Pandu | 5436 | 41 |
-| Krishna | 5334 | 45 |
-| Duryodhana | 5055 | 40 |
-| Kunti | 4598 | 42 |
-| Drona | 4296 | 38 |
-| Karna | 4084 | 38 |
-| Bhishma | 4031 | 41 |
+| Arjuna | 7706 | 44 |
+| Yudhishthira | 6441 | 45 |
+| Pandu | 5431 | 41 |
+| Bhima | 5415 | 44 |
+| Krishna | 5251 | 44 |
+| Duryodhana | 5024 | 40 |
+| Kunti | 4592 | 42 |
+| Drona | 4274 | 38 |
+| Karna | 4065 | 38 |
+| Bhishma | 3962 | 41 |
 
 Strongest pairs:
 
 | Pair | Shared passages |
 |---|---|
-| Arjuna - Krishna | 739 |
-| Arjuna - Bhima | 645 |
+| Arjuna - Krishna | 729 |
+| Arjuna - Bhima | 644 |
 | Pandu - Arjuna | 641 |
-| Arjuna - Yudhishthira | 622 |
-| Bhima - Yudhishthira | 586 |
+| Arjuna - Yudhishthira | 621 |
+| Bhima - Yudhishthira | 585 |
 | Kunti - Arjuna | 578 |
-| Kunti - Yudhishthira | 531 |
-| Pandu - Yudhishthira | 528 |
-| Karna - Arjuna | 517 |
-| Drona - Arjuna | 492 |
+| Kunti - Yudhishthira | 529 |
+| Pandu - Yudhishthira | 527 |
+| Karna - Arjuna | 514 |
+| Drona - Arjuna | 488 |
 
 ### Ramayana
 
@@ -132,11 +132,11 @@ Strongest pairs:
 |---|---|---|
 | Nachiketas | 14 | 1 |
 | Yama | 14 | 1 |
-| Indra | 6 | 5 |
-| Uma Haimavati | 5 | 4 |
-| Brahma | 4 | 4 |
-| Shiva | 4 | 4 |
-| Vishnu | 4 | 4 |
+| Indra | 3 | 2 |
+| Brahma | 2 | 2 |
+| Shiva | 2 | 2 |
+| Vishnu | 2 | 2 |
+| Uma Haimavati | 2 | 1 |
 | Agni | 1 | 1 |
 
 Strongest pairs:
@@ -145,14 +145,10 @@ Strongest pairs:
 |---|---|
 | Nachiketas - Yama | 14 |
 | Indra - Uma Haimavati | 2 |
-| Brahma - Indra | 1 |
 | Brahma - Shiva | 1 |
-| Brahma - Uma Haimavati | 1 |
 | Brahma - Vishnu | 1 |
-| Indra - Shiva | 1 |
-| Indra - Vishnu | 1 |
+| Shiva - Vishnu | 1 |
 | Indra - Agni | 1 |
-| Shiva - Uma Haimavati | 1 |
 
 ### Vishnu Purana
 
@@ -188,33 +184,33 @@ Strongest pairs:
 
 | Figure | Mahabharata | Ramayana | Upanishads | Vishnu Purana |
 |---|---|---|---|---|
-| Krishna | 2992 | 1 | 0 | 392 |
-| Bhima | 3339 | 1 | 0 | 10 |
-| Indra | 2330 | 285 | 8 | 119 |
-| Drona | 2597 | 1 | 0 | 9 |
-| Vishnu | 1247 | 77 | 2 | 491 |
-| Brahma | 1390 | 117 | 4 | 244 |
-| Shiva | 1030 | 43 | 1 | 53 |
-| Yama | 662 | 46 | 26 | 20 |
-| Ganga | 589 | 62 | 0 | 21 |
-| Lakshmana | 110 | 554 | 0 | 7 |
-| Narada | 580 | 6 | 0 | 19 |
-| Agni | 507 | 8 | 5 | 11 |
+| Bhima | 3325 | 1 | 0 | 10 |
+| Krishna | 2908 | 1 | 0 | 392 |
+| Indra | 2287 | 285 | 8 | 119 |
+| Drona | 2579 | 1 | 0 | 9 |
+| Vishnu | 1159 | 77 | 2 | 491 |
+| Brahma | 1168 | 117 | 4 | 244 |
+| Shiva | 908 | 43 | 1 | 53 |
+| Yama | 650 | 46 | 26 | 20 |
+| Lakshmana | 109 | 554 | 0 | 7 |
+| Ganga | 565 | 62 | 0 | 21 |
+| Narada | 571 | 6 | 0 | 19 |
 | Sita | 79 | 434 | 0 | 9 |
-| Sahadeva | 437 | 1 | 0 | 10 |
-| Vasishtha | 280 | 121 | 0 | 36 |
-| Ravana | 130 | 298 | 0 | 5 |
-| Sugriva | 87 | 317 | 0 | 1 |
-| Himalaya | 234 | 30 | 3 | 4 |
-| Vishvamitra | 195 | 65 | 0 | 10 |
-| Markandeya | 208 | 2 | 0 | 2 |
-| Dasaratha | 65 | 139 | 0 | 7 |
-| Uma Haimavati | 162 | 8 | 4 | 7 |
-| Prahlada | 93 | 1 | 0 | 71 |
+| Agni | 488 | 8 | 5 | 11 |
+| Sahadeva | 435 | 1 | 0 | 10 |
+| Ravana | 126 | 298 | 0 | 5 |
+| Vasishtha | 262 | 121 | 0 | 36 |
+| Sugriva | 85 | 317 | 0 | 1 |
+| Himalaya | 220 | 30 | 3 | 4 |
+| Vishvamitra | 179 | 65 | 0 | 10 |
+| Dasaratha | 63 | 139 | 0 | 7 |
+| Markandeya | 205 | 2 | 0 | 2 |
+| Uma Haimavati | 154 | 8 | 4 | 7 |
+| Prahlada | 90 | 1 | 0 | 71 |
 | Ayodhya | 24 | 126 | 0 | 1 |
-| Mithila | 62 | 14 | 0 | 2 |
+| Mithila | 58 | 14 | 0 | 2 |
 | Lakshmi | 35 | 9 | 0 | 22 |
-| Valmiki | 12 | 12 | 0 | 1 |
+| Valmiki | 9 | 12 | 0 | 1 |
 
 ## Caveats
 

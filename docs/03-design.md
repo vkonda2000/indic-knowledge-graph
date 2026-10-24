@@ -48,9 +48,9 @@ Each bundled edition has a different layout, so each has a parser keyed by `work
 
 | Parser | Structure recognised | Passage ID | Kind | Edition quirks handled |
 |---|---|---|---|---|
-| `mahabharata` | `BOOK n` → parva name → `SECTION XII` *or* a bare Arabic numeral | `mbh.b05.s033.p02` | narrative | Books 8–11 and 16–18 number sections with bare numerals. Only the *next* number in sequence starts a section, so stray numerals in the text don't split it. Repeated running heads are skipped |
+| `mahabharata` | `BOOK n` → parva name → `SECTION XII` *or* a bare Arabic numeral | `mbh.b05.s033.p02` | narrative | Books 8–11 and 16–18 number sections with bare numerals. Only the *next* number in sequence starts a section, so stray numerals in the text don't split it. Repeated running heads are skipped A `FOOTNOTES` block after a parva's last section is skipped until the next `BOOK` or `SECTION` heading (its numbered notes would otherwise look like section numbers). |
 | `ramayana` | `BOOK IV.` → `Canto XII. <title>` | `ram.b4.c012.p01` | verse | Starts at the BOOK heading just before the first canto, skipping the table of contents. Stops at `APPENDIX.` Strips `(12)` note markers. Keeps line breaks inside verse |
-| `upanishads` | Upanishad name → `Part First` → Roman verse number → `Peace Chant` | `upa.katha.p1.v19`, `.c1` for commentary, `.intro01`, `.peace` | verse / commentary / introduction | The first paragraph after a verse number is the verse and the rest is commentary. The first occurrence of an Upanishad's name opens its introduction, the second opens its text. Peace chants split at "PEACE!" |
+| `upanishads` | Upanishad name → `Part First` → Roman verse number → `Peace Chant` | `upa.katha.p1.v19`, `.c1` for commentary, `.intro01`, `.peace` | verse / commentary / introduction | The first paragraph after a verse number is the verse and the rest is commentary. The first occurrence of an Upanishad's name opens its introduction, the second opens its text. Peace chants split at "PEACE!" Part headings are matched case-insensitively (the Kena's last is "Part fourth"). |
 | `vishnu_purana` | `PART I.` → `SECTION XII.` | `vp.b1.s012.p01` | narrative | Stops at the footnotes (`[1] `). Strips `[n]` markers. Section numbers are forced to increase, to work around a typo in Part V |
 | `generic` | Level 1: Markdown `#` or `BOOK/PART/VOLUME/KANDA/PARVA n`. Level 2: `##` or `CHAPTER/SECTION/CANTO/ADHYAYA/SARGA n`. Headings are at most 100 characters | `<work>.f1.b2.s003.p01` | taken from the work (chosen on upload) | Text with no headings becomes one book with one section. Multi-file works get `f<n>` per file. Used for all uploads and added Gutenberg texts unless an admin picks another parser |
 
@@ -119,7 +119,7 @@ always take that span. The same form listed twice under one entity keeps the wid
 ### 4.3 Outputs
 
 `extract()` produces one `Mention(entity, passage, work, surface, via)` for each match:
-68,901 for the current corpus. Mentions are the single source for the graph, the RDF
+66,411 for the current corpus. Mentions are the single source for the graph, the RDF
 mention counts, the entity pages' surface-form tables, and the retrieval entity boost.
 
 ## 5. Retrieval (`retrieve.py`)
@@ -202,7 +202,7 @@ If retrieval returns nothing, the answer abstains without calling the API.
 - **Edges:** an undirected edge between every pair of entities mentioned in the same passage.
   `weight` is the number of shared passages; `weight_<work>` is the same count per work.
 
-The graph is stored as GraphML. Today it has 75 nodes and 1,921 edges. It feeds the explorer
+The graph is stored as GraphML. Today it has 75 nodes and 1,903 edges. It feeds the explorer
 (`/api/graph`), entity neighbours, the QA graph summary, and the analysis report.
 
 ### 7.2 RDF export
@@ -300,7 +300,7 @@ including two prompt-injection attempts.
 `ikg analyze` writes `reports/corpus-analysis.md` with:
 
 1. Concept density per 10,000 words for each work, split into direct Sanskrit term vs.
-   translator rendering. Example: Ganguli writes *dharma* 372 times but its renderings 2,986
+   translator rendering. Example: Ganguli writes *dharma* 340 times but its renderings 2,832
    times.
 2. Concept density across the 18 books of the Mahabharata.
 3. Central figures per work: weighted degree in a Person/Deity co-occurrence graph, plus the
@@ -310,11 +310,15 @@ including two prompt-injection attempts.
 ## 11. Evaluation (`evaluate.py`)
 
 `eval/questions.jsonl` holds hand-written items. A `retrieval` item lists `expected` passage-ID
-*prefixes* (e.g. `mbh.b12`); an `adversarial` item has no answer in the corpus.
+*prefixes* at section or verse level (e.g. `mbh.b08.s090`, `upa.katha.p2.v18`), each checked by
+reading the passages; only a primary-text passage (verse, narrative) under one of them counts as
+a hit, not commentary on it; a long discourse is listed section by section (Bhishma's Rajadharma is
+`mbh.b12.s055`…`s130`). An `adversarial` item has no answer in the corpus.
 
 | Metric | Mode | Definition |
 |---|---|---|
 | `retrieval_hit_at_1` / `hit_at_k` | Offline | Top-1 / any of top-k passage IDs start with an expected prefix |
+| `retrieval_mrr` | Offline | Mean over items of 1 / rank of the first matching passage in the top k (0 if none) |
 | `cites_expected` | `--llm` | At least one citation matches an expected prefix |
 | `citation_precision` | `--llm` | Share of citations that match expected prefixes |
 | `has_citations` | `--llm` | The answer has at least one citation |
@@ -335,7 +339,7 @@ eval set grows, update the baseline in the same PR and explain why.
 
 ## 12. Testing
 
-`pytest` runs 75 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 78 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer

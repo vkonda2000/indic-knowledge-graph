@@ -172,8 +172,9 @@ Each week pairs learning with a real task from the roadmap. Open a PR at the end
   - about 10 across works (the same figure in the Mahabharata and the Ramayana);
   - about 10 adversarial (false premises, wrong attributions, things the texts don't contain).
 - For each, find the correct passage with `ikg search` and the passage pages, and **read the
-  passage to confirm it really answers the question**. `expected` takes ID prefixes such as
-  `mbh.b12` (see [docs/04 §2](docs/04-data-model.md#2-identifiers)).
+  passage to confirm it really answers the question**. `expected` takes ID prefixes at
+  section or verse level, such as `mbh.b08.s090` or `upa.katha.p2.v18`, never a whole book
+  (see [docs/04 §2](docs/04-data-model.md#2-identifiers)).
   - Done when: every item is verified, and the PR lists `ikg eval` and `ikg eval --no-expand`
     results before and after, with a few sentences on what changed.
 
@@ -195,7 +196,7 @@ Each week pairs learning with a real task from the roadmap. Open a PR at the end
 
 - Read §4.3, the RDF Primer, and the SPARQL examples.
 - **Task: speaker attribution for the Mahabharata** (roadmap Phase 2). Ganguli marks speakers
-  like `"Bhishma said, ...`: 3,599 times, in 23% of passages.
+  like `"Bhishma said, ...`: about 3,600 times, in about 24% of passages.
   - Add `speaker: str = ""` to `Passage` in `src/ikg/segment.py`.
   - In `parse_mahabharata`, detect the marker and carry the last speaker forward within a
     section.
