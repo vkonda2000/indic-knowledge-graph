@@ -157,28 +157,36 @@ passages this takes milliseconds.
 1. Retrieve the top `k` passages (§5) and detect the entities in the question.
 2. Build a **knowledge-graph summary** with `graph_context()`. For each question entity it
    lists the works it appears in, with counts, and its eight strongest co-occurring entities.
-3. Send to Claude (`claude-opus-5-5`, `max_tokens=16000`, `effort=high`, server-side fallback
-   enabled). The request contains:
+3. Send to Claude: by default `claude-haiku-5-5` at `effort=low` (`IKG_ANSWER_MODEL`,
+   `IKG_ANSWER_EFFORT`, or `--model`/`--effort`), `max_tokens=16000`. The server-side refusal
+   fallback (`fallbacks: "default"`) is sent only to models that accept it (Opus 5.5,
+   Sonnet 5.5); Haiku 5.5 has none, so a refusal there is shown as a refusal. The request contains:
    - one `document` block per passage, with `citations.enabled`, title `[<passage id>] <ref>`,
      and context `passage_id=…; work=…; kind=…; translator=…`
-   - the graph summary as a final document, titled as *not a source*
+   - the graph summary as a plain text block, labelled *not a source*. It is not a document:
+     the API requires citations on all documents or none, and a citable summary would let a
+     sentence drawn from it lose its citation and still look grounded
    - the question.
+
+   Why Haiku 5.5 at low effort: on the eval set it matched or beat Opus 5.5 at high effort on
+   every answer metric at 1/44 of the cost ([06 §1](06-roadmap.md#1-measured-baseline), D13).
 4. The system prompt requires the model to:
    - use the passages only
    - attribute commentary and scholarship instead of presenting them as the text
    - not attribute a translator's English word to the Sanskrit original
    - keep different works and speakers separate
-   - never cite the graph summary
+   - never state anything only the graph summary supports
    - reply `NOT_IN_SOURCES` on the first line when the passages are insufficient.
 5. Post-processing:
-   - Each citation's `document_index` maps back to a hit. Citations of the graph summary
-     (index ≥ number of hits) are dropped. The summary is sent with citations enabled, so a
-     sentence the model drew from it stays in the answer with no citation marker. This is a known
-     gap (L20 in [06](06-roadmap.md#2-known-limitations)).
+   - Each citation's `document_index` maps back to a hit; only passages are documents.
    - Passages are numbered in order of first citation, `[n]` markers are added after each text
      block, and a *Sources* list is appended.
    - `abstained` is set when the text starts with `NOT_IN_SOURCES`.
-   - `refused` is set when `stop_reason == "refusal"`.
+   - `refused` is set when `stop_reason == "refusal"`; `truncated` when it is `max_tokens`,
+     and the answer then says it was cut off.
+   - `input_tokens`, `output_tokens` (thinking included) and `cost_usd`, estimated from
+     `config.PRICES`, are recorded on the answer. `ikg ask` prints them and `ikg eval --llm`
+     sums them.
 
 If retrieval returns nothing, the answer abstains without calling the API.
 
@@ -243,12 +251,35 @@ including two prompt-injection attempts.
   mutable state (sessions, rate limiter, build job) in closures. Each test gets an isolated app.
 - **Corpus not built.** If loading fails, `state["error"]` holds the reason, pages show a
   notice, and corpus routes return 503.
-- **Authentication.** The admin token is compared with `secrets.compare_digest`. A successful
+- **Authentication.** Tokens are compared with `secrets.compare_digest` on UTF-8 bytes (on
+  `str` it raises for non-ASCII input). A successful
   login creates a random 32-byte session ID in an in-memory dict with a 12 h expiry; expired
   sessions are pruned at login. The cookie is `HttpOnly`, `SameSite=Strict`, and `Secure` over
   HTTPS. `SameSite=Strict` is the CSRF defence for admin POSTs.
-- **Rate limiting.** `RateLimiter` keeps a one-hour sliding window per client IP (a `deque` of
-  timestamps under a lock). It is checked only for Ask by non-admins. Search is not limited.
+- **Ask spends money, so it is guarded in four ways.**
+  - *POST only, same site only.* `GET /?mode=ask` fills in the form but never calls the API,
+    so links, link previews and crawlers cost nothing. Submitting the form POSTs. A browser
+    request from another site (an auto-submitted form or a `fetch`, detected by
+    `Sec-Fetch-Site` or `Origin`) is refused, so other pages can't spend visitors' quotas.
+    Clients that send neither header (curl, scripts) are allowed and limited per address.
+    Questions are cut to 2,000 characters on both routes.
+  - *Answer cache.* `AnswerCache` keeps up to `IKG_ANSWER_CACHE_SIZE` (1,000) recent answers,
+    keyed by the question (case and spacing folded), `k`, works, `primary_only`, model, effort
+    and the build generation. A hit makes no API call and uses no budget or rate limit. The
+    cache is cleared on every corpus reload, and an answer that finishes after a rebuild is
+    not stored, because answers cite passages of the build they came from. Truncated or
+    refused answers and errors are not cached.
+  - *Daily budget.* `SpendBudget` adds up the estimated cost of every Ask (admins included) per
+    UTC day and stops Ask at `IKG_ASK_BUDGET_USD` ($5). Questions that match no passages cost
+    nothing (no API call). Requests the API rejects or never received (bad request, auth,
+    connection) are not charged; a timeout, server error or unpriced model is charged $0.25,
+    since it may have been billed. The check runs before the call and the charge after, so
+    concurrent requests can overshoot slightly (L32).
+  - *Rate limit.* `RateLimiter` keeps a one-hour sliding window per client IP for non-admins,
+    and forgets clients idle for an hour so memory stays bounded.
+
+  Search is not limited: it never calls a model. `/api/ask` runs the Claude call in a worker
+  thread so it does not block other requests.
 - **Bounds.** `k` is clamped to 1–20 for Ask and 1–50 for search. Uploads are read in 1 MB
   chunks and stop at 20 MB. Contributor text fields are truncated (title 200, notes 2000).
 - **Background rebuild.** `BuildJob` uses a non-blocking lock, so only one rebuild runs at a
@@ -301,7 +332,7 @@ eval set grows, update the baseline in the same PR and explain why.
 
 ## 12. Testing
 
-`pytest` runs 56 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 69 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer

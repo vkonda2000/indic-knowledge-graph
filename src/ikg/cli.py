@@ -70,8 +70,10 @@ def cmd_ask(args):
     from ikg.qa import ask
     rt = _runtime()
     ans = ask(args.question, rt.index, rt.gazetteer, graph=rt.graph, passage_entities=rt.passage_entities,
-              k=args.k, works=args.works, primary_only=args.primary_only)
+              k=args.k, works=args.works, primary_only=args.primary_only, model=args.model, effort=args.effort)
     print("The model declined to answer this question." if ans.refused else ans.text)
+    cost = f", about ${ans.cost_usd:.4f}" if ans.cost_usd is not None else ""
+    print(f"\n({ans.model}, effort {ans.effort}: {ans.input_tokens:,} input + {ans.output_tokens:,} output tokens{cost})")
     if args.show_retrieval:
         print("\nRetrieved:")
         for h in ans.hits:
@@ -97,7 +99,8 @@ def cmd_eval(args):
             sys.exit(f"Baseline was recorded with k={baseline['k']}; run with -k {baseline['k']}.")
     rt = _runtime()
     result = run(load_items(config.EVAL_FILE), rt.index, rt.gazetteer, rt.passage_entities, k=args.k,
-                 llm=args.llm, graph=rt.graph, out_dir=config.EVAL_RESULTS_DIR, expand=not args.no_expand)
+                 llm=args.llm, graph=rt.graph, out_dir=config.EVAL_RESULTS_DIR, expand=not args.no_expand,
+                 model=args.model, effort=args.effort)
     for row in result["rows"]:
         if row["type"] == "retrieval" and not row["hit_at_k"]:
             print(f"MISS  {row['id']}: top={row['retrieved'][:3]}")
@@ -130,6 +133,12 @@ def cmd_serve(args):
     uvicorn.run(create_app(), host=args.host, port=args.port)
 
 
+def _model_args(p):
+    p.add_argument("--model", help=f"answering model (default {config.MODEL}; env IKG_ANSWER_MODEL)")
+    p.add_argument("--effort", choices=config.EFFORTS,
+                   help=f"answering effort (default {config.EFFORT}; env IKG_ANSWER_EFFORT)")
+
+
 def main(argv=None):
     # Translations use IAST diacritics; Windows consoles default to cp1252.
     if hasattr(sys.stdout, "reconfigure"):
@@ -158,6 +167,7 @@ def main(argv=None):
         p.add_argument("--primary-only", action="store_true", help="exclude commentary, introductions, scholarship")
         if name == "ask":
             p.add_argument("--show-retrieval", action="store_true")
+            _model_args(p)
         p.set_defaults(func=func)
 
     sub.add_parser("analyze", help="write reports/corpus-analysis.md").set_defaults(func=cmd_analyze)
@@ -166,6 +176,7 @@ def main(argv=None):
     p.add_argument("-k", type=int, default=8)
     p.add_argument("--llm", action="store_true", help="also evaluate answers and citations (calls Claude)")
     p.add_argument("--no-expand", action="store_true", help="ablation: disable knowledge-graph query expansion")
+    _model_args(p)
     p.add_argument("--check", type=Path, metavar="BASELINE",
                    help="exit non-zero if any metric in this baseline JSON got worse (CI gate)")
     p.set_defaults(func=cmd_eval)

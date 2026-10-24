@@ -39,8 +39,10 @@ def _matches(pid: str, prefixes: list[str]) -> bool:
 
 
 def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False,
-        graph=None, out_dir: Path | None = None, expand: bool = True) -> dict:
-    """``expand=False`` disables knowledge-graph query expansion and entity boosting (ablation)."""
+        graph=None, out_dir: Path | None = None, expand: bool = True,
+        model: str | None = None, effort: str | None = None) -> dict:
+    """``expand=False`` disables gazetteer query expansion and entity boosting (ablation).
+    ``model``/``effort`` choose the answering model for ``llm`` runs (default: config)."""
     rows = []
     for item in items:
         hits = search(index, gazetteer, item.question, k=k, works=item.works,
@@ -53,9 +55,11 @@ def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False
         if llm:
             from ikg.qa import ask
             ans = ask(item.question, index, gazetteer, graph=graph,
-                      passage_entities=passage_entities, k=k, works=item.works)
+                      passage_entities=passage_entities, k=k, works=item.works, model=model, effort=effort)
             cited = [c.passage_id for c in ans.citations]
-            row.update(answer=ans.text, cited=cited, abstained=ans.abstained, refused=ans.refused)
+            row.update(answer=ans.text, cited=cited, abstained=ans.abstained, refused=ans.refused,
+                       truncated=ans.truncated, model=ans.model, effort=ans.effort,
+                       input_tokens=ans.input_tokens, output_tokens=ans.output_tokens, cost_usd=ans.cost_usd)
             if item.type == "retrieval":
                 row["cites_expected"] = any(_matches(pid, item.expected) for pid in cited)
                 row["citation_precision"] = (sum(_matches(pid, item.expected) for pid in cited) / len(cited)) if cited else 0.0
@@ -75,7 +79,8 @@ def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False
 # Metrics where a higher value is worse; every other numeric metric is better when higher.
 # Item counts (n_retrieval, n_adversarial) belong in the baseline too, so that deleting a
 # failing question does not pass the gate.
-LOWER_IS_BETTER = {"false_abstain_rate"}
+LOWER_IS_BETTER = {"false_abstain_rate", "truncated_rate", "mean_input_tokens", "mean_output_tokens",
+                   "total_cost_usd", "mean_cost_usd"}
 
 
 def regressions(summary: dict, baseline: dict) -> list[str]:
@@ -109,5 +114,15 @@ def summarize(rows: list[dict]) -> dict:
             has_citations=rate(retrieval, "has_citations"),
             false_abstain_rate=rate(retrieval, "false_abstain"),
             adversarial_abstain_rate=rate(adversarial, "abstained"),
+            truncated_rate=rate(rows, "truncated"),
+        )
+        answered = [r for r in rows if "answer" in r]
+        costs = [r["cost_usd"] for r in answered if r.get("cost_usd") is not None]
+        summary.update(
+            model=sorted({r["model"] for r in answered}), effort=answered[0]["effort"],
+            mean_input_tokens=round(sum(r["input_tokens"] for r in answered) / len(answered)),
+            mean_output_tokens=round(sum(r["output_tokens"] for r in answered) / len(answered)),
+            total_cost_usd=round(sum(costs), 4) if costs else None,
+            mean_cost_usd=round(sum(costs) / len(costs), 5) if costs else None,
         )
     return summary
