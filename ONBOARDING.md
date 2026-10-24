@@ -164,7 +164,7 @@ Each week pairs learning with a real task from the roadmap. Open a PR at the end
 ### Week 2: Search and evaluation
 
 - Read §4.1 and the IR book chapters.
-- **Task: grow the eval set from 57 to about 80 questions** (roadmap Phase 0, the most valuable
+- **Task: grow the eval set from 86 to about 120 questions** (roadmap Phase 0, the most valuable
   work for the project right now). Add to `eval/questions.jsonl`:
   - about 15 phrased with the Sanskrit term where the translation uses English (e.g. "What
     does Bhishma say about *moksha*?" where Ganguli writes "emancipation");

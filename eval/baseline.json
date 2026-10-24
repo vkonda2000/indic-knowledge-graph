@@ -3,10 +3,10 @@
   "recorded": "2026-10-23",
   "k": 8,
   "metrics": {
-    "n_retrieval": 47,
-    "n_adversarial": 10,
-    "retrieval_hit_at_1": 0.298,
-    "retrieval_hit_at_k": 0.66,
-    "retrieval_mrr": 0.45
+    "n_retrieval": 71,
+    "n_adversarial": 15,
+    "retrieval_hit_at_1": 0.282,
+    "retrieval_hit_at_k": 0.62,
+    "retrieval_mrr": 0.423
   }
 }
