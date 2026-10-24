@@ -1,8 +1,9 @@
 # 06 Roadmap: current limits and future expansion
 
-This document records what the system does well today, where it is measurably weak, and a
-phased plan for extending it. Each phase lists the extension points in the code, so the work
-can be scoped from here.
+This document records what the system does well today, where it is measurably weak, which
+target capabilities are done, partial or not started, the original contributions the
+project aims to make, and a phased plan for extending it.
+Each phase lists the extension points in the code, so the work can be scoped from here.
 
 ## 1. Measured baseline
 
@@ -57,7 +58,76 @@ by starting at a minimum of 10 shared passages (the API default is 5).
 | L17 | Scanned PDFs (no text layer) are rejected | Some scholarship can't be contributed | `screen.py`, `read_source` |
 | L18 | Gutenberg texts added by an admin are not screened | Depends on admin judgement | `/admin/gutenberg` |
 
-## 3. Phased plan toward the target
+## 3. Status against the target responsibilities
+
+The target role description lists nine responsibilities, from ontology design to SME
+collaboration. This section breaks them into capabilities, marks what the prototype already
+does, and lists what is partial or not started. Each open item has a **candidate use case**:
+a concrete question or workflow that needs the capability. Use cases set the scope of the
+work and are the first eval items written for it. They are proposals until researchers and
+SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-target-alignment.md#1-capability-gap-analysis).
+
+### 3.1 Done
+
+- [x] **LLM answering**: Claude (`claude-opus-5-5`) with native citations (`qa.py`)
+- [x] **RAG**: BM25 retrieval, then an answer written from the retrieved passages only (`retrieve.py`, `qa.py`)
+- [x] **Traceable answers**: every citation maps to a passage ID, edition and translator (T6)
+- [x] **Primary text, commentary and scholarship kept apart** in passages and in answers (T7)
+- [x] **Sanskrit concept vs. translator's word**: renderings recorded per translator, not merged into the concept (T7)
+- [x] **Abstention**: `NOT_IN_SOURCES` when the passages do not answer the question (T8)
+- [x] **Core ontology** in OWL, with RDF export and SPARQL (`ontology/ikg.ttl`, `graph.py`) (T1, T13)
+- [x] **Entity graph** of people, deities, places and concepts, with an interactive explorer (T2)
+- [x] **Deterministic ingestion pipeline** for the four bundled works, with per-edition parsers (`ikg build`) (T5, T15)
+- [x] **Upload classification for relevance** with a local model, plus an admin review queue (T5)
+- [x] **Retrieval evaluation** (hit@1, hit@k) with a graph-expansion ablation switch (T10)
+- [x] **Adversarial eval items**: 4 questions the corpus cannot answer (T10)
+- [x] **SME tooling, first step**: admin gazetteer editor with validation (T11)
+
+### 3.2 Partial
+
+| Capability | What exists | What is missing | Candidate use case | Phase |
+|---|---|---|---|---|
+| Ontology for civilizational knowledge (T1) | Works, passages by kind, entities by type, mentions, renderings; `Claim` defined | Thinker, Framework, `critiques`/`interprets`/`respondsTo`, debate roles, provenance | "How does Ramanuja's reading of *Brahman* differ from Shankara's?" needs Thinker, SOT, Claim and `interprets` | 2 |
+| Typed relationships in the graph (T2) | Co-occurrence edges only (density 0.69) | Typed, evidence-backed relations (`teaches`, `son of`, `fights`) | "Who were Arjuna's teachers, and what did each teach him?" | 2 |
+| Schools of thought and thinkers (T2) | 2 SOT entities, no thinkers, Claims empty | SOT and thinker coverage, curated claims | An Advaita page listing its thinkers, key texts and core claims, each with a citation | 2 |
+| QA over a scholarly repository (T3) | Public-domain corpus; `.txt`/`.md`/`.pdf` uploads as scholarship | Books with page citations, papers, video transcripts with timestamps, metadata catalogue | "Which books in the repository discuss Sanskrit non-translatables, and what do they say about *dharma*?" answered with book and page | 1 |
+| GraphRAG (T4) | Query expansion from the gazetteer, entity boost, graph summary in the prompt | Retrieval by traversing claims and SOT neighbourhoods | "How are *karma* and *moksha* related across the Upanishads?", where the relevant passages share few words | 3 |
+| Pipelines that classify and connect content (T5) | Relevance screening, generic section parser | Classification by topic, SOT and work discussed; links from scholarship to the verses it cites; EPUB, DOCX, audio, video; incremental builds | A researcher uploads a chapter quoting Katha 1.2.18, and the verse's page then shows that chapter | 1 |
+| Representation without distortion (T7) | Kinds, renderings, per-work separation, prompt forbids blending | SOT-level attribution, debate roles (*pūrvapakṣa* vs. *siddhānta*) | A commentary states an opposing view in order to refute it; the answer must not report it as the commentary's conclusion | 2–3 |
+| Minimise hallucinations (T8) | Grounding, native citations, abstention, refusal handling | Checking each sentence against its citation; unsupported-claim rate | A five-sentence answer where one sentence is not supported by its passage; that sentence is flagged and counted | 3 |
+| Evaluation datasets (T10) | 28 items; citation precision and abstention metrics in `--llm` | `--llm` baseline never recorded; SME gold answers; about 150 items | Record the first citation-precision baseline, then grow the set with speaker-specific and Sanskrit-phrased questions | 0 |
+| Collaboration with researchers and SMEs (T11) | Gazetteer editor, upload review queue | Curation of relations and claims with provenance; correcting answers | An SME marks an answer that blends two schools; the correction becomes an eval item | 2, 4 |
+
+### 3.3 Not started
+
+| Capability | Candidate use case | Phase |
+|---|---|---|
+| Semantic search: embeddings, vector store, hybrid fusion with BM25 (T4, T14) | "What happens to one who knows the Self at death?", phrased differently from the translation | 3 |
+| Knowledge-gap identification (T9) | A report for researchers listing the concepts and questions most often asked that the corpus cannot answer | 3 |
+| Multi-turn question answering | "What does Yama teach Nachiketas?" followed by "How does Shankara read that?" | 3 |
+| Multi-turn eval items (T10) | The same conversation, scored on whether the follow-up keeps the right context and citations | 0 |
+| SOT-fidelity metric and eval items (T7, T10). Item format and 10 draft items are in [`eval/fidelity/`](../eval/fidelity/README.md), awaiting SME review | "What is *maya*?" answered for Advaita and Vishishtadvaita separately, without blending, scored on the four rates in [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) | 0 |
+| Regression checks in CI (T10) | A pull request that lowers hit@8 or citation precision fails its checks | 0 |
+
+## 4. Original contributions
+
+Retrieval with citations is now standard, so on its own it does not set this system apart.
+What sets it apart is representing Indic traditions on their own terms, and being able to
+show that it does. The four contributions below make that measurable. They are ordered by how
+soon they can produce a result. Each is placed in the phases of §5.
+
+| # | Contribution | Why it is original | First deliverable | Phase |
+|---|---|---|---|---|
+| C1 | **Fidelity benchmark for Indic traditions** | We know of no public benchmark that tests whether AI answers attribute views correctly, keep schools apart, use Sanskrit concepts on their own terms and respect debate roles. The four properties are defined in [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) | 40–100 SME-approved items in [`eval/fidelity/`](../eval/fidelity/README.md), scored for a plain model with no retrieval and for this system. The gap between them is the headline result | 0 |
+| C2 | **Sanskrit concepts as the unit of meaning** | The corpus analysis already shows the problem: Ganguli uses "dharma" 372 times and its English renderings 2,986 times, so a search for the Sanskrit term alone finds about 11% of the material. Few systems model renderings explicitly | Align passages to Sanskrit originals (GRETIL, Digital Corpus of Sanskrit) and show the Sanskrit term behind each rendering. Compare translators verse by verse. Flag answers that substitute an English approximation | 1, 3 |
+| C3 | **A graph of the debates, not only of concepts** | Indian philosophy argues in a fixed form: the opponent's view (*pūrvapakṣa*), its refutation, the conclusion (*siddhānta*). Typical knowledge graphs only record that X relates to Y | Claims with holders, `critiques`/`respondsTo`/`interprets`, and debate roles on passages. Answers to "what did Ramanuja object to in Shankara's view of *maya*, and how did Advaitins reply?" | 2 |
+| C4 | **A research instrument, not only a chatbot** | Gaps, unsupported sentences and expert corrections are reported to researchers instead of being discarded | Gap report by concept, SOT and work; sentence-level citation checks with a tracked unsupported-claim rate; SME corrections turned into eval items | 3 |
+
+**Order of work.** C1 comes first, with C2 as its first test case. About half of the first
+SME-written items should target renderings and non-translatables, which the current corpus
+already supports. From then on, every change in C2–C4 must move a C1 rate.
+
+## 5. Phased plan toward the target
 
 The phases are ordered by dependency and aimed at the target system
 ([01 §0](01-specification.md#0-target-system-and-this-prototype)). [07](07-target-alignment.md)
@@ -83,7 +153,7 @@ flowchart LR
 |---|---|---|
 | Grow the eval set to about 150 items: about 30 phrased in Sanskrit where the translation uses renderings, about 20 speaker-specific, about 20 cross-work, about 20 adversarial (false premises, misattributions, out-of-corpus) | L1, T10 | `eval/questions.jsonl` |
 | **Multi-turn eval items**: conversations whose follow-ups depend on earlier turns ("and how does Shankara read that verse?") | T10 | new `type: multiturn` in `evaluate.py` |
-| **SOT-fidelity eval items** and the four rates from [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) (attribution, separation, own terms, debate position), using a rubric-guided LLM judge checked against SME labels | T7, T10 | `evaluate.py` |
+| **Fidelity benchmark (C1)**: SME-approved items and the four rates from [07 §2](07-target-alignment.md#2-sot-fidelity-definition-and-measurement) (attribution, separation, own terms, debate position), using a rubric-guided LLM judge checked against SME labels. Run against a plain model with no retrieval as well as this system, and report both | T7, T10 | `eval/fidelity/items.jsonl`, new `type: fidelity` and a `--baseline` switch in `evaluate.py` |
 | Record the first `ikg eval --llm` baseline and commit the summary | §1 | `eval/results/` (commit summaries only) |
 | GitHub Actions: `pytest` plus an offline eval regression gate on every PR | L15, T10 | `.github/workflows/` |
 | Tests for `to_rdf`, `analysis.write_report`, CLI `search`/`stats` | L15 | `tests/` |
@@ -110,6 +180,7 @@ with precise citations, classification, and links to the primary texts.
 | **Linking scholarship to primary texts** | Detect verse references (*Katha 1.2.18*, *BG 2.47*, *MBh 12.59*) and quoted passages. Resolve them to passage IDs as `citesPassage` edges | new `links.py`, RDF |
 | Access control for copyrighted material | Repository text shown only to authorised users, in cited excerpts | `web/app.py`; Phase 4 auth |
 | Public-domain expansion (secondary) | More Puranas, Upanishads and Gita editions. **Parallel translations**, including editions that follow Indic traditions of interpretation alongside the 19th-century European translations, to compare renderings | `sources.yaml`, parsers, `Passage` (+ `edition`) |
+| **Sanskrit alignment (C2)** | Align passages to Sanskrit originals from GRETIL or the Digital Corpus of Sanskrit, verse by verse where the structure allows. Show the Sanskrit term behind each rendering and compare translators of the same verse | new `align.py`, `Passage` (+ `sanskrit_ref`), RDF |
 | Mixed-kind uploads and OCR | Mark commentary inside uploads; optional local OCR for scanned PDFs | `parse_generic`, `read_source` (L16, L17) |
 
 ### Phase 2: SOT ontology and knowledge enrichment (T1, T2, T7, T11)
@@ -167,11 +238,11 @@ Phase 0 set without raising `false_abstain_rate`, and the ablation results go in
 | Screen admin-added Gutenberg texts at rebuild time | L18 | Reuse `screen.screen` |
 | UI translations (Hindi first) | Reach | Jinja2 i18n |
 
-## 4. Suggested order
+## 6. Suggested order
 
 | Priority | Item | Target capability | Impact | Effort |
 |---|---|---|---|---|
-| 1 | Eval expansion incl. multi-turn and SOT fidelity, LLM baseline, CI gate (Phase 0) | T10 | High: everything else depends on it | M |
+| 1 | Fidelity benchmark (C1) with a plain-model baseline; eval expansion incl. multi-turn; LLM baseline; CI gate (Phase 0) | T7, T10 | High: the project's headline result, and everything else depends on it | M |
 | 2 | Book + paper ingestion with page citations, metadata catalogue (Phase 1) | T3, T5 | High: the target's core content | M |
 | 3 | Sentence-level citation verification + gap reporting (Phase 3) | T8, T9 | High: reliability, which the target stresses most | M |
 | 4 | SOT/Thinker/Claim ontology + SME curation workflow (Phase 2) | T1, T2, T11 | High: the heart of the target | L |
@@ -183,7 +254,7 @@ Phase 0 set without raising `false_abstain_rate`, and the ablation results go in
 S = days, M = 1–3 weeks, L = more than 3 weeks, for one developer. Items 1 and 3 can run in
 parallel. Item 3 needs only the existing corpus.
 
-## 5. Extension points reference
+## 7. Extension points reference
 
 | To add… | Change |
 |---|---|

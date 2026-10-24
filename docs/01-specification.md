@@ -3,8 +3,7 @@
 ## 0. Target system and this prototype
 
 **Target.** An ontology-based AI knowledge system for Indian civilization, philosophy, history
-and intellectual traditions, of the kind Infinity Foundation describes in its call for AI
-engineers. Such a system:
+and intellectual traditions. Such a system:
 
 - organises a large body of scholarship (books, research papers, lectures, videos) into
   ontologies and knowledge graphs of concepts, relationships, schools of thought (SOT), texts,
@@ -15,8 +14,7 @@ engineers. Such a system:
   retrieval, citation accuracy and SOT fidelity, including adversarial and multi-turn tests;
 - is refined together with researchers and subject-matter experts (SMEs).
 
-This project is independent and has no affiliation with Infinity Foundation. The target is the
-scope it is designed toward.
+This is an independent project. The target is the scope it is designed toward.
 
 **This prototype** implements the core of that architecture end to end on a public-domain
 corpus: four classical works in English translation. It shows source-grounded GraphRAG-style
@@ -144,7 +142,7 @@ These come from the target system (§0). The current status of each is in
 
 | Area | Target capability |
 |---|---|
-| **Corpus** | A large, private scholarly repository: books (PDF, EPUB, DOCX) by Rajiv Malhotra and others, research papers, lecture and video transcripts. Each is cited by page, section or timestamp, alongside the primary texts it discusses |
+| **Corpus** | A large, private scholarly repository: books (PDF, EPUB, DOCX), research papers, lecture and video transcripts. Each is cited by page, section or timestamp, alongside the primary texts it discusses |
 | **Ingestion** | Pipelines that extract, segment, classify (topic, SOT, work discussed, genre) and connect content at scale. Scholarship links to the primary passages it cites |
 | **Ontology** | SOT, thinkers, works, concepts and frameworks as first-class classes. `Claim`s attributed to a thinker or SOT and grounded in passages. Relations such as *critiques*, *responds to* and *interprets*. Sanskrit terms that resist translation modelled explicitly (an extension of today's `Rendering`). Versioned and refined with SMEs |
 | **Knowledge graph** | Typed, evidence-backed relations instead of co-occurrence only, queryable as RDF/SPARQL or a property graph (e.g. Neo4j) |
