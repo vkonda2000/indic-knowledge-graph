@@ -16,7 +16,9 @@ MENTIONS_FILE = PROCESSED_DIR / "mentions.jsonl"
 INDEX_FILE = PROCESSED_DIR / "bm25.pkl"
 GRAPH_FILE = PROCESSED_DIR / "cooccurrence.graphml"
 RDF_FILE = PROCESSED_DIR / "ikg.ttl"
-MANIFEST_FILE = PROCESSED_DIR / "manifest.json"  # what the build was made from (D11)
+MANIFEST_FILE = PROCESSED_DIR / "manifest.json"  # what the build was made from (D11), with checksums
+GAZETTEER_SNAPSHOT_FILE = PROCESSED_DIR / "gazetteer.yaml"  # the gazetteer the build used
+BUILD_LOCK_FILE = PROCESSED_DIR / ".build.lock"  # one build at a time, CLI and web alike
 
 REPORTS_DIR = Path("reports")
 EVAL_FILE = Path("eval") / "questions.jsonl"

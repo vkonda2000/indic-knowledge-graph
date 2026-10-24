@@ -111,6 +111,26 @@ flowchart LR
 fails the whole build on a parse error in any work, naming that work, and on duplicate passage
 IDs. Nothing in the build calls a model, so builds are reproducible (NFR-2).
 
+A build is **all-or-nothing and self-describing** (L19):
+
+- It holds `processed/.build.lock`, so a CLI build and a web rebuild can't run at the same time.
+  A lock older than 30 minutes is treated as left by a crash. Downloads happen before the lock.
+- It reads the gazetteer once and saves that text as `processed/gazetteer.yaml`. The runtime and
+  `ikg analyze` use this snapshot, never the gazetteer being edited, so editing the gazetteer
+  changes nothing until the next build.
+- It writes every artefact to a `.tmp` file first. Only when all of them succeeded does it swap
+  them in, file by file, and then write the new `manifest.json` with each artefact's SHA-256. A
+  failure before the swap leaves the previous build untouched. A failure during it (on Windows,
+  another process reading a file, retried for a few seconds first) leaves files from two builds,
+  which the old manifest's checksums reject; the build reports an error, and running it again
+  recovers. A versioned build directory with a single pointer switch would remove that window;
+  it is not needed yet.
+- `Runtime.load` verifies every artefact against the manifest and refuses a mismatch (an
+  interrupted swap, a hand-edited file, or a build from before this scheme) with a message to
+  rebuild. Verification adds about 0.03 s to a 0.5 s load. `ikg stats` and `ikg sparql` verify
+  too. If the web app can't load a freshly built corpus, it keeps serving the previous one and
+  the rebuild shows as an error.
+
 ### 3.2 Query (online)
 
 ```mermaid
@@ -167,17 +187,20 @@ sequenceDiagram
 |---|---|---|---|
 | Built corpus (`Runtime`) | Process memory, loaded from `data/processed/` | Until the next successful rebuild | BM25 index (~30 MB pickle), passages, mentions, graph. All read-only after load |
 | Work registry | `data/works.yaml` | Persistent | Written under an in-process lock |
-| Gazetteer override | `data/gazetteer.yaml` | Persistent | Falls back to the bundled `src/ikg/data/gazetteer.yaml` |
+| Gazetteer override | `data/gazetteer.yaml` | Persistent | Falls back to the bundled `src/ikg/data/gazetteer.yaml`. Takes effect at the next build |
+| Gazetteer of the current build | `data/processed/gazetteer.yaml` | Until the next build | What `Runtime` and `ikg analyze` use |
+| Build lock | `data/processed/.build.lock` | During a build | Shared by the CLI and the web app |
 | Uploaded files | `data/uploads/<uuid>.<ext>` | Persistent | |
 | Admin sessions | Process memory (dict) | 12 h, lost on restart | |
 | Ask rate-limit windows | Process memory | 1 h sliding window | Per client IP; idle clients forgotten |
 | Ask spend | Process memory | Current UTC day, lost on restart | Estimated USD, all visitors |
 | Answer cache | Process memory | Until the next corpus reload or restart | Up to 1,000 answers |
-| Build job state and log | Process memory | Current process | One build at a time (non-blocking lock) |
+| Build job state and log | Process memory | Current process | One build at a time (non-blocking lock, plus the build lock file across processes) |
 
 **Consequence:** the web app must run as a **single process with a single worker**. More
-workers would each hold their own sessions, rate limits and build lock, and two concurrent
-builds could write the same files. Moving this state out of the process is a roadmap item.
+workers would each hold their own sessions, rate limits, spend budget and answer cache. (Two
+concurrent builds are prevented by the lock file.) Moving this state out of the process is a
+roadmap item.
 
 ## 5. Deployment
 

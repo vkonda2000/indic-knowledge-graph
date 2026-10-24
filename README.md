@@ -42,6 +42,9 @@ ikg build                         # segment, extract entities, index, build grap
 ikg serve                         # web app at http://127.0.0.1:8000
 ```
 
+A build records checksums of everything it writes, and the app refuses a build that doesn't
+match them. After upgrading from a version without them, run `ikg build` once.
+
 Cited answers call Claude (Haiku 5.5 by default, about $0.001 a question) and need an API key. Copy `.env.example` to `.env`
 and set `ANTHROPIC_API_KEY` and `IKG_ADMIN_TOKEN` there; `ikg` loads it from the current
 directory, and `.env` is git-ignored. Variables set in the shell take precedence.
@@ -228,7 +231,7 @@ pytest
 ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-92 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+97 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
 matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
 (checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
 citation handling, model choice and cost with a mocked Claude client, and the web app end to end: contribute, review,
