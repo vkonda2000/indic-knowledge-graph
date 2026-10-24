@@ -75,7 +75,7 @@ ikg:via a owl:DatatypeProperty ; rdfs:domain ikg:Mention ;
     rdfs:comment "'alias' (the name or Sanskrit term appears) or 'rendering' (a translator's English word for it)." .
 
 ikg:Rendering a owl:Class ;
-    rdfs:comment "An English word an Edition uses to translate a Sanskrit Concept." .
+    rdfs:comment "An English word an Edition uses to translate a Sanskrit Concept: one per (edition, concept, word), linked with ikg:fromEdition, with ikg:count giving how often that edition uses it." .
 ikg:renders a owl:ObjectProperty ; rdfs:domain ikg:Rendering ; rdfs:range ikg:Concept .
 ikg:surface a owl:DatatypeProperty ; rdfs:domain ikg:Rendering .
 

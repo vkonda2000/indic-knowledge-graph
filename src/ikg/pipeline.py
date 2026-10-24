@@ -1,5 +1,6 @@
 """Build pipeline and loaded runtime, shared by the CLI and the web app."""
 
+import json
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -11,7 +12,7 @@ from ikg import config
 from ikg.entities import Gazetteer, Mention, extract, mentions_by_passage, read_mentions, write_mentions
 from ikg.graph import build_cooccurrence, load_graph, save_graph, to_rdf
 from ikg.retrieve import BM25Index
-from ikg.segment import Passage, read_passages, segment_work, write_passages
+from ikg.segment import _SENTENCE_END_RE, ID_SCHEME, MAX_CHARS, Passage, read_passages, segment_work, write_passages
 from ikg.sources import Work, fetch, load_works
 
 
@@ -57,12 +58,30 @@ def build(works: list[Work] | None = None, log: Callable[[str], None] = print,
     save_graph(graph, config.GRAPH_FILE)
     rdf = to_rdf(works, passages, mentions, gazetteer, graph, with_passages=with_passages)
     rdf.serialize(config.RDF_FILE, format="turtle")
+    write_manifest(works, passages)
     stats = {"works": len(works), "passages": len(passages), "mentions": len(mentions),
              "entities": graph.number_of_nodes(), "edges": graph.number_of_edges(),
              "triples": len(rdf), "seconds": round(time.time() - t0, 1)}
     log(f"graph: {stats['entities']} entities, {stats['edges']} edges; RDF: {stats['triples']:,} triples")
     log(f"built in {stats['seconds']}s")
     return stats
+
+
+def write_manifest(works: list[Work], passages: list[Passage]) -> None:
+    """Record what the build was made from: the passage ID scheme and the chunking parameters
+    it depends on (D11), and each edition with its pinned sources. No timestamp, so identical
+    inputs give an identical file."""
+    counts = Counter(p.edition for p in passages)
+    manifest = {
+        "id_scheme": ID_SCHEME,
+        "chunking": {"max_chars": MAX_CHARS, "sentence_end": _SENTENCE_END_RE.pattern},
+        "editions": [{"edition": w.edition_id, "work": w.work_id, "registry_id": w.id,
+                      "translator": w.translator, "parser": w.parser, "passages": counts[w.edition_id],
+                      "sources": w.files} for w in works],
+        "passages": len(passages),
+    }
+    config.MANIFEST_FILE.parent.mkdir(parents=True, exist_ok=True)
+    config.MANIFEST_FILE.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 @dataclass
@@ -96,8 +115,9 @@ class Runtime:
     def neighbour_passages(self, pid: str) -> tuple[Passage | None, Passage | None]:
         i = self.order[pid]
         ps = self.index.passages
-        prev = ps[i - 1] if i > 0 and ps[i - 1].work == ps[i].work else None
-        nxt = ps[i + 1] if i + 1 < len(ps) and ps[i + 1].work == ps[i].work else None
+        prev = ps[i - 1] if i > 0 and ps[i - 1].edition == ps[i].edition and ps[i - 1].work == ps[i].work else None
+        nxt = (ps[i + 1] if i + 1 < len(ps) and ps[i + 1].edition == ps[i].edition and ps[i + 1].work == ps[i].work
+               else None)
         return prev, nxt
 
     def passages_for_entity(self, entity_id: str, limit: int = 50) -> list[Passage]:

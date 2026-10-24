@@ -45,11 +45,11 @@
     <tbody>
       {% for w in works if w.status != 'pending' %}
       <tr>
-        <td>{{ w.title }} <span class="muted small">({{ w.id }})</span>{% if w.bundled %} <span class="chip">bundled</span>{% endif %}</td>
+        <td>{{ w.title }} <span class="muted small">({{ w.id }}{% if w.edition_id != w.id %}, edition {{ w.edition_id }}{% endif %})</span>{% if w.bundled %} <span class="chip">bundled</span>{% endif %}</td>
         <td>{{ w.translator }}{% if w.year %}, {{ w.year }}{% endif %}</td>
         <td>{{ w.parser }}</td>
         <td><span class="kind {{ w.status }}">{{ w.status }}</span></td>
-        <td>{{ counts.get(w.id, 0) }}</td>
+        <td>{{ counts.get(w.edition_id, 0) }}</td>
         <td class="actions">
           {% if not w.bundled %}
             {% if w.status == 'approved' %}

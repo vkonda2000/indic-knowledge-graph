@@ -8,6 +8,7 @@ Two registries are merged:
 """
 
 import hashlib
+from collections import Counter
 import re
 import threading
 import time
@@ -46,6 +47,22 @@ class Work:
     submitted_at: str = ""
     screening: str = ""  # local model's relevance verdict for uploads
     bundled: bool = False
+    # A registry entry is one edition (a translation or a scholarly book) of a work (the text).
+    # Both default to `id`; set them when a second edition of the same text is added (D10).
+    work: str = ""
+    edition: str = ""
+    # Passage ID prefix. Bundled parsers default to their own (mbh, ram, upa, vp) and the generic
+    # parser to `id`; a second edition of a bundled text must set its own (e.g. mbhd), or the
+    # build fails on duplicate passage IDs (D11).
+    id_prefix: str = ""
+
+    @property
+    def work_id(self) -> str:
+        return self.work or self.id
+
+    @property
+    def edition_id(self) -> str:
+        return self.edition or self.id
 
     def raw_paths(self, raw_dir: Path | None = None) -> list[Path]:
         raw_dir = raw_dir or config.RAW_DIR
@@ -78,6 +95,9 @@ def _to_work(entry: dict, bundled: bool) -> Work:
 def load_works(include_unapproved: bool = False) -> list[Work]:
     works = [_to_work(w, True) for w in _load_yaml(config.package_file("sources.yaml"))]
     works += [_to_work(w, False) for w in _load_yaml(config.USER_WORKS_FILE)]
+    editions = Counter(w.edition_id for w in works)
+    if dupes := sorted(e for e, n in editions.items() if n > 1):
+        raise ValueError(f"edition ids must be unique across the registry: {', '.join(dupes)}")
     if not include_unapproved:
         works = [w for w in works if w.status == "approved"]
     return works
@@ -106,7 +126,8 @@ def _slug(text: str) -> str:
 
 
 def _unique_id(base: str) -> str:
-    existing = {w.id for w in load_works(include_unapproved=True)}
+    works = load_works(include_unapproved=True)
+    existing = {w.id for w in works} | {w.edition_id for w in works}  # a new entry's edition defaults to its id
     candidate, n = base, 2
     while candidate in existing:
         candidate, n = f"{base}_{n}", n + 1

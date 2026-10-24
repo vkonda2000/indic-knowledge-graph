@@ -4,13 +4,15 @@ RDF export that follows ontology/ikg.ttl (queryable with SPARQL)."""
 from collections import Counter, defaultdict
 from itertools import combinations
 from pathlib import Path
+from urllib.parse import quote
 
 import networkx as nx
 from rdflib import RDF, RDFS, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import XSD
 
 from ikg.entities import Gazetteer, Mention
-from ikg.segment import Passage
+from ikg.normalize import fold
+from ikg.segment import WORK_LABELS, Passage
 from ikg.sources import Work
 
 IKG = Namespace("https://example.org/ikg#")
@@ -76,11 +78,14 @@ def to_rdf(works: list[Work], passages: list[Passage], mentions: list[Mention],
     rdf.bind("ikg", IKG)
     rdf.bind("d", DATA)
 
+    # A work is the text; an edition is one translation of it (D10). Books, mentions and
+    # renderings belong to an edition, because each translation divides and words the text its own way.
     for w in works:
-        wu, eu = DATA[f"work/{w.id}"], DATA[f"edition/{w.id}"]
+        wu, eu = DATA[f"work/{w.work_id}"], DATA[f"edition/{w.edition_id}"]
         rdf.add((wu, RDF.type, IKG.Work))
-        rdf.add((wu, RDFS.label, Literal(w.title)))
+        rdf.add((wu, RDFS.label, Literal(WORK_LABELS.get(w.work_id, w.title))))
         rdf.add((eu, RDF.type, IKG.Edition))
+        rdf.add((eu, RDFS.label, Literal(w.title)))
         rdf.add((eu, IKG.editionOf, wu))
         rdf.add((eu, IKG.translator, Literal(w.translator)))
         rdf.add((eu, IKG.year, Literal(w.year)))
@@ -89,14 +94,15 @@ def to_rdf(works: list[Work], passages: list[Passage], mentions: list[Mention],
 
     books = {}
     for p in passages:
-        key = (p.work, p.book)
+        edition = p.edition or p.work
+        key = (edition, p.book)
         if key not in books:
-            bu = DATA[f"book/{p.work}/{p.book}"]
+            bu = DATA[f"book/{edition}/{p.book}"]
             books[key] = bu
             rdf.add((bu, RDF.type, IKG.Book))
             rdf.add((bu, RDFS.label, Literal(p.book_label)))
             rdf.add((bu, IKG.partOf, DATA[f"work/{p.work}"]))
-            rdf.add((bu, IKG.fromEdition, DATA[f"edition/{p.work}"]))
+            rdf.add((bu, IKG.fromEdition, DATA[f"edition/{edition}"]))
         if with_passages:
             pu = DATA[f"passage/{p.id}"]
             rdf.add((pu, RDF.type, IKG[p.kind.title()]))
@@ -111,20 +117,28 @@ def to_rdf(works: list[Work], passages: list[Passage], mentions: list[Mention],
             rdf.add((eu, IKG.iast, Literal(e.iast, lang="sa-Latn")))
         for a in e.aliases + e.aliases_cs:
             rdf.add((eu, IKG.alias, Literal(a)))
-        for r in e.renderings:
-            ru = DATA[f"rendering/{e.id}/{r.replace(' ', '_')}"]
-            rdf.add((ru, RDF.type, IKG.Rendering))
-            rdf.add((ru, IKG.renders, eu))
-            rdf.add((ru, IKG.surface, Literal(r)))
 
-    # Aggregated mentions per (entity, book, via)
-    passage_book = {p.id: (p.work, p.book) for p in passages}
+    passage_book = {p.id: (p.edition or p.work, p.book) for p in passages}
+
+    # Renderings as each edition actually uses them: one per (edition, concept, English word),
+    # with how often that translation uses the word for the concept.
+    rendered = Counter((passage_book[m.passage][0], m.entity, " ".join(fold(m.surface).lower().split()))
+                       for m in mentions if m.via == "rendering" and m.passage in passage_book)
+    for (edition, ent, surface), count in rendered.items():
+        ru = DATA[f"rendering/{edition}/{ent}/{quote(surface.replace(' ', '_'), safe='-_.~')}"]
+        rdf.add((ru, RDF.type, IKG.Rendering))
+        rdf.add((ru, IKG.renders, DATA[f"entity/{ent}"]))
+        rdf.add((ru, IKG.surface, Literal(surface)))
+        rdf.add((ru, IKG.fromEdition, DATA[f"edition/{edition}"]))
+        rdf.add((ru, IKG["count"], Literal(count, datatype=XSD.integer)))
+
+    # Aggregated mentions per (entity, edition and book, via)
     counts = Counter((m.entity, passage_book[m.passage], m.via) for m in mentions if m.passage in passage_book)
-    for (ent, (work, book), via), count in counts.items():
-        mu = DATA[f"mention/{ent}/{work}/{book}/{via}"]
+    for (ent, (edition, book), via), count in counts.items():
+        mu = DATA[f"mention/{ent}/{edition}/{book}/{via}"]
         rdf.add((mu, RDF.type, IKG.Mention))
         rdf.add((mu, IKG.entity, DATA[f"entity/{ent}"]))
-        rdf.add((mu, IKG.inUnit, books[(work, book)]))
+        rdf.add((mu, IKG.inUnit, books[(edition, book)]))
         rdf.add((mu, IKG["count"], Literal(count, datatype=XSD.integer)))  # IKG.count is str.count
         rdf.add((mu, IKG.via, Literal(via)))
 

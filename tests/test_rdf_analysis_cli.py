@@ -38,9 +38,13 @@ def test_rdf_entities_renderings_and_mentions(gazetteer):
     rdf = _export(gazetteer)
     dharma = DATA["entity/dharma"]
     assert (dharma, RDF.type, IKG.Concept) in rdf
-    rendering = DATA["rendering/dharma/righteousness"]
+    # Renderings are per edition, as that translation uses them, with a count.
+    rendering = DATA["rendering/mahabharata/dharma/righteousness"]
     assert (rendering, IKG.renders, dharma) in rdf
     assert (rendering, IKG.surface, Literal("righteousness")) in rdf
+    assert (rendering, IKG.fromEdition, DATA["edition/mahabharata"]) in rdf
+    assert int(rdf.value(rendering, IKG["count"])) == 1
+    assert (DATA["rendering/mahabharata/dharma/duty"], None, None) not in rdf  # listed, never used
     assert (DATA["entity/arjuna"], IKG.coOccursWith, DATA["entity/krishna"]) in rdf
     # Mentions are aggregated per entity, book and match type.
     rows = rdf.query("""SELECT ?via ?n WHERE { ?m ikg:entity ?e ; ikg:via ?via ; ikg:count ?n }""",
@@ -48,12 +52,48 @@ def test_rdf_entities_renderings_and_mentions(gazetteer):
     assert sorted((str(v), int(n)) for v, n in rows) == [("alias", 1), ("rendering", 1)]
 
 
+def test_two_translations_of_one_text_stay_apart(gazetteer):
+    """D10: two editions of the same work share the work, but books, mentions and renderings
+    are per edition, so translators can be compared."""
+    a = make_passage("mbh.b01.s001.p01", "mahabharata", "Dharma is righteousness.")
+    b = make_passage("mbhd.b01.s001.p01", "mahabharata", "Dharma is duty.")
+    a.edition, b.edition = "ganguli-1883", "dutt-1895"
+    ganguli, dutt = make_work("mahabharata"), make_work("mahabharata-dutt")
+    ganguli.edition, dutt.edition, dutt.work = "ganguli-1883", "dutt-1895", "mahabharata"
+    mentions = extract([a, b], gazetteer)
+    rdf = to_rdf([ganguli, dutt], [a, b], mentions, gazetteer, build_cooccurrence(mentions, gazetteer))
+    work = DATA["work/mahabharata"]
+    assert set(rdf.subjects(IKG.editionOf, work)) == {DATA["edition/ganguli-1883"], DATA["edition/dutt-1895"]}
+    assert (DATA["book/ganguli-1883/1"], IKG.partOf, work) in rdf
+    assert (DATA["book/dutt-1895/1"], IKG.partOf, work) in rdf
+    assert (DATA["rendering/ganguli-1883/dharma/righteousness"], IKG.fromEdition, DATA["edition/ganguli-1883"]) in rdf
+    assert (DATA["rendering/dutt-1895/dharma/duty"], IKG.fromEdition, DATA["edition/dutt-1895"]) in rdf
+    assert (DATA["rendering/dutt-1895/dharma/righteousness"], None, None) not in rdf
+
+
+def test_registry_rejects_duplicate_edition_ids(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "USER_WORKS_FILE", tmp_path / "works.yaml")
+    (tmp_path / "works.yaml").write_text(yaml.safe_dump({"works": [
+        {"id": "other", "title": "T", "translator": "X", "year": "1900", "parser": "generic",
+         "edition": "ganguli-1883"}]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="edition ids must be unique.*ganguli-1883"):
+        sources.load_works()
+
+
+def test_bundled_editions_and_passage_ids_scheme():
+    from ikg.segment import ID_SCHEME, MAX_CHARS
+    # Frozen for v1 passage IDs (D11): changing either renumbers IDs and needs a migration map.
+    assert (ID_SCHEME, MAX_CHARS) == ("v1", 1500)
+    eds = {w.id: (w.work_id, w.edition_id) for w in sources.load_works() if w.bundled}
+    assert eds["mahabharata"] == ("mahabharata", "ganguli-1883")
+
+
 def test_rdf_passages_only_on_request(gazetteer):
     passage = DATA["passage/ram.b01.s001.p01"]
     assert (passage, None, None) not in _export(gazetteer)
     rdf = _export(gazetteer, with_passages=True)
     assert (passage, RDF.type, IKG.Verse) in rdf
-    assert (passage, IKG.partOf, DATA["book/ramayana/1"]) in rdf
+    assert (passage, IKG.partOf, DATA["book/ramayana/1"]) in rdf  # edition defaults to the work id here
 
 
 def test_rdf_uses_only_terms_declared_in_ontology(gazetteer):
@@ -211,3 +251,18 @@ def test_committed_baseline_is_well_formed():
     baseline = json.loads((ONTOLOGY.parents[1] / "eval" / "baseline.json").read_text(encoding="utf-8"))
     assert baseline["k"] == 8
     assert set(baseline["metrics"]) >= {"n_retrieval", "n_adversarial", "retrieval_hit_at_1", "retrieval_hit_at_k"}
+
+
+def test_build_manifest_records_id_scheme_and_editions(tmp_path, monkeypatch):
+    from ikg.pipeline import write_manifest
+    monkeypatch.setattr(config, "MANIFEST_FILE", tmp_path / "manifest.json")
+    work = make_work("mahabharata")
+    work.edition, work.files = "ganguli-1883", [{"gutenberg": 1, "sha256": "ab" * 32}]
+    p = make_passage("mbh.b01.s001.p01", "mahabharata", "text")
+    p.edition = "ganguli-1883"
+    write_manifest([work], [p])
+    m = json.loads(config.MANIFEST_FILE.read_text(encoding="utf-8"))
+    assert m["id_scheme"] == "v1" and m["chunking"]["max_chars"] == 1500 and m["passages"] == 1
+    assert m["chunking"]["sentence_end"]  # the splitter pattern is recorded too
+    assert m["editions"][0]["edition"] == "ganguli-1883" and m["editions"][0]["work"] == "mahabharata"
+    assert m["editions"][0]["passages"] == 1 and m["editions"][0]["sources"][0]["sha256"] == "ab" * 32

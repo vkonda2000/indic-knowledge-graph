@@ -37,7 +37,7 @@ from ikg.entities import Gazetteer
 from ikg.graph import neighbours
 from ikg.pipeline import Runtime, build
 from ikg.retrieve import search
-from ikg.segment import KINDS, PARSERS
+from ikg.segment import KINDS, PARSERS, WORK_LABELS
 
 HERE = Path(__file__).parent
 SESSION_COOKIE = "ikg_admin"
@@ -135,6 +135,15 @@ class AnswerCache:
     def clear(self):
         with self.lock:
             self.items.clear()
+
+
+def filter_works(works) -> list[dict]:
+    """One entry per text for the work filters: passages, filters and graph weights are keyed by
+    the work, so two translations of the same text are one choice (D10)."""
+    seen: dict[str, dict] = {}
+    for w in works:
+        seen.setdefault(w.work_id, {"id": w.work_id, "title": WORK_LABELS.get(w.work_id, w.title)})
+    return list(seen.values())
 
 
 def same_origin(request: Request) -> bool:
@@ -311,7 +320,7 @@ def create_app() -> FastAPI:
         works = sources.load_works()
         return templates.TemplateResponse(request, name, {
             "is_admin": is_admin(request), "corpus_ready": rt is not None,
-            "corpus_error": state["error"], "all_works": works, **ctx})
+            "corpus_error": state["error"], "all_works": filter_works(works), **ctx})
 
     # ------------------------------------------------------------------ viewer
 
@@ -436,7 +445,8 @@ def create_app() -> FastAPI:
         counts = {}
         if rt:
             for p in rt.index.passages:
-                counts[p.work] = counts.get(p.work, 0) + 1
+                edition = p.edition or p.work
+                counts[edition] = counts.get(edition, 0) + 1
         gz_text = config.gazetteer_file().read_text(encoding="utf-8")
         return render(request, "admin.html", works=works, counts=counts, job=job.snapshot(), kinds=KINDS,
                       parsers=sorted(PARSERS), gazetteer_text=gz_text,
