@@ -47,7 +47,7 @@ is small, these runs used the old book-level expectations (so `cites_expected` a
 `citation_precision` are not comparable with section-level runs; `eval/baseline-llm.json` must
 be re-recorded, about $0.04), and it doesn't test SOT fidelity; re-run when the fidelity
 benchmark exists.
-Retrieval with k = 4 still reaches hit@k 0.958 (k = 3: 0.917), but answers got worse: with
+Measured with the earlier book-level expectations: retrieval with k = 4 still reached hit@k 0.958 (k = 3: 0.917), but answers got worse: with
 k = 4, cites_expected fell to 0.833 and false abstentions rose to 0.167, at $0.00079 a question.
 k stays 8 (Phase 0 row "Send fewer passages"). Book-level hit@k can't tell whether the model
 has enough supporting passages to answer.
@@ -241,7 +241,7 @@ flowchart LR
 | Implement D9: register `https://w3id.org/ikg/` (PR to perma-id/w3id.org), switch the ontology and export, add `owl:versionIRI` | L13 | `ontology/ikg.ttl`, `graph.py`, `cli.py` | Not started; registration needs a maintainer |
 | Section-level eval expectations and MRR | L1 (B3) | `evaluate.py`, `eval/questions.jsonl` | **Done**: hit@1 0.292, hit@8 0.792, MRR 0.502 (§1); also fixed two segmentation defects it exposed (footnotes inside sections, Kena Part 4 missing). `eval/baseline-llm.json` needs re-recording (~$0.04) |
 | Gazetteer schema validation (field types, `type` value) | L22 | `entities.py` | Not started |
-| **Send fewer passages per answer (k = 8 → 4)**: retrieval finds the right book as often with 4 passages as with 8 (hit@k 0.958 for both; k = 3 drops to 0.917), which would roughly halve input tokens (~7,000 → ~3,500) and answer cost. Run `ikg eval --llm -k 4` (about $0.02 on Haiku 5.5) and compare with `eval/baseline-llm.json` on the agreed bar before changing the default `k` in the CLI, web form and API | Cost (NFR-5) | `cli.py`, `web/app.py`, `search.html`, `eval/baseline-llm.json` | **Measured 2026-10-23: rejected; k stays 8.** Haiku 5.5 low at k = 4: cites_expected 0.833 (−8 pts, fails the 5-point bar), citation_precision 0.722, false_abstain 0.167 (worse), adversarial 1.0, $0.00079 a question (−32%, not −50%: the system prompt, graph summary and question are fixed overhead). `ram-01` and `vp-01` abstained with 4 passages. Revisit with re-ranking (Phase 3), which could put the best passages in a smaller k |
+| **Send fewer passages per answer (k = 8 → 4)**: with the earlier book-level expectations, retrieval found the right book as often with 4 passages as with 8 (hit@k 0.958 for both; k = 3 drops to 0.917), which would roughly halve input tokens (~7,000 → ~3,500) and answer cost. Run `ikg eval --llm -k 4` (about $0.02 on Haiku 5.5) and compare with `eval/baseline-llm.json` on the agreed bar before changing the default `k` in the CLI, web form and API | Cost (NFR-5) | `cli.py`, `web/app.py`, `search.html`, `eval/baseline-llm.json` | **Measured 2026-10-23: rejected; k stays 8.** Haiku 5.5 low at k = 4: cites_expected 0.833 (−8 pts, fails the 5-point bar), citation_precision 0.722, false_abstain 0.167 (worse), adversarial 1.0, $0.00079 a question (−32%, not −50%: the system prompt, graph summary and question are fixed overhead). `ram-01` and `vp-01` abstained with 4 passages. Revisit with re-ranking (Phase 3), which could put the best passages in a smaller k |
 
 **Exit criteria:** CI is green; baselines for retrieval, citations, abstention and SOT fidelity
 are committed. As of October 2026, CI and the retrieval baseline are in place; the citation,
