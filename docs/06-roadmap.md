@@ -119,7 +119,7 @@ by starting at a minimum of 10 shared passages (the API default is 5).
 | L8 | Dense graph (0.69), raw counts as weights | Common figures dominate; weak edges are noise | `build_cooccurrence` |
 | L9 | Sparse retrieval only | Paraphrased questions that share few words with the passage are missed | `retrieve.py` |
 | L10 | State in process memory (sessions, rate limits, build job) | Single worker only; restart logs the admin out | `web/app.py` |
-| L11 | One shared admin token, no roles or audit log | Not fit for a multi-curator team | `web/app.py` |
+| L11 | One shared admin token, no roles or audit log | **Partly resolved (Oct 2026, D12):** named curator tokens and an append-only provenance log. Still open: roles (every curator is a full admin) and real identity (OIDC, Phase 4) | `web/app.py` |
 | L12 | YAML registry and file storage | Single host, single writer | `sources.py` |
 | L13 | Placeholder RDF namespace `example.org` | RDF IRIs are not stable or resolvable | `graph.py`, `ontology/ikg.ttl` |
 | L14 | `Advaita` (SchoolOfThought) has renderings, but `ikg:renders` has range `Concept` | Exported RDF is slightly inconsistent with the ontology | `gazetteer.yaml`, ontology |
@@ -145,7 +145,7 @@ are now section- or verse-level, and MRR is reported.
 | L27 | Work and edition are not separated in the data model (B1) | **Resolved (Oct 2026, D10):** passages, the registry and RDF separate the text (`work`) from the translation (`edition`); books, mentions and renderings are per edition | `Passage`, IRIs, gazetteer |
 | L28 | Passage IDs include a chunk ordinal that depends on chunking parameters (B2) | **Resolved (Oct 2026, D11):** v1 IDs are frozen (chunking parameters pinned by a test and recorded in the build manifest); positions for citations come from the new `locator` field | `segment.py` |
 | L29 | The RDF shape lacks passages by default, `Section` instances, per-edition renderings and `ordinal` (B4) | **Partly resolved (Oct 2026):** renderings are now per edition with counts. Still open: passages only with `--with-passages`, no `Section` instances, `ordinal` not exported, placeholder namespace (D9) | `graph.py`, ontology |
-| L30 | Curation provenance and copyrighted ingestion are planned before identity and roles (B5) | "Who approved" can't be recorded correctly with one shared token | Phases 1, 2, 4 |
+| L30 | Curation provenance and copyrighted ingestion are planned before identity and roles (B5) | **Partly resolved (Oct 2026):** named curators and the provenance log (D12, L11) record who proposed and who approved; roles and real identity (Phase 4) are still needed before copyrighted material is served | Phases 1, 2, 4 |
 | L31 | When a refusal fallback answers (Opus or Sonnet only), cost is estimated from the final model's usage alone; the declined attempt (`usage.iterations`) is not added, and an unpriced fallback model is charged a flat $0.25 | Budget under- or over-estimates in rare cases; not relevant to the Haiku default | `qa.py`, `config.PRICES` |
 | L32 | The daily budget is checked before a call and charged after it | Concurrent requests can overshoot the budget by their combined cost (about $0.001 each on Haiku) | `web/app.py` |
 | L33 | `ikg analyze` reports per work only: its Translator column takes one edition's translator and concept densities merge editions | Wrong once a text has two editions; the per-edition comparison D10 enables is not in the report yet (SPARQL has it) | `analysis.py` |
@@ -303,7 +303,7 @@ evidence-backed relations, built together with SMEs.
 | Deliverable | Approach | Extension point |
 |---|---|---|
 | **Ontology extensions** | Thinker, Framework, populated Claims, `critiques`/`respondsTo`/`interprets`, debate roles, `citesPassage`, page/time segments, provenance ([07 §3](07-target-alignment.md#3-ontology-extensions-the-target-needs)) | `ontology/ikg.ttl`, `to_rdf` |
-| **Curator identity and provenance (D12)**: named curator tokens replacing the single admin token, and an append-only provenance log. Prerequisite for everything else in this phase | Before the first curation queue | `web/app.py`, new `provenance.py` |
+| **Curator identity and provenance (D12)**: named curator tokens replacing the single admin token, and an append-only provenance log. Prerequisite for everything else in this phase | **Done** (Oct 2026): `ikg curator`, provenance log | `web/app.py`, `curators.py` |
 | **SME curation workflow** | Review queues for proposed entities, relations, claims and classifications, with approve/edit/reject and provenance (who proposed, who approved). Ontology change proposals | `web/app.py`, new `curation.py`, data files replayed in the build |
 | Claim extraction | A model proposes claims ("X holds that Y", grounded in passage P, attributed to thinker or SOT S); SMEs approve | new `claims.py`, `claims.yaml` |
 | **Speaker attribution** (Mahabharata first) | Deterministic. Ganguli marks speakers as `"X said,"`: about 3,600 markers in about 2,900 of 11,916 passages (24%). Carry the last speaker forward within a section | `segment.py`, `Passage` (+ `speaker`, `addressee`) |

@@ -64,6 +64,8 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand`, `--model`, `--effort` (with `--llm`), `--check BASELINE` (exit 1 if any baseline metric got worse; used by CI) | built corpus (+ API key with `--llm`) |
 | `ikg eval --fidelity` | SOT-fidelity benchmark: pass/fail per item and check, rates per property | `--baseline` (plain model, no retrieval), `--include-drafts`, `--judge-model`, `--model`, `--effort`, `-k`; not combinable with `--check`, `--llm`, `--no-expand` | API key; built corpus unless `--baseline`; at least one approved item |
 | `ikg sparql "QUERY"` | Query `processed/ikg.ttl` | none | built corpus |
+| `ikg curator add\|remove\|list [NAME]` | Manage named curators; `add` prints the new login token once | none | none |
+| `ikg provenance` | Print the provenance log, oldest first | `-n` (50) | none |
 | `ikg serve` | Run the web app | `--host` (127.0.0.1), `--port` (8000) | `[web]` extras |
 
 `python -m ikg` is equivalent to `ikg`.
@@ -77,7 +79,7 @@ shell take precedence. `.env` is git-ignored.
 | Variable | Default | Effect |
 |---|---|---|
 | `IKG_DATA` | `data` | Data directory (raw, processed, uploads, registries) |
-| `IKG_ADMIN_TOKEN` | random, printed at startup | Admin login token |
+| `IKG_ADMIN_TOKEN` | random, printed at startup | Admin login token; logs in as the curator "admin" |
 | `IKG_CONTRIBUTOR_TOKEN` | unset (open uploads) | Token required on `/contribute` |
 | `IKG_ASK_LIMIT` | `20` | Ask requests per hour per client IP for non-admins; `0` = admins only |
 | `ANTHROPIC_API_KEY` | none | Claude API key for Ask |
@@ -89,6 +91,7 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_JUDGE_EFFORT` | `medium` | Judge effort |
 | `IKG_UPLOAD_LIMIT` | `10` | Contributor uploads per hour per client address (admins are not limited) |
 | `IKG_UPLOAD_GLOBAL_LIMIT` | `100` | Contributor uploads per hour across all clients |
+| `IKG_LOGIN_FAILURE_LIMIT` | `10` | Failed admin logins per hour per client address before login is refused |
 | `IKG_PDF_MAX_PAGES` | `2000` | PDFs with more pages are rejected |
 | `IKG_PDF_TIMEOUT` | `120` | Seconds a PDF may take to read before it is rejected |
 | `IKG_PDF_MAX_CHARS` | `50000000` | PDFs with more text are rejected |

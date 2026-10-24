@@ -163,6 +163,28 @@ def cmd_sparql(args):
         print("\t".join(str(v) for v in row))
 
 
+def cmd_curator(args):
+    from ikg import curators
+    try:
+        if args.action == "add":
+            token = curators.add_curator(args.name)
+            print(f"Curator {args.name!r} added. Their login token (shown once, not stored):\n\n  {token}\n")
+        elif args.action == "remove":
+            curators.remove_curator(args.name)
+            print(f"Curator {args.name!r} removed; their token no longer logs in.")
+        else:
+            for c in curators.load_curators():
+                print(f"{c.name:<24} added {c.added}")
+    except ValueError as exc:
+        sys.exit(str(exc))
+
+
+def cmd_provenance(args):
+    from ikg import curators
+    for e in curators.recent(args.n)[::-1]:
+        print(f"{e['time']}  {e['curator']:<16} {e['action']:<18} {e['target']}  {e['detail']}".rstrip())
+
+
 def cmd_serve(args):
     try:
         import uvicorn
@@ -230,6 +252,15 @@ def main(argv=None):
     p = sub.add_parser("sparql", help="run a SPARQL query over the RDF export")
     p.add_argument("query")
     p.set_defaults(func=cmd_sparql)
+
+    p = sub.add_parser("curator", help="manage named curators who can log in to the admin")
+    p.add_argument("action", choices=["add", "remove", "list"])
+    p.add_argument("name", nargs="?", default="")
+    p.set_defaults(func=cmd_curator)
+
+    p = sub.add_parser("provenance", help="show the provenance log (who did what, when)")
+    p.add_argument("-n", type=int, default=50, help="number of entries (default 50)")
+    p.set_defaults(func=cmd_provenance)
 
     p = sub.add_parser("serve", help="run the web viewer and admin")
     p.add_argument("--host", default="127.0.0.1")

@@ -91,6 +91,8 @@ All paths are under `IKG_DATA` (default `data/`) unless noted.
 | `processed/gazetteer.yaml` | YAML, a copy of the gazetteer the build used | `build` | `Runtime`, `analyze` | no |
 | `processed/.build.lock` | Text (process ID), present only during a build | `build` | `build` | no |
 | `works.yaml` | YAML | web admin / contribute | `sources` | no |
+| `curators.yaml` | YAML: `name`, `token_sha256`, `added` per curator | `ikg curator` | login | no |
+| `provenance.jsonl` | JSONL: `time` (UTC), `curator`, `action`, `target`, `detail` | web app, `ikg curator` | admin page, `ikg provenance` | no |
 | `gazetteer.yaml` | YAML | web admin gazetteer editor | `entities` (takes precedence) | no |
 | `raw/pg<n>.txt` | Gutenberg text | `fetch` | `segment` | no |
 | `uploads/<uuid32>.<txt\|md\|pdf>` | as uploaded | web uploads | `segment` | no |

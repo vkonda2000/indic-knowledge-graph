@@ -2,6 +2,7 @@
 {% block title %}Admin · Indic Knowledge Graph{% endblock %}
 {% block content %}
 <h1>Admin</h1>
+{% if curator %}<p class="muted">Logged in as <strong>{{ curator }}</strong>. Your actions are recorded in the provenance log below.</p>{% endif %}
 {% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
 
@@ -106,6 +107,22 @@
     <button name="action" value="save">Save gazetteer</button>
     {% if gazetteer_custom %}<button name="action" value="reset" class="secondary">Reset to bundled</button>{% endif %}
   </form>
+</section>
+<section class="card">
+  <h2>Recent activity (provenance log)</h2>
+  {% if provenance %}
+  <table>
+    <thead><tr><th>When (UTC)</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+    <tbody>
+    {% for e in provenance %}
+      <tr><td class="small">{{ e.time }}</td><td>{{ e.curator }}</td><td>{{ e.action }}</td><td>{{ e.target }}</td><td class="small">{{ e.detail }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small">Newest first; the full log is <code>data/provenance.jsonl</code> (<code>ikg provenance</code>).</p>
+  {% else %}
+  <p class="muted">Nothing recorded yet.</p>
+  {% endif %}
 </section>
 {% endblock %}
 {% block scripts %}

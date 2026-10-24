@@ -32,7 +32,8 @@ def client(tmp_path, monkeypatch):
                       ("PASSAGES_FILE", "processed/passages.jsonl"), ("MENTIONS_FILE", "processed/mentions.jsonl"),
                       ("INDEX_FILE", "processed/bm25.pkl"), ("GRAPH_FILE", "processed/g.graphml"),
                       ("RDF_FILE", "processed/ikg.ttl"), ("MANIFEST_FILE", "processed/manifest.json"),
-                      ("GAZETTEER_SNAPSHOT_FILE", "processed/gazetteer.yaml"), ("BUILD_LOCK_FILE", "processed/.build.lock")]:
+                      ("GAZETTEER_SNAPSHOT_FILE", "processed/gazetteer.yaml"), ("BUILD_LOCK_FILE", "processed/.build.lock"),
+                      ("CURATORS_FILE", "curators.yaml"), ("PROVENANCE_FILE", "provenance.jsonl")]:
         monkeypatch.setattr(config, name, tmp_path / rel)
     # Build only user-added works, so the test needs no Gutenberg downloads.
     monkeypatch.setattr(pipeline, "load_works", lambda: [w for w in sources.load_works() if not w.bundled])
@@ -491,3 +492,58 @@ def test_upload_disk_error_leaves_no_orphan(client, monkeypatch):
     r = client.post("/contribute", data={"title": "Notes"}, files={"file": ("n.md", MATERIAL, "text/markdown")})
     assert "could not be saved" in r.text
     assert not config.UPLOADS_DIR.exists() or not any(config.UPLOADS_DIR.iterdir())
+
+
+def test_named_curator_actions_are_attributed_in_the_provenance_log(client):
+    from ikg import curators
+    token = curators.add_curator("ravi")
+    # A public submission records who proposed it.
+    client.post("/contribute", data={"title": "Gita notes", "contributor": "Asha"},
+                files={"file": ("n.md", MATERIAL, "text/markdown")})
+    work_id = next(w.id for w in sources.load_works(include_unapproved=True) if w.title == "Gita notes")
+    assert client.post("/admin/login", data={"token": token}, follow_redirects=False).status_code == 303
+    page = client.get("/admin").text
+    assert "Logged in as <strong>ravi</strong>" in page
+    client.post(f"/admin/works/{work_id}/status", data={"status": "approved"})
+    client.post("/admin/rebuild")
+    wait_for_build(client)
+    client.post("/admin/logout")
+    log = curators.recent()[::-1]
+    pairs = [(e["curator"], e["action"]) for e in log]
+    assert ("public", "work_submitted") in pairs and log[pairs.index(("public", "work_submitted"))]["detail"] == "by Asha"
+    for expected in [("ravi", "login"), ("ravi", "work_status"), ("ravi", "rebuild_started"),
+                     ("ravi", "rebuild_done"), ("ravi", "logout")]:
+        assert expected in pairs
+    assert pairs.index(("ravi", "rebuild_started")) < pairs.index(("ravi", "rebuild_done"))
+    assert log[pairs.index(("ravi", "work_status"))]["target"] == work_id
+
+
+def test_env_admin_token_logs_in_as_admin(client):
+    login(client)
+    from ikg import curators
+    assert curators.recent()[0] == {**curators.recent()[0], "curator": "admin", "action": "login"}
+
+
+def test_removing_a_curator_ends_their_live_session(client):
+    from ikg import curators
+    token = curators.add_curator("ravi")
+    client.post("/admin/login", data={"token": token})
+    assert client.get("/admin", follow_redirects=False).status_code == 200
+    curators.remove_curator("ravi")
+    assert client.get("/admin", follow_redirects=False).headers["location"] == "/admin/login"
+
+
+def test_failed_logins_are_recorded_and_limited(client):
+    from ikg import curators
+    for _ in range(10):
+        assert "Invalid token" in client.post("/admin/login", data={"token": "guess"}).text
+    assert "Too many failed logins" in client.post("/admin/login", data={"token": "secret"}).text
+    failed = [e for e in curators.recent() if e["action"] == "login_failed"]
+    assert len(failed) == 10 and failed[0]["curator"] == "public" and "guess" not in str(failed)
+
+
+def test_broken_curator_registry_does_not_leak_paths(client):
+    config.CURATORS_FILE.write_text("curators: [unclosed", encoding="utf-8")
+    page = client.post("/admin/login", data={"token": "wrong"}).text
+    assert "registry is unavailable" in page and "curators.yaml" not in page
+    assert client.post("/admin/login", data={"token": "secret"}, follow_redirects=False).status_code == 303  # env admin still works

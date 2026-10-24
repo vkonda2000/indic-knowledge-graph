@@ -35,7 +35,8 @@ python -m venv .venv
 pip install -e ".[web,dev]"
 
 copy .env.example .env                 # macOS/Linux: cp .env.example .env
-# edit .env: set ANTHROPIC_API_KEY and IKG_ADMIN_TOKEN (any password you like)
+# edit .env: set ANTHROPIC_API_KEY and IKG_ADMIN_TOKEN (a long random string)
+# for your own admin login, ask for a curator token: ikg curator add <your-name>
 
 ikg fetch                              # download the texts (~18 MB)
 ikg build                              # build passages, index, graph (~10 s)

@@ -256,10 +256,23 @@ including two prompt-injection attempts.
   mutable state (sessions, rate limiter, build job) in closures. Each test gets an isolated app.
 - **Corpus not built.** If loading fails, `state["error"]` holds the reason, pages show a
   notice, and corpus routes return 503.
-- **Authentication.** Tokens are compared with `secrets.compare_digest` on UTF-8 bytes (on
-  `str` it raises for non-ASCII input). A successful
-  login creates a random 32-byte session ID in an in-memory dict with a 12 h expiry; expired
-  sessions are pruned at login. The cookie is `HttpOnly`, `SameSite=Strict`, and `Secure` over
+- **Authentication.** A login token identifies a curator (D12): `IKG_ADMIN_TOKEN` logs in as
+  "admin", and each token created with `ikg curator add <name>` logs in as that name. Only the
+  token's SHA-256 is stored (`data/curators.yaml`); comparisons are constant-time on bytes. A
+  successful login creates a random 32-byte session ID, holding its expiry (12 h) and curator,
+  in an in-memory dict; expired sessions are pruned at login. Every admin request re-checks that
+  the curator is still registered, so `ikg curator remove` also ends their live sessions. Failed
+  logins are recorded (with the client address, never the token) and limited per client
+  (`IKG_LOGIN_FAILURE_LIMIT`, 10 an hour). A broken `curators.yaml` shows a generic message on
+  the login page; the env admin token still works.
+- **Provenance.** `curators.record()` appends `{time, curator, action, target, detail}` to
+  `data/provenance.jsonl` for logins and logouts, public submissions (curator "public", with the
+  contributor's name), works added and status changes, gazetteer saves (with a hash of the text)
+  and resets, rebuilds started and finished, and curators added or removed (curator "system").
+  Nothing rewrites the file. A failure to write the log never fails or undoes the action itself.
+  The admin page shows the latest 30 entries; `ikg provenance` prints the log. Entries are single
+  short appended lines, safe across the CLI and the web app; `curators.yaml` has no cross-process
+  lock, so add or remove curators from one place at a time (single host, L12). The cookie is `HttpOnly`, `SameSite=Strict`, and `Secure` over
   HTTPS. `SameSite=Strict` is the CSRF defence for admin POSTs.
 - **Ask spends money, so it is guarded in four ways.**
   - *POST only, same site only.* `GET /?mode=ask` fills in the form but never calls the API,
@@ -372,7 +385,7 @@ expert-approved, current-corpus items are scored; the command refuses to run oth
 
 ## 12. Testing
 
-`pytest` runs 117 tests in about 3 s, with no network or API key needed. CI runs them on
+`pytest` runs 127 tests in about 3 s, with no network or API key needed. CI runs them on
 Python 3.10 and 3.12:
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer
