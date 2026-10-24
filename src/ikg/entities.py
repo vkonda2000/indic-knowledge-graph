@@ -47,25 +47,61 @@ class _Pattern:
     works: frozenset | None  # None means all works
 
 
+def _overlap(a: frozenset | None, b: frozenset | None) -> bool:
+    return a is None or b is None or bool(a & b)
+
+
+def _pick(pats: list[_Pattern], work: str | None) -> _Pattern | None:
+    """The pattern that applies in ``work``. Without a work (e.g. a question), a form shared by
+    entities in different works is ambiguous and matches nothing."""
+    if work is None:
+        return pats[0] if len(pats) == 1 else None
+    return next((p for p in pats if p.works is None or work in p.works), None)
+
+
 class Gazetteer:
     def __init__(self, entities: list[Entity]):
         self.entities = {e.id: e for e in entities}
-        # surface form -> pattern info, split by case sensitivity
-        self._ci: dict[str, _Pattern] = {}
-        self._cs: dict[str, _Pattern] = {}
+        # surface form -> patterns, split by case sensitivity. A form has several patterns only
+        # when it names different entities in disjoint sets of works (e.g. two Bharatas).
+        self._ci: dict[str, list[_Pattern]] = {}
+        self._cs: dict[str, list[_Pattern]] = {}
         for e in entities:
             scope = frozenset(e.works) if e.works else None
             for a in e.aliases:
-                self._ci[fold(a).lower()] = _Pattern(e.id, "alias", scope)
+                self._add(self._ci, fold(a).lower(), _Pattern(e.id, "alias", scope), a)
             for r in e.renderings:
-                self._ci[fold(r).lower()] = _Pattern(e.id, "rendering", scope)
+                self._add(self._ci, fold(r).lower(), _Pattern(e.id, "rendering", scope), r)
             for a in e.aliases_cs:
-                self._cs[fold(a)] = _Pattern(e.id, "alias", scope)
+                self._add(self._cs, fold(a), _Pattern(e.id, "alias", scope), a)
             for work, aliases in e.aliases_by_work.items():
                 for a in aliases:
-                    self._ci[fold(a).lower()] = _Pattern(e.id, "alias", frozenset([work]))
+                    self._add(self._ci, fold(a).lower(), _Pattern(e.id, "alias", frozenset([work])), a)
+        # The case-insensitive pass runs first and takes the span, so a clashing case-sensitive
+        # form of another entity would never match.
+        for key, pats in self._cs.items():
+            for pat in pats:
+                for owner in self._ci.get(key.lower(), []):
+                    if owner.entity != pat.entity and _overlap(owner.works, pat.works):
+                        raise ValueError(f"surface form '{key}' is used by both '{owner.entity}' and "
+                                         f"'{pat.entity}' (case-sensitive) in the same works")
         self._ci_re = self._compile(self._ci, re.IGNORECASE)
         self._cs_re = self._compile(self._cs, 0)
+
+    @staticmethod
+    def _add(table: dict[str, list[_Pattern]], key: str, pat: _Pattern, surface: str) -> None:
+        # Letting a later entry win would silently re-route a form, so clashes are errors.
+        pats = table.setdefault(key, [])
+        for i, owner in enumerate(pats):
+            if owner.entity == pat.entity:
+                # The same entity listing a form twice keeps the wider scope.
+                wider = None if owner.works is None or pat.works is None else owner.works | pat.works
+                pats[i] = _Pattern(owner.entity, owner.via, wider)
+                return
+            if _overlap(owner.works, pat.works):
+                raise ValueError(f"surface form '{surface}' is used by both '{owner.entity}' and "
+                                 f"'{pat.entity}' in the same works; restrict them to different works")
+        pats.append(pat)
 
     @staticmethod
     def _compile(table: dict, flags: int) -> re.Pattern | None:
@@ -109,8 +145,8 @@ class Gazetteer:
             for m in regex.finditer(folded):
                 surface = m.group(1)
                 key = re.sub(r"\s+", " ", surface.lower() if lower else surface)
-                pat = table.get(key)
-                if pat is None or (pat.works is not None and work is not None and work not in pat.works):
+                pat = _pick(table.get(key, []), work)
+                if pat is None:
                     continue
                 if any(m.start() < e and s < m.end() for s, e in taken):
                     continue

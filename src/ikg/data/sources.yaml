@@ -2,6 +2,8 @@
 # so answers can always be traced back to a specific public-domain edition.
 #
 # To add a work: add an entry here and a parser in ikg/segment.py (keyed by `parser`).
+# Each Gutenberg file is pinned by `sha256`: `ikg fetch` and `ikg build` refuse a file whose
+# contents differ, so a re-edited upstream text can't silently change passages or eval results.
 
 works:
   - id: upanishads
@@ -11,6 +13,7 @@ works:
     parser: upanishads
     files:
       - gutenberg: 3283
+        sha256: 2ffc941173d8fd10c16eea7bfb4ab2ace13cf9e734228c71f367402f9236aa46
     notes: >
       Each verse is followed by the translator's commentary. The parser separates
       verse text (kind=verse) from commentary (kind=commentary) and introductions.
@@ -22,9 +25,13 @@ works:
     parser: mahabharata
     files:
       - gutenberg: 15474   # Books 1-3
+        sha256: 6936769ca526bc5486335940958f43d036414d2fd29dcc17259610fa95b66b75
       - gutenberg: 15475   # Books 4-7
+        sha256: 135076505fc86930e9817858def7f1448d73d5dbf6000c841eafcc2e73f59eb3
       - gutenberg: 15476   # Books 8-12
+        sha256: 2d4d53b9c4892ebdc5a4bfa59458d0e0acf9742d3ce0f3b7b1b428ab838f402d
       - gutenberg: 15477   # Books 13-18
+        sha256: 60de2a2f82f22247fdb72096c7ebbb01b63ad42770506c10f6d7c7a82868e437
 
   - id: ramayana
     title: The Ramayan of Valmiki, translated into English verse
@@ -33,6 +40,7 @@ works:
     parser: ramayana
     files:
       - gutenberg: 24869
+        sha256: 4310b710a9c6942490bf8270a8a6620f314dcc2adf7b413833596ca9aaebca6f
 
   - id: vishnu_purana
     title: A Prose English Translation of Vishnupuranam
@@ -41,6 +49,7 @@ works:
     parser: vishnu_purana
     files:
       - gutenberg: 66208
+        sha256: 924d8c109ddf87a26fab4025556be7b74dbf0c21534e253bfb4561f711956bb5
     notes: >
       The only Purana currently on Project Gutenberg. Candidates to add from other
       public-domain editions (verify license first): Bhagavata Purana (M. N. Dutt, 1895),

@@ -6,7 +6,10 @@ Question types (eval/questions.jsonl):
 
 Offline metrics (no API calls): retrieval hit@k for retrieval questions.
 With --llm: citation precision against `expected`, citation presence, and abstention
-on adversarial questions. Results are written to eval/results/ for regression checks.
+on adversarial questions. Results are written to eval/results/ (git-ignored).
+
+Regression gate: ``ikg eval --check eval/baseline.json`` exits non-zero if any metric in the
+committed baseline got worse. CI runs it on every pull request.
 """
 
 import json
@@ -67,6 +70,26 @@ def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False
         (out_dir / f"run-{stamp}.json").write_text(
             json.dumps({"summary": summary, "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"summary": summary, "rows": rows}
+
+
+# Metrics where a higher value is worse; every other numeric metric is better when higher.
+# Item counts (n_retrieval, n_adversarial) belong in the baseline too, so that deleting a
+# failing question does not pass the gate.
+LOWER_IS_BETTER = {"false_abstain_rate"}
+
+
+def regressions(summary: dict, baseline: dict) -> list[str]:
+    """Describe each baseline metric that the new summary does worse on (empty list: no regression)."""
+    found = []
+    for key, base in baseline.get("metrics", {}).items():
+        new = summary.get(key)
+        if not isinstance(base, (int, float)):
+            found.append(f"{key}: baseline value {base!r} is not a number; fix eval/baseline.json")
+        elif new is None:
+            found.append(f"{key}: missing (baseline {base})")
+        elif (new > base) if key in LOWER_IS_BETTER else (new < base):
+            found.append(f"{key}: {new} (baseline {base})")
+    return found
 
 
 def summarize(rows: list[dict]) -> dict:

@@ -7,6 +7,7 @@ Two registries are merged:
     corpus once an admin approves them.
 """
 
+import hashlib
 import re
 import threading
 import time
@@ -153,20 +154,47 @@ def save_upload(filename: str, content: bytes) -> dict:
     return {"upload": stored, "original_name": Path(filename).name}
 
 
+def _download(url: str, attempts: int = 3) -> bytes:
+    for attempt in range(1, attempts + 1):
+        try:
+            resp = requests.get(url, timeout=120)
+            resp.raise_for_status()
+            return resp.content
+        except requests.RequestException:
+            if attempt == attempts:
+                raise
+            time.sleep(2 ** attempt)
+    raise AssertionError("unreachable")
+
+
 def fetch(works: list[Work], raw_dir: Path | None = None, force: bool = False) -> list[Path]:
-    """Download each work's Gutenberg files into the raw directory (skips existing files)."""
+    """Download each work's Gutenberg files into the raw directory (skips existing files).
+
+    Files pinned with ``sha256`` in the registry are verified, whether just downloaded or
+    already present, so the build only ever segments the exact texts the eval was written for.
+    """
     raw_dir = raw_dir or config.RAW_DIR
     raw_dir.mkdir(parents=True, exist_ok=True)
     written = []
     for work in works:
         for f, path in zip(work.files, work.raw_paths(raw_dir)):
-            if "gutenberg" not in f or (path.exists() and not force):
+            if "gutenberg" not in f:
                 continue
-            resp = requests.get(GUTENBERG_URL.format(id=int(f["gutenberg"])), timeout=120)
-            resp.raise_for_status()
-            path.write_bytes(resp.content)
-            written.append(path)
+            if force or not path.exists():
+                content = _download(GUTENBERG_URL.format(id=int(f["gutenberg"])))
+                _verify(f, content, f"downloaded pg{f['gutenberg']}")
+                path.write_bytes(content)
+                written.append(path)
+            else:
+                _verify(f, path.read_bytes(), str(path))
     return written
+
+
+def _verify(entry: dict, content: bytes, what: str) -> None:
+    expected = entry.get("sha256")
+    if expected and hashlib.sha256(content).hexdigest() != expected:
+        raise ValueError(f"{what} does not match the sha256 pinned in the source registry; the upstream "
+                         f"text may have changed. Check it, then update the pin and the eval baseline.")
 
 
 def strip_gutenberg(text: str) -> str:

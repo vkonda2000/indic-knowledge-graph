@@ -100,7 +100,8 @@ ikg search "What does Yama teach Nachiketas about the Self?"       # retrieval o
 ikg ask "What does Yama teach Nachiketas about the Self?" --primary-only
 ikg analyze                       # writes reports/corpus-analysis.md
 ikg eval                          # retrieval metrics; add --llm for answer/citation metrics
-ikg eval --no-expand              # ablation without knowledge-graph query expansion
+ikg eval --no-expand              # ablation without gazetteer query expansion
+ikg eval --check eval/baseline.json   # regression gate used by CI
 ikg sparql "SELECT ?label WHERE { ?e a ikg:Concept ; rdfs:label ?label }"
 ikg stats
 ```
@@ -151,7 +152,7 @@ questions the corpus cannot answer (for example, Hanuman in the Katha Upanishad)
 
 | Retrieval (k = 8) | hit@1 | hit@8 |
 |---|---|---|
-| With graph expansion | 62.5% | 95.8% |
+| With gazetteer expansion | 62.5% | 95.8% |
 | Without (`--no-expand`) | 62.5% | 95.8% |
 
 What this shows so far:
@@ -167,6 +168,8 @@ What this shows so far:
 - **Answer-level metrics not yet measured.** `ikg eval --llm` measures citation precision,
   citation presence, false abstention and abstention on adversarial questions. It has not been
   run yet because it needs an API key.
+- **Retrieval is guarded in CI.** The row with gazetteer expansion is committed as
+  [eval/baseline.json](eval/baseline.json), and a pull request that lowers either number fails.
 
 ## Analysis
 
@@ -199,9 +202,26 @@ What this shows so far:
 
 ```bash
 pytest
+ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-25 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
-matching, retrieval and expansion, the graph, QA citation handling with a mocked Claude client,
-and the web app end to end: contribute, review, rebuild, search, graph, and auth, upload
-validation and HTML escaping.
+56 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
+(checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
+citation handling with a mocked Claude client, and the web app end to end: contribute, review,
+rebuild, search, graph, and auth, upload validation and HTML escaping. No test needs a network
+connection or an API key.
+
+**Continuous integration.** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml))
+runs the tests on Python 3.10 and 3.12 for every pull request. It also builds the full corpus
+and runs the eval check above. Every PR also gets an independent review by a Fable subagent
+([.claude/agents/fable-reviewer.md](.claude/agents/fable-reviewer.md)); see
+[ONBOARDING.md §7](ONBOARDING.md#7-how-we-work).
+
+## Technology
+
+Python 3.10+, a BM25 index implemented in the project, a curated YAML gazetteer, networkx,
+rdflib (OWL, RDF, SPARQL), Claude (`claude-opus-5-5`) with native citations for answers,
+a local Ollama model for screening uploads, FastAPI with Jinja2, Cytoscape.js, pytest, and
+GitHub Actions. Data is stored as files, with no database. The full table with versions and
+where each technology is used is in [docs/02 §7](docs/02-architecture.md#7-technology-stack).

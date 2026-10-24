@@ -60,6 +60,7 @@ All paths are under `IKG_DATA` (default `data/`) unless noted.
 | `src/ikg/data/gazetteer.yaml` | YAML | developers | `entities` (fallback) | yes |
 | `ontology/ikg.ttl` | Turtle/OWL | developers | people, SPARQL tools | yes |
 | `eval/questions.jsonl` | JSONL | developers | `evaluate` | yes |
+| `eval/baseline.json` | JSON | developers | `eval --check`, CI | yes |
 | `works.yaml` | YAML | web admin / contribute | `sources` | no |
 | `gazetteer.yaml` | YAML | web admin gazetteer editor | `entities` (takes precedence) | no |
 | `raw/pg<n>.txt` | Gutenberg text | `fetch` | `segment` | no |
@@ -107,6 +108,9 @@ elsewhere.
 
 ### Work registry entry (`sources.yaml`, `works.yaml`)
 
+Bundled Gutenberg files carry `sha256: <hex>` next to `gutenberg: <id>`; `fetch` and `build`
+refuse a file whose contents differ.
+
 ```yaml
 - id: gita_notes                 # unique slug
   title: Gita notes
@@ -138,7 +142,8 @@ elsewhere.
   aliases_by_work: {}            # optional: {ramayana: [rama]}
 ```
 
-Unknown fields and duplicate IDs are rejected when the gazetteer is loaded.
+Unknown fields and duplicate IDs are rejected when the gazetteer is loaded. So is a surface
+form listed under two entities, unless their `works` scopes are disjoint ([03 §4.2](03-design.md#42-matching)).
 
 ### Graph (GraphML)
 
@@ -152,6 +157,17 @@ Unknown fields and duplicate IDs are rejected when the gazetteer is loaded.
 ```json
 {"id": "mbh-04", "type": "retrieval", "question": "How did Karna die when the wheel of his chariot sank into the earth?", "expected": ["mbh.b08"]}
 {"id": "adv-02", "type": "adversarial", "question": "What does the Kena Upanishad say about the battle of Kurukshetra?", "expected": [], "works": ["upanishads"]}
+```
+
+### Evaluation baseline (`eval/baseline.json`)
+
+The metrics CI holds the project to (`ikg eval --check`). `k` must match the run's `-k`, and
+every key under `metrics` must not get worse, item counts included. `description` and
+`recorded` are for readers.
+
+```json
+{"description": "...", "recorded": "2026-10-23", "k": 8,
+ "metrics": {"n_retrieval": 24, "n_adversarial": 4, "retrieval_hit_at_1": 0.625, "retrieval_hit_at_k": 0.958}}
 ```
 
 ## 5. Example SPARQL

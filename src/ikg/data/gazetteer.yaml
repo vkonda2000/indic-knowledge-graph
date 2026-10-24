@@ -15,6 +15,9 @@
 #               epithet in the Mahabharata)
 #   aliases_by_work  optional: extra aliases that only apply inside one work
 #
+# Two entities may share a surface form only if their `works` are disjoint; any other clash
+# is rejected when the gazetteer loads (see docs/03 §4.2).
+#
 # Longer aliases win over shorter ones ("Krishna-Dwaipayana" is Vyasa, not Krishna).
 
 entities:
