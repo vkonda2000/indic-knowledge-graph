@@ -274,7 +274,7 @@ and are not part of the system until they appear in this table.
 | Language | Python | 3.10+ (CI tests 3.10 and 3.12) | everywhere | Packaged with setuptools (`pyproject.toml`), console script `ikg` |
 | Configuration | python-dotenv | ≥ 1.0 | `cli.py`, `config.py` | `.env` loaded from the working directory upwards; shell variables take precedence |
 | Source texts | Project Gutenberg plain text, fetched with `requests` | ≥ 2.31 | `sources.py`, `sources.yaml` | Seven files, about 18 MB, each pinned by SHA-256; network needed only for `fetch`/`build` |
-| Uploads | `.txt`, `.md`, `.pdf` (text layer via pypdf) | pypdf ≥ 4.0 | `sources.py`, `segment.parse_generic` | No OCR, EPUB or DOCX yet |
+| Uploads | `.txt`, `.md`, `.pdf` (text layer via pypdf) | pypdf ≥ 6.0 (core dependency: the build reads PDFs too) | `sources.py`, `segment.parse_generic`, `pdftext.py` | PDFs read in a child process with time and page limits. No OCR, EPUB or DOCX yet |
 | Segmentation and entity extraction | Python `re`, curated YAML gazetteer (PyYAML) | PyYAML ≥ 6.0 | `segment.py`, `entities.py`, `normalize.py` | Deterministic; no NLP or NER library |
 | Retrieval | BM25 implemented in the project (k1 = 1.5, b = 0.75), stored as a pickle | none (no search library) | `retrieve.py` | Gazetteer query expansion and entity boost; no embeddings or vector store |
 | Knowledge graph | networkx co-occurrence graph, saved as GraphML | networkx ≥ 3.0 | `graph.py` | Not a graph database |

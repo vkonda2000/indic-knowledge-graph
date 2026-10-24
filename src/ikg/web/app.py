@@ -56,6 +56,12 @@ class RateLimiter:
         self.events: dict[str, deque] = {}
         self.calls = 0
 
+    def has_room(self, key: str) -> bool:
+        """Whether `allow(key)` would succeed now, without recording anything."""
+        now = time.time()
+        with self.lock:
+            return sum(t > now - 3600 for t in self.events.get(key, ())) < self.per_hour
+
     def allow(self, key: str) -> bool:
         now = time.time()
         with self.lock:
@@ -226,7 +232,7 @@ async def screen_upload(filename: str, content: bytes, title: str, notes: str) -
     """Reject material unrelated to Indic texts; returns the verdict summary to store."""
     if not screen.enabled():
         return ""
-    text = screen.extract_text(filename, content)
+    text = await run_in_threadpool(screen.extract_text, filename, content)  # may take up to PDF_TIMEOUT
     try:
         verdict = await run_in_threadpool(screen.screen, text, title, notes)
     except screen.ScreeningUnavailable as exc:
@@ -251,6 +257,9 @@ def create_app() -> FastAPI:
     contributor_token = os.environ.get("IKG_CONTRIBUTOR_TOKEN", "")
     sessions: dict[str, float] = {}
     ask_limiter = RateLimiter(int(os.environ.get("IKG_ASK_LIMIT", "20")))
+    upload_limiter = RateLimiter(config.UPLOAD_LIMIT)
+    upload_global = RateLimiter(config.UPLOAD_GLOBAL_LIMIT)
+    app.state.upload_limiter, app.state.upload_global = upload_limiter, upload_global
     budget = SpendBudget(config.ASK_BUDGET_USD)
     app.state.budget = budget
     answer_cache = AnswerCache(config.ANSWER_CACHE_SIZE)
@@ -286,6 +295,8 @@ def create_app() -> FastAPI:
 
     def require_admin(request: Request):
         if not is_admin(request):
+            if request.url.path.startswith("/api/"):  # scripts and the admin page's poller expect JSON
+                raise HTTPException(401, "Admin login required", headers={"WWW-Authenticate": "Cookie"})
             raise HTTPException(303, headers={"Location": "/admin/login"})
 
     def ask_refusal(request: Request) -> str:
@@ -337,6 +348,31 @@ def create_app() -> FastAPI:
             "is_admin": is_admin(request), "corpus_ready": rt is not None,
             "corpus_error": state["error"], "registry_error": registry_error,
             "all_works": filter_works(works), **ctx})
+
+    @app.middleware("http")
+    async def limit_contributions(request: Request, call_next):
+        """Refuse an oversized or over-limit upload before its body is received: by the time a route
+        runs, the framework has already read and spooled the whole multipart body."""
+        if request.method == "POST" and request.url.path == "/contribute" and not is_admin(request):
+            refusal = ""
+            try:
+                too_big = int(request.headers.get("content-length", "0")) > sources.MAX_UPLOAD_BYTES + (1 << 20)
+            except ValueError:
+                too_big = False
+            client_key = request.client.host if request.client else ""
+            if too_big:
+                refusal = f"The file is larger than {sources.MAX_UPLOAD_BYTES // (1024 * 1024)} MB."
+            elif not (upload_limiter.has_room(client_key) and upload_global.has_room("*")):
+                refusal = "Too many uploads in the last hour. Please try again later."
+            else:  # both have room: record the upload against both
+                upload_limiter.allow(client_key)
+                upload_global.allow("*")
+            if refusal:
+                response = render(request, "contribute.html", kinds=KINDS, needs_token=bool(contributor_token),
+                                  message="", error=refusal)
+                response.status_code = 413 if too_big else 429
+                return response
+        return await call_next(request)
 
     # ------------------------------------------------------------------ viewer
 
@@ -415,6 +451,7 @@ def create_app() -> FastAPI:
         if contributor_token and not token_ok(token, contributor_token):
             ctx["error"] = "Invalid contributor token."
             return render(request, "contribute.html", **ctx)
+        entry = None
         try:
             filename, content = file.filename or "upload.txt", await read_upload(file)
             verdict = await screen_upload(filename, content, title.strip()[:200], notes.strip()[:2000])
@@ -424,8 +461,10 @@ def create_app() -> FastAPI:
                                          submitted_by=contributor.strip()[:100], notes=notes.strip()[:2000],
                                          screening=verdict)
             ctx["message"] = f"Thank you. '{work.title}' was submitted and is waiting for admin review."
-        except ValueError as exc:
-            ctx["error"] = str(exc)
+        except (ValueError, OSError) as exc:
+            if entry:  # saved but not registered: don't leave an orphan file behind
+                (config.UPLOADS_DIR / entry["upload"]).unlink(missing_ok=True)
+            ctx["error"] = str(exc) if isinstance(exc, ValueError) else "The upload could not be saved. Please try again later."
         return render(request, "contribute.html", **ctx)
 
     # ------------------------------------------------------------------ admin

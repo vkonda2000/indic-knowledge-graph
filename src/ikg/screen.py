@@ -10,7 +10,6 @@ Screening is a filter for off-topic material, not a substitute for admin review:
 uploaded document is untrusted and may try to talk the model into accepting it.
 """
 
-import io
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -64,11 +63,8 @@ def extract_text(filename: str, content: bytes) -> str:
     if suffix not in UPLOAD_EXTENSIONS:
         raise ValueError(f"unsupported file type {suffix!r}; allowed: {', '.join(UPLOAD_EXTENSIONS)}")
     if suffix == ".pdf":
-        from pypdf import PdfReader
-        try:
-            return "\n\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(content)).pages)
-        except Exception as exc:
-            raise ValueError(f"could not read the PDF: {exc}") from None
+        from ikg.pdftext import pdf_text
+        return pdf_text(content)
     return content.decode("utf-8", errors="replace")
 
 

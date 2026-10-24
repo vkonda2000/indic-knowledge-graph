@@ -118,6 +118,7 @@
     const timer = setInterval(async () => {
       try {
         const res = await fetch("/api/build/status");
+        if (res.status === 401) { clearInterval(timer); location.assign("/admin/login"); return; }
         if (!res.ok) return;
         const job = await res.json();
         stateEl.textContent = job.state;
