@@ -14,6 +14,11 @@ and the document is out of date. Please fix the document in the same pull reques
 | [06 Roadmap](06-roadmap.md) | Measured limitations of the current system, a done / partial / not-started checklist against the target with candidate use cases, the project's original contributions, and a phased plan toward the target system, with extension points for each change |
 | [07 Target alignment](07-target-alignment.md) | The target (an ontology-based civilizational knowledge system), a capability-by-capability gap analysis, the SOT-fidelity definition, and the ontology extensions and constraints the target adds |
 
+Slides: [`slides/ikg-project-goals.pptx`](slides/ikg-project-goals.pptx) is an 8-slide overview
+of the project's goals and high-level objectives, current status and roadmap, with speaker
+notes, for introducing the project to collaborators and subject experts. Its figures are a
+snapshot from October 2026; the documents above are authoritative.
+
 Reviews: [`reviews/`](reviews/) holds the independent Fable reviews of code and architecture
 (ONBOARDING §7). Their findings are tracked as limitations in 06 §2.
 
