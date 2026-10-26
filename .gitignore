@@ -13,3 +13,6 @@ eval/results/
 
 # Local secrets and settings
 .env
+
+# Office lock files
+~$*
