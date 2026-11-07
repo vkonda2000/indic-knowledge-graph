@@ -241,7 +241,9 @@ def _verify(entry: dict, content: bytes, what: str) -> None:
     expected = entry.get("sha256")
     if expected and hashlib.sha256(content).hexdigest() != expected:
         raise ValueError(f"{what} does not match the sha256 pinned in the source registry; the upstream "
-                         f"text may have changed. Check it, then update the pin and the eval baseline.")
+                         f"text may have changed. For bundled works, take the pinned copies with "
+                         f"`gh release download pinned-sources-v1 --dir data/raw --pattern 'pg*.txt' --clobber`. "
+                         f"Repinning changes passage IDs (D11): compare the builds first.")
 
 
 def strip_gutenberg(text: str) -> str:
