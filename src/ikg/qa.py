@@ -3,6 +3,9 @@
 Pipeline: detect entities in the question -> expanded BM25 retrieval with entity boost
 -> knowledge-graph neighbourhood summary -> Claude answers from the passages only,
 using the API's native citations so every claim maps to a passage id.
+
+With `IKG_ANSWER_MODEL=ollama:<model>` (or `model="ollama:..."`) a local model answers instead, and
+the citations are checked in code (ikg.localqa).
 """
 
 from dataclasses import dataclass, field
@@ -13,6 +16,7 @@ import networkx as nx
 from ikg import config
 from ikg.entities import Gazetteer
 from ikg.graph import graph_context
+from ikg.localqa import answer_locally, is_local
 from ikg.retrieve import BM25Index, Hit, search
 
 NOT_IN_SOURCES = "NOT_IN_SOURCES"
@@ -52,6 +56,8 @@ class Answer:
     output_tokens: int = 0  # includes thinking tokens, which are billed as output
     cost_usd: float | None = None
     cached: bool = False  # served from the web app's answer cache; no API call was made
+    dropped_sentences: int | None = None  # local models only: sentences removed for an unverifiable citation
+    model_abstained: bool | None = None   # local models only: the model itself said it can't answer
 
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
@@ -102,7 +108,9 @@ def ask(
     effort: str | None = None,
 ) -> Answer:
     model, effort = model or config.MODEL, effort or config.EFFORT
-    if effort not in config.EFFORTS:
+    if is_local(model):
+        effort = "n/a"  # effort is a Claude setting
+    elif effort not in config.EFFORTS:
         raise ValueError(f"effort must be one of {', '.join(config.EFFORTS)}, not {effort!r}")
     hits = search(index, gazetteer, question, k=k, works=works, primary_only=primary_only,
                   passage_entities=passage_entities)
@@ -113,6 +121,8 @@ def ask(
         answer.text, answer.abstained = f"{NOT_IN_SOURCES}\nNo passages matched the question.", True
         answer.cost_usd = 0.0  # no API call was made
         return answer
+    if is_local(model):
+        return answer_locally(answer, hits, kg, SYSTEM_PROMPT, NOT_IN_SOURCES)
 
     client = client or anthropic.Anthropic()
     fallback = ({"betas": ["server-side-fallback-2026-07-01"], "extra_body": {"fallbacks": "default"}}

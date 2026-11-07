@@ -36,6 +36,7 @@ from starlette.concurrency import run_in_threadpool
 from ikg import config, curators, screen, sources
 from ikg.entities import Gazetteer
 from ikg.graph import neighbours
+from ikg.localqa import LocalAnswerError
 from ikg.pipeline import Runtime, build
 from ikg.retrieve import search
 from ikg.segment import KINDS, PARSERS, WORK_LABELS
@@ -346,9 +347,9 @@ def create_app() -> FastAPI:
         except anthropic.APITimeoutError:  # a subclass of APIConnectionError, but may have been billed
             budget.charge(None)
             raise
-        except (ValueError, anthropic.BadRequestError, anthropic.AuthenticationError,
+        except (ValueError, LocalAnswerError, anthropic.BadRequestError, anthropic.AuthenticationError,
                 anthropic.PermissionDeniedError, anthropic.NotFoundError, anthropic.APIConnectionError):
-            raise  # rejected or never sent: not billed
+            raise  # rejected, never sent, or a local model: not billed
         except Exception:
             budget.charge(None)  # e.g. a server error: the request may still have been billed
             raise
@@ -429,6 +430,9 @@ def create_app() -> FastAPI:
             elif mode == "ask" and post:
                 try:
                     ctx["answer"] = answer(request, q, k, works, primary_only)
+                except LocalAnswerError:  # its message names the Ollama host: keep that out of the page
+                    ctx["error"] = ("Answering failed: the local model could not answer. Cited answers need a "
+                                    "local Ollama server with that model. Search still works.")
                 except Exception as exc:  # missing API key, network, rate limit...
                     ctx["error"] = (f"Answering failed: {exc}. Cited answers need Claude API credentials "
                                     "(set ANTHROPIC_API_KEY before starting the server). Search still works.")
@@ -659,6 +663,8 @@ def create_app() -> FastAPI:
             # The Claude call blocks for seconds; keep it off the event loop.
             if ans is None:
                 ans = await run_in_threadpool(answer, request, question, k, works or None, primary_only)
+        except LocalAnswerError:  # its message names the Ollama host
+            raise HTTPException(503, "Answering failed: the local model could not answer.") from None
         except Exception as exc:  # missing API key, network, rate limit...
             raise HTTPException(503, f"Answering failed: {exc}") from None
         return {"answer": ans.text, "abstained": ans.abstained, "refused": ans.refused,

@@ -47,7 +47,9 @@ ikg serve                         # web app at http://127.0.0.1:8000
 A build records checksums of everything it writes, and the app refuses a build that doesn't
 match them. After upgrading from a version without them, run `ikg build` once.
 
-Cited answers call Claude (Haiku 5.5 by default, about $0.001 a question) and need an API key. Copy `.env.example` to `.env`
+Cited answers call Claude (Haiku 5.5 by default, about $0.001 a question) and need an API key,
+or run on a local model with `IKG_ANSWER_MODEL=ollama:qwen3.5:9B` (no key, no cost, slower;
+citations are checked in code, see docs/03 §6.1). Copy `.env.example` to `.env`
 and set `ANTHROPIC_API_KEY` and `IKG_ADMIN_TOKEN` there; `ikg` loads it from the current
 directory, and `.env` is git-ignored. Variables set in the shell take precedence.
 Search, the graph explorer, analysis and the retrieval evaluation work without one.

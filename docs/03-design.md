@@ -195,6 +195,37 @@ passages this takes milliseconds.
 
 If retrieval returns nothing, the answer abstains without calling the API.
 
+### 6.1 Local models (`localqa.py`)
+
+With `IKG_ANSWER_MODEL=ollama:<model>` (for example `ollama:qwen3.5:9B`), or `--model ollama:...`,
+a model served by Ollama answers instead, with the same retrieval, knowledge-graph summary and
+system prompt. A local model has no native citations, so the citation contract is enforced in code:
+
+1. The passages are numbered and labelled with work, kind, translator and reference, and the model
+   must reply in a JSON schema (Ollama's `format`): `abstain` and `missing`, or `sentences`, each
+   with `text`, `passages` (numbers) and a short verbatim `quote`.
+2. A sentence is kept only if its quote has at least 4 content words (stopwords excluded, so a
+   name or "O monarch" is not enough) and occurs as whole words, case-, diacritic- and
+   punctuation-insensitively, in a passage the sentence lists. Only the listed passages that
+   contain the quote are cited. Anything else is dropped and counted in `dropped_sentences`; the
+   answer says how many were removed. `[n]` markers and line breaks the model wrote itself are
+   removed from the sentence before the real markers are added.
+3. If nothing survives, the answer abstains with `NOT_IN_SOURCES`. `abstained` counts these too;
+   `model_abstained` records whether the model itself said it could not answer, and the eval
+   reports it separately (`adversarial_model_abstain_rate`).
+
+What the quote check proves: each cited passage contains words the model copied, so the citation
+points where the model read. It does not prove the sentence follows from the passage or that
+commentary was attributed as commentary; like the Claude path, those rest on the prompt. Passage
+delimiters in passage text are neutralised, so an uploaded text cannot close its passage and
+relabel what follows as primary text.
+
+`cost_usd` is 0.0, the tokens are Ollama's counts, `effort` is `n/a`. Unreachable Ollama or an
+unusable reply raises `LocalAnswerError`, which the web app reports without charging the budget
+and without the Ollama host name. Temperature is 0; the context window is
+`IKG_LOCAL_ANSWER_CONTEXT` (16K tokens; eight passages need about 4K). An answer takes tens of
+seconds on a laptop and holds a server thread meanwhile, so the hourly Ask limit matters more.
+
 ## 7. Knowledge graph (`graph.py`)
 
 ### 7.1 Co-occurrence graph

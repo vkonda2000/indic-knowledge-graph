@@ -31,8 +31,8 @@ flowchart LR
 | Dependency | Used for | Needed for |
 |---|---|---|
 | Project Gutenberg | Downloading bundled and admin-added texts | `fetch` and `build` only. Once files are in `data/raw/`, no network is needed |
-| Claude API (`ANTHROPIC_API_KEY`) | Cited answers | Ask mode, `ikg ask`, `ikg eval --llm` |
-| Ollama (local) | Relevance screening of uploads | Contributor and admin uploads, unless `IKG_SCREEN=off` |
+| Claude API (`ANTHROPIC_API_KEY`) | Cited answers | Ask mode, `ikg ask`, `ikg eval --llm`, unless `IKG_ANSWER_MODEL` is `ollama:<model>` |
+| Ollama (local) | Relevance screening of uploads; cited answers when `IKG_ANSWER_MODEL=ollama:<model>` | Uploads unless `IKG_SCREEN=off`; Ask, `ikg ask`, `ikg eval --llm` with a local model |
 | jsDelivr | Cytoscape library for the graph page | `/graph` in the browser |
 
 ## 2. Components
@@ -307,6 +307,7 @@ and are not part of the system until they appear in this table.
 | Vector store (optional) | Exact search over the matrix (`FileVectorStore`, default), or Postgres 17 with pgvector 0.8.1 and an HNSW index (`PgVectorStore`) through psycopg 3 | psycopg ≥ 3.2, pgvector (Python) ≥ 0.4; image `pgvector/pgvector:0.8.1-pg17` | `vectorstore.py`, `compose.yaml` | `[pg]` extra. Work and kind filters run inside the store (iterative HNSW scans). `ikg vectors compare` measures recall against exact search. Not used by search yet (A3) |
 | Knowledge graph | networkx co-occurrence graph, saved as GraphML | networkx ≥ 3.0 | `graph.py` | Not a graph database |
 | Ontology and linked data | OWL ontology in Turtle; RDF export and SPARQL with rdflib | rdflib ≥ 7.0 | `ontology/ikg.ttl`, `graph.to_rdf`, `ikg sparql` | Namespace is the placeholder `https://example.org/ikg#` (L13) |
+| Answer generation (local, optional) | A model served by Ollama, e.g. `qwen3.5:9B`, with a JSON-schema reply; citations verified in code by quote matching | `IKG_ANSWER_MODEL=ollama:<model>` | `localqa.py` | No API key or cost; see docs/03 §6.1 and the eval comparison in docs/06 §1 |
 | Answer generation | Claude API through the `anthropic` SDK, native document citations | `claude-haiku-5-5` at effort `low` by default (D13); configurable | `qa.py`, `config.py` | Needs `ANTHROPIC_API_KEY`; the only paid call. Cost estimated per answer from `config.PRICES` |
 | Upload screening | Ollama (local) over HTTP | default model `qwen3.5:9B` | `screen.py` | Runs on the host; uploads are rejected if Ollama is unreachable |
 | Web app | FastAPI, served by uvicorn; Jinja2 templates; python-multipart for forms | FastAPI ≥ 0.110, uvicorn ≥ 0.29, Jinja2 ≥ 3.1 | `web/app.py`, `web/templates/` | `[web]` extra. Sessions, rate limits and the build job live in process memory |

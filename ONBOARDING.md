@@ -50,7 +50,8 @@ ikg serve                              # open http://127.0.0.1:8000
 **Local model (optional on day 1).** Uploads are checked by a local model through
 [Ollama](https://ollama.com). Install it and run `ollama pull qwen3.5:9B` (6.6 GB; use
 `qwen3.5:4B` on a smaller GPU and set `IKG_SCREEN_MODEL` in `.env`). Without Ollama, set
-`IKG_SCREEN=off` in `.env`.
+`IKG_SCREEN=off` in `.env`. The same model can answer questions without an API key:
+`ikg ask "..." --model ollama:qwen3.5:9B` (docs/03 §6.1).
 
 **Check it works:**
 - Search: `ikg search "How did Karna die?"`
