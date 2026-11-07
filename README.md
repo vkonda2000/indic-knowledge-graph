@@ -179,6 +179,14 @@ extra first (`pip install -e ".[mcp]"`, Python 3.11+).
 The resource `ikg://ontology` serves the ontology for writing SPARQL. Every tool output has a JSON schema,
 and every call is logged to `data/mcp-calls.jsonl` with the caller, tool and cost.
 
+**As a Claude Code plugin**, with the `ikg-scholar` skill that teaches Claude to cite passage ids and
+translators, search across works and abstain ([integrations/](integrations/README.md)):
+
+```
+/plugin marketplace add vkonda2000/indic-knowledge-graph
+/plugin install indic-knowledge-graph@indic-knowledge-graph    # asks for the server URL and token
+```
+
 **Local (stdio)**, for Claude Code, Claude Desktop or any MCP client that launches a command:
 
 ```bash
@@ -204,9 +212,8 @@ IKG_MCP_TOKEN=<16+ random characters> ikg mcp --http --port 8001
 docker compose --profile mcp up -d mcp     # http://127.0.0.1:8001/mcp
 ```
 
-Clients send `Authorization: Bearer <token>`. `ikg_ask`'s budget and hourly limit are per server, shared
-by every client of one token. Packaging as Claude, ChatGPT and Microsoft 365 Copilot
-plugins, which needs a public HTTPS address, is the next step ([docs/08 B2–B4](docs/08-agentic-extension.md)).
+The claude.ai connector, a ChatGPT custom GPT and a Microsoft 365 Copilot agent, which need a public
+HTTPS address, are next ([docs/08 B2–B4](docs/08-agentic-extension.md)).
 
 ## Roadmap: the agentic extension
 
@@ -219,7 +226,8 @@ and an agent, one measured pull request at a time.
 | — | Cited answers from a local model (Ollama), citations checked in code | Done |
 | B1 | MCP server: search, passages, entities, SPARQL and answers as tools; stdio and HTTP with a token | Done |
 | E (local) | Docker image and compose stack (app, Postgres, MCP) | Done; public hosting and a runbook next |
-| B2–B4 | The same backend as a Claude connector and skill, a ChatGPT custom GPT, and a Microsoft 365 Copilot declarative agent | Next |
+| B2 | Claude: a Claude Code plugin (the MCP server and the `ikg-scholar` skill) and a plugin marketplace; the skill tested on three questions over stdio ([integrations/](integrations/README.md)) | Done; an installed-plugin run over HTTP and the claude.ai connector (needs hosting) remain |
+| B3–B4 | The same backend as a ChatGPT custom GPT and a Microsoft 365 Copilot declarative agent | Next |
 | C1–C3 | A LangGraph agent that plans, gathers evidence through the MCP tools, drafts, and verifies every citation; curator approval before a claim enters the graph; an LLM-judge evaluation with calibration; versioned prompts | Planned |
 | D | A regulation corpus (31 CFR Chapter X), to show the design carries to compliance text | Optional |
 

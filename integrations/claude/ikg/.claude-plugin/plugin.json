@@ -1,0 +1,26 @@
+{
+  "name": "indic-knowledge-graph",
+  "version": "0.1.0",
+  "description": "Cited answers about the Upanishads, Mahabharata, Ramayana and Vishnu Purana: the IKG MCP server (search, passages, entities, SPARQL, cited answers) and the ikg-scholar skill for using it with traceable citations",
+  "author": {
+    "name": "Vijay Konda"
+  },
+  "repository": "https://github.com/vkonda2000/indic-knowledge-graph",
+  "keywords": ["sanskrit", "upanishads", "mahabharata", "ramayana", "puranas", "knowledge-graph", "citations", "rag"],
+  "userConfig": {
+    "mcp_url": {
+      "type": "string",
+      "title": "IKG MCP server URL",
+      "description": "Streamable HTTP endpoint of an IKG MCP server (`ikg mcp --http`, or `docker compose --profile mcp up -d mcp`). Use https:// for anything but a loopback address: the token is sent with every request",
+      "default": "http://127.0.0.1:8001/mcp",
+      "required": true
+    },
+    "mcp_token": {
+      "type": "string",
+      "title": "IKG MCP token",
+      "description": "The server's IKG_MCP_TOKEN, sent as a Bearer token",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}

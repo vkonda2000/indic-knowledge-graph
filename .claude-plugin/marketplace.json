@@ -1,0 +1,16 @@
+{
+  "name": "indic-knowledge-graph",
+  "owner": {
+    "name": "Vijay Konda"
+  },
+  "plugins": [
+    {
+      "name": "indic-knowledge-graph",
+      "source": "./integrations/claude/ikg",
+      "description": "Cited answers about the Upanishads, Mahabharata, Ramayana and Vishnu Purana through the IKG MCP server, with the ikg-scholar skill"
+    }
+  ],
+  "metadata": {
+    "description": "The Indic Knowledge Graph plugin: cited answers about classical Indian texts through its MCP server"
+  }
+}

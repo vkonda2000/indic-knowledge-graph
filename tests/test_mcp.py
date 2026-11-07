@@ -46,6 +46,9 @@ def test_tools_describe_themselves(server):
         assert t.annotations.read_only_hint and not t.annotations.destructive_hint
     search = next(t for t in tools if t.name == "ikg_search_passages")
     assert "commentary" in search.description and "primary" in search.description
+    assert "once per work" in search.description  # clients without the skill still see this rule
+    from ikg.mcp_server import INSTRUCTIONS
+    assert "passage_id" in INSTRUCTIONS and "once per work" in INSTRUCTIONS
     assert "ikg:Concept" in ontology
 
 

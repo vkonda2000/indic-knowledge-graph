@@ -232,6 +232,7 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 - [x] **Vector store** behind one interface: exact search over the matrix, or Postgres + pgvector with an HNSW index, filters by work and kind inside the store, recall measured with `ikg vectors compare` and tested in CI against a pgvector container; hybrid search uses it (docs/08 A2) (T14)
 - [x] **Hybrid retrieval is the default**: BM25 and dense (`bge-small-en-v1.5`) fused by reciprocal rank fusion; hit@1 0.282 → 0.408, hit@8 0.620 → 0.634, MRR 0.423 → 0.476; CI gates it with cached vectors (docs/08 A3, §1)
 - [x] **MCP server** (`ikg mcp`): search, passages, entities, read-only SPARQL and cited answers as tools with JSON-schema outputs; stdio, and Streamable HTTP with a bearer token; budgeted and rate-limited `ikg_ask`; a call log (docs/08 B1)
+- [x] **Claude Code plugin** (`integrations/claude/ikg`): the MCP server and the `ikg-scholar` skill, installable from this repository's plugin marketplace; the skill answered three test questions with the expected citations over stdio; an installed-plugin run over HTTP remains (docs/08 B2)
 - [x] **Cited answers from a local model** through Ollama, with citations checked in code by quote matching (docs/03 §6.1)
 - [x] **Independent review practice**: each PR is reviewed by a Fable subagent (`.claude/agents/fable-reviewer.md`) and the findings are summarised in the PR
 
