@@ -1,12 +1,14 @@
 {
   "description": "Offline retrieval baseline enforced by CI (ikg eval --check). Every key under metrics must not get worse; item counts must not shrink. Since 2026-10-23 expectations are section- or verse-level and only primary text (verse, narrative) counts as a hit; before, they were book-level and gave hit@1 0.625 / hit@k 0.958. Update it in the same PR as any change that legitimately moves these numbers, and say why in the PR.",
-  "recorded": "2026-10-23",
+  "recorded": "2026-11-07",
+  "retriever": "hybrid",
+  "previous": "BM25 alone, 2026-10-23: hit@1 0.282, hit@k 0.62, MRR 0.423. Hybrid (BM25 + bge-small-en-v1.5 dense, reciprocal rank fusion) beat it on hit@k and MRR and became the default (docs/08 A3, docs/06 §1). CI builds with --embed and reuses cached vectors.",
   "k": 8,
   "metrics": {
     "n_retrieval": 71,
     "n_adversarial": 15,
-    "retrieval_hit_at_1": 0.282,
-    "retrieval_hit_at_k": 0.62,
-    "retrieval_mrr": 0.423
+    "retrieval_hit_at_1": 0.408,
+    "retrieval_hit_at_k": 0.634,
+    "retrieval_mrr": 0.476
   }
 }

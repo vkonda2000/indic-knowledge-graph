@@ -23,6 +23,7 @@ only when embeddings are used.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from importlib import metadata
 from pathlib import Path
@@ -38,6 +39,12 @@ if TYPE_CHECKING:
     from ikg.segment import Passage
 
 BATCH_SIZE = 64
+# Instructions some models expect before a query (not before passages). fastembed does not add them.
+QUERY_PREFIXES = {
+    "BAAI/bge-small-en-v1.5": "Represent this sentence for searching relevant passages: ",
+    "BAAI/bge-base-en-v1.5": "Represent this sentence for searching relevant passages: ",
+    "BAAI/bge-large-en-v1.5": "Represent this sentence for searching relevant passages: ",
+}
 OLLAMA_PREFIX = "ollama:"
 OLLAMA_TIMEOUT = 300.0  # per batch; the first call loads the model
 
@@ -145,6 +152,48 @@ def embed_passages(passages: list["Passage"], embedder: Embedder,
     return (matrix / norms).astype(np.float32)
 
 
+def embed_query(text: str, embedder: Embedder) -> "np.ndarray":
+    """One normalised query vector, with the model's query instruction if it has one. Use the
+    embedder the build used (the manifest's `embedding.model`): vectors from two models don't mix."""
+    np = _numpy()
+    rows = embedder.embed([QUERY_PREFIXES.get(embedder.name, "") + text])
+    if rows.ndim != 2 or rows.shape[0] != 1:
+        raise EmbedError(f"{embedder.name} returned shape {rows.shape} for one query")
+    v = rows[0].astype(np.float32)
+    norm = float(np.linalg.norm(v))
+    if not np.isfinite(norm) or norm == 0:
+        raise EmbedError(f"{embedder.name} returned an unusable query vector")
+    return v / norm
+
+
+def texts_sha256(passages: list["Passage"]) -> str:
+    """What the vectors depend on: every passage's id and embedded text, in order."""
+    h = hashlib.sha256()
+    for p in passages:
+        h.update(f"{p.id}\t{passage_text(p)}\n".encode("utf-8"))
+    return h.hexdigest()
+
+
+def reusable_embeddings(passages: list["Passage"], embedder: Embedder, vectors_path: Path,
+                        meta_path: Path) -> "np.ndarray | None":
+    """The vectors already on disk, if they were made by this model and library version from exactly
+    these passage texts, and the file is the one its metadata describes; otherwise None. A full
+    re-embedding takes minutes, so a rebuild that changes no passage text (a gazetteer edit, CI with
+    cached vectors) reuses them."""
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        if (meta.get("model"), meta.get("library")) != (embedder.name, embedder.library):
+            return None
+        if meta.get("texts_sha256") != texts_sha256(passages):
+            return None
+        if hashlib.sha256(vectors_path.read_bytes()).hexdigest() != meta.get("matrix_sha256"):
+            return None
+        matrix, _ = read_embeddings(vectors_path, meta_path, [p.id for p in passages])
+        return matrix
+    except (OSError, ValueError, KeyError):
+        return None
+
+
 def write_embeddings(matrix: "np.ndarray", passages: list["Passage"], embedder: Embedder,
                      vectors_path: Path, meta_path: Path) -> dict:
     """Write the matrix and its metadata; return the summary the manifest records."""
@@ -153,7 +202,9 @@ def write_embeddings(matrix: "np.ndarray", passages: list["Passage"], embedder: 
         np.save(f, matrix, allow_pickle=False)
     summary = {"model": embedder.name, "library": embedder.library, "dim": int(matrix.shape[1]),
                "normalized": True, "text": "passage text"}
-    meta = {**summary, "ids": [p.id for p in passages]}
+    meta = {**summary, "texts_sha256": texts_sha256(passages),
+            "matrix_sha256": hashlib.sha256(vectors_path.read_bytes()).hexdigest(),
+            "ids": [p.id for p in passages]}
     meta_path.write_text(json.dumps(meta, ensure_ascii=False) + "\n", encoding="utf-8")
     return summary
 

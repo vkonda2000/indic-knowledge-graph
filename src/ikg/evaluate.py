@@ -51,13 +51,15 @@ def _answers(passage, prefixes: list[str]) -> bool:
 
 def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False,
         graph=None, out_dir: Path | None = None, expand: bool = True,
-        model: str | None = None, effort: str | None = None) -> dict:
+        model: str | None = None, effort: str | None = None, retrieval: dict | None = None) -> dict:
     """``expand=False`` disables gazetteer query expansion and entity boosting (ablation).
-    ``model``/``effort`` choose the answering model for ``llm`` runs (default: config)."""
+    ``model``/``effort`` choose the answering model for ``llm`` runs (default: config).
+    ``retrieval`` is retrieve.search's ``mode``/``dense`` (default: BM25)."""
+    retrieval = retrieval or {"mode": "bm25"}
     rows = []
     for item in items:
         hits = search(index, gazetteer, item.question, k=k, works=item.works,
-                      passage_entities=passage_entities if expand else None, expand=expand)
+                      passage_entities=passage_entities if expand else None, expand=expand, **retrieval)
         row = {"id": item.id, "type": item.type,
                "retrieved": [h.passage.id for h in hits]}
         if item.type == "retrieval":
@@ -68,7 +70,8 @@ def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False
         if llm:
             from ikg.qa import ask
             ans = ask(item.question, index, gazetteer, graph=graph,
-                      passage_entities=passage_entities, k=k, works=item.works, model=model, effort=effort)
+                      passage_entities=passage_entities, k=k, works=item.works, model=model, effort=effort,
+                      retrieval=retrieval)
             cited = [c.passage_id for c in ans.citations]
             row.update(answer=ans.text, cited=cited, abstained=ans.abstained, refused=ans.refused,
                        truncated=ans.truncated, model=ans.model, effort=ans.effort,
@@ -84,6 +87,7 @@ def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False
         rows.append(row)
 
     summary = summarize(rows)
+    summary["retriever"] = retrieval["mode"]
     if out_dir:
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")

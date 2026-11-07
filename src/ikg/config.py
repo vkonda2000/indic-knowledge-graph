@@ -80,6 +80,12 @@ EMBED_MODEL = os.environ.get("IKG_EMBED_MODEL", "BAAI/bge-small-en-v1.5")  # or 
 # Where nearest-passage search runs (ikg.vectorstore; docs/08 A2): "file" (exact, in memory) or a
 # postgresql:// URL with pgvector (`docker compose up db`), which is synced from the build on first use.
 VECTOR_STORE = os.environ.get("IKG_VECTOR_STORE", "file")
+# Retrieval mode for search, Ask and eval (ikg.retrieve; docs/08 A3): bm25, dense or hybrid. Hybrid is
+# the default because it beat BM25 on hit@8 and MRR (docs/06 §1). Dense and hybrid need a build with
+# embeddings (`ikg build --embed`); without one the default falls back to bm25.
+RETRIEVER = os.environ.get("IKG_RETRIEVER", "hybrid")
+if RETRIEVER not in ("bm25", "dense", "hybrid"):  # retrieve.MODES
+    raise ValueError(f"IKG_RETRIEVER must be bm25, dense or hybrid, not {RETRIEVER!r}")
 
 # Local model (Ollama) that screens uploads for relevance; see ikg.screen.
 SCREEN_ENABLED = os.environ.get("IKG_SCREEN", "on").lower() not in ("off", "0", "false", "no")

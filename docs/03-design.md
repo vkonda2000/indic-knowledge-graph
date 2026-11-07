@@ -157,6 +157,40 @@ passages this takes milliseconds.
 
 `expand=False` turns off steps 2 and 4. `ikg eval --no-expand` uses it for the ablation.
 
+### 5.3 Dense and hybrid retrieval (docs/08 A3)
+
+`search(..., mode=...)` takes `bm25` (above), `dense` or `hybrid`; the default is `IKG_RETRIEVER`,
+`hybrid`, and it falls back to `bm25` when the build has no embeddings. An explicit `--mode` that
+can't be served is an error rather than a silent fallback.
+
+- **Query embedding** (`embed.embed_query`): the question is embedded with the model the build
+  used (the manifest's `embedding.model`, loaded on first use), with that model's query
+  instruction (`QUERY_PREFIXES`; for BGE, "Represent this sentence for searching relevant
+  passages: "), and normalised. Without the instruction hybrid's hit@8 is the same and its MRR
+  0.013 lower.
+- **Dense:** the vector store's nearest `k` passages (`vectorstore`), with the work and kind
+  filters applied in the store. No expansion, no entity boost.
+- **Hybrid:** the BM25 ranking (with expansion, filtered, *before* the entity boost) and the dense
+  ranking, top `CANDIDATES = 50` of each, fused by reciprocal rank fusion:
+  `score = Σ 1 / (RRF_K + rank)` with `RRF_K = 60`. Then the entity boost is applied to the fused
+  score (`ENTITY_BOOST · top · |matched entities|`). Ties go to the earlier passage.
+
+Fusion uses ranks, not scores, so BM25's unbounded scores and cosine similarities need no
+calibration. A passage high in both lists beats one that tops only one.
+
+**In the web app.** The query model and the vector store are loaded when a build is loaded (startup,
+after a Rebuild), not on a visitor's first search. If that fails, or dense search fails later, the
+site serves BM25 with a notice ("keyword (BM25) results"), `/api/search` reports `"retriever": "bm25"`,
+and the next build that loads tries again. An explicit mode in the CLI (`--mode hybrid`) exits with
+the reason instead. A vector store loaded from another build may return ids this build lacks; they
+are skipped. Hybrid scores are fused rank scores (about 0.02–0.04), not BM25 scores.
+
+**Reusing vectors.** `embeddings.json` records `texts_sha256` (every passage's ID and text, in
+order) and `matrix_sha256`. A build with `--embed` reuses the previous vectors when the model,
+the library version and `texts_sha256` match and the file is intact, so a rebuild that changes
+no passage text (a gazetteer edit, an admin Rebuild, CI with cached vectors) takes seconds
+instead of minutes.
+
 ## 6. Cited question answering (`qa.py`)
 
 1. Retrieve the top `k` passages (§5) and detect the entities in the question.
@@ -327,7 +361,9 @@ including two prompt-injection attempts.
   - *Rate limit.* `RateLimiter` keeps a one-hour sliding window per client IP for non-admins,
     and forgets clients idle for an hour so memory stays bounded.
 
-  Search is not limited: it never calls a model. `/api/ask` runs the Claude call in a worker
+  Search is not rate-limited: it never calls a generative model, only the local embedding model
+  for the query (milliseconds on the CPU). If that model or the vector store fails, search and Ask
+  fall back to BM25 and the page says so, until the next build loads. `/api/ask` runs the Claude call in a worker
   thread so it does not block other requests.
 - **Bounds.** `k` is clamped to 1–20 for Ask and 1–50 for search. Uploads are read in 1 MB
   chunks and stop at 20 MB. Contributor text fields are truncated (title 200, notes 2000).
