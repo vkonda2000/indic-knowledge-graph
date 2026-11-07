@@ -201,7 +201,8 @@ Kanda 55). Hybrid needs a build with embeddings (`pip install -e ".[embed]"`, `i
 without one, search falls back to BM25.
 Computing the embeddings takes about 10 minutes on a laptop. To skip that, take the published ones
 (the build checks they match your passages and model, and re-embeds if not):
-`gh release download embeddings-bge-small-en-v1.5 --dir data/processed --pattern 'embeddings.*'`, then `ikg build --embed`.
+`gh release download embeddings-bge-small-en-v1.5 --dir data/processed --pattern 'embeddings.*' --clobber`,
+then `ikg build --embed`. (They were made with the fastembed version the `[embed]` extra pins.)
 
 What this shows so far:
 

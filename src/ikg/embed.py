@@ -189,9 +189,14 @@ def reusable_embeddings(passages: list["Passage"], embedder: Embedder, vectors_p
         if hashlib.sha256(vectors_path.read_bytes()).hexdigest() != meta.get("matrix_sha256"):
             return None
         matrix, _ = read_embeddings(vectors_path, meta_path, [p.id for p in passages])
-        return matrix
     except (OSError, ValueError, KeyError):
         return None
+    np = _numpy()
+    # The same checks as freshly computed vectors: a hand-made file must not slip through.
+    if (matrix.dtype != np.float32 or not np.all(np.isfinite(matrix))
+            or not np.allclose(np.linalg.norm(matrix, axis=1), 1.0, atol=1e-3)):
+        return None
+    return matrix
 
 
 def write_embeddings(matrix: "np.ndarray", passages: list["Passage"], embedder: Embedder,

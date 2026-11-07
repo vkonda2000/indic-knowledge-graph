@@ -226,3 +226,21 @@ def test_eval_check_passes_with_a_matching_retriever(corpus, capsys, monkeypatch
     baseline.write_text(json.dumps({"k": 8, "retriever": "bm25", "metrics": {"n_retrieval": 1}}), encoding="utf-8")
     cli.main(["eval", "--retriever", "bm25", "--check", str(baseline)])
     assert "No regression" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("damage", ["float64", "not normalised", "nan"])
+def test_reuse_refuses_vectors_that_fresh_ones_would_never_be(corpus, damage):  # noqa: F811
+    _build(corpus, embedder=FakeEmbedder())
+    meta = json.loads(config.EMBEDDINGS_META_FILE.read_text(encoding="utf-8"))
+    with config.EMBEDDINGS_FILE.open("rb") as f:
+        matrix = np.load(f)
+    matrix = {"float64": matrix.astype(np.float64), "not normalised": matrix * 2,
+              "nan": np.where(np.arange(matrix.size).reshape(matrix.shape) == 0, np.nan, matrix)}[damage]
+    with config.EMBEDDINGS_FILE.open("wb") as f:
+        np.save(f, matrix)
+    import hashlib
+    meta["matrix_sha256"] = hashlib.sha256(config.EMBEDDINGS_FILE.read_bytes()).hexdigest()  # a consistent fake
+    config.EMBEDDINGS_META_FILE.write_text(json.dumps(meta), encoding="utf-8")
+    fake = FakeEmbedder()
+    _build(corpus, embedder=fake)
+    assert fake.seen  # recomputed, not reused

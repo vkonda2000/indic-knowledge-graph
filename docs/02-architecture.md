@@ -254,6 +254,13 @@ request and on pushes to `main`:
 | `pgvector` | The vector store tests (`tests/test_vectorstore.py`) against a `pgvector/pgvector:0.8.1-pg17` service container, including recall against exact search | Any of them fails |
 | `eval-gate` | Takes the bundled texts from the `pinned-sources-v1` release of this repository, not gutenberg.org, and verifies their checksums (cached on `sources.yaml`; if the release or an asset is missing, this step fails on a cache miss), runs `ikg build --embed` (vectors from the CI cache, else the `embeddings-bge-small-en-v1.5` seed release, else computed: over 45 minutes on the 2-core runner), then `ikg eval --check eval/baseline.json` against the hybrid baseline | An offline retrieval metric falls below the committed baseline |
 
+**Refreshing the seed embeddings.** The `embeddings-bge-small-en-v1.5` release holds the vectors for the
+current pinned texts. When passage texts change (a new or re-pinned source, a segmentation change) or the
+fastembed pin moves, rebuild with `ikg build --embed` using the pinned `[embed]` extra, then
+`gh release upload embeddings-bge-small-en-v1.5 data/processed/embeddings.npy data/processed/embeddings.json --clobber`,
+in the same PR. A stale seed is never used (the build checks it), but CI then embeds everything itself,
+which takes over 45 minutes.
+
 The gate covers offline retrieval metrics only. Answer-level metrics (`--llm`) call the Claude
 API and are not run in CI.
 
@@ -306,7 +313,7 @@ and are not part of the system until they appear in this table.
 | Uploads | `.txt`, `.md`, `.pdf` (text layer via pypdf) | pypdf ≥ 6.0 (core dependency: the build reads PDFs too) | `sources.py`, `segment.parse_generic`, `pdftext.py` | PDFs read in a child process with time and page limits. No OCR, EPUB or DOCX yet |
 | Segmentation and entity extraction | Python `re`, curated YAML gazetteer (PyYAML) | PyYAML ≥ 6.0 | `segment.py`, `entities.py`, `normalize.py` | Deterministic; no NLP or NER library |
 | Retrieval | Hybrid by default: BM25 implemented in the project (k1 = 1.5, b = 0.75, a pickle) fused with dense search over the vector store by reciprocal rank fusion (k = 60, top 50 each) | none (no search library) | `retrieve.py`, `pipeline.Runtime.dense` | Gazetteer expansion and entity boost; BM25 alone when the build has no embeddings (D15, docs/03 §5.3) |
-| Embeddings (optional) | fastembed (ONNX Runtime, CPU) with `BAAI/bge-small-en-v1.5`, 384 dimensions; numpy for the matrix; or Ollama | fastembed ≥ 0.4, numpy ≥ 1.24 | `embed.py`, `pipeline.py` | `[embed]` extra; only with `ikg build --embed`. Written at build time and reused while texts are unchanged; queries are embedded with the same model (D15) |
+| Embeddings (optional) | fastembed (ONNX Runtime, CPU) with `BAAI/bge-small-en-v1.5`, 384 dimensions; numpy for the matrix; or Ollama | fastembed 0.9.1 (pinned: reused vectors must come from the same version), numpy ≥ 1.24 | `embed.py`, `pipeline.py` | `[embed]` extra; only with `ikg build --embed`. Written at build time and reused while texts are unchanged; queries are embedded with the same model (D15) |
 | Vector store (optional) | Exact search over the matrix (`FileVectorStore`, default), or Postgres 17 with pgvector 0.8.1 and an HNSW index (`PgVectorStore`) through psycopg 3 | psycopg ≥ 3.2, pgvector (Python) ≥ 0.4; image `pgvector/pgvector:0.8.1-pg17` | `vectorstore.py`, `compose.yaml` | `[pg]` extra. Work and kind filters run inside the store (iterative HNSW scans). `ikg vectors compare` measures recall against exact search. Serves the dense half of hybrid search (D15) |
 | Knowledge graph | networkx co-occurrence graph, saved as GraphML | networkx ≥ 3.0 | `graph.py` | Not a graph database |
 | Ontology and linked data | OWL ontology in Turtle; RDF export and SPARQL with rdflib | rdflib ≥ 7.0 | `ontology/ikg.ttl`, `graph.to_rdf`, `ikg sparql` | Namespace is the placeholder `https://example.org/ikg#` (L13) |
