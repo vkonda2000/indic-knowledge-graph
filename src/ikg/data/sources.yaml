@@ -9,6 +9,9 @@
 # To add a work: add an entry here and a parser in ikg/segment.py (keyed by `parser`).
 # Each Gutenberg file is pinned by `sha256`: `ikg fetch` and `ikg build` refuse a file whose
 # contents differ, so a re-edited upstream text can't silently change passages or eval results.
+# Every pinned file must also be an asset of the `pinned-sources-v1` GitHub release, which CI and
+# new clones download from (Gutenberg re-issues texts in place). When you add or repin a file,
+# upload it there (`gh release upload pinned-sources-v1 data/raw/pg<n>.txt`).
 
 works:
   - id: upanishads

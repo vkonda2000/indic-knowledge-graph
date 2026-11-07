@@ -234,7 +234,7 @@ request and on pushes to `main`:
 | Job | What it does | Fails when |
 |---|---|---|
 | `tests` | `pytest` on Python 3.10 and 3.12; no network or API key | Any test fails |
-| `eval-gate` | Fetches the bundled Gutenberg texts and verifies their checksums (cached on `sources.yaml`), runs `ikg build`, then `ikg eval --check eval/baseline.json` | An offline retrieval metric falls below the committed baseline |
+| `eval-gate` | Takes the bundled texts from the `pinned-sources-v1` release of this repository, not gutenberg.org, and verifies their checksums (cached on `sources.yaml`; if the release or an asset is missing, this step fails on a cache miss), runs `ikg build`, then `ikg eval --check eval/baseline.json` | An offline retrieval metric falls below the committed baseline |
 
 The gate covers offline retrieval metrics only. Answer-level metrics (`--llm`) call the Claude
 API and are not run in CI.
@@ -283,7 +283,7 @@ and are not part of the system until they appear in this table.
 |---|---|---|---|---|
 | Language | Python | 3.10+ (CI tests 3.10 and 3.12) | everywhere | Packaged with setuptools (`pyproject.toml`), console script `ikg` |
 | Configuration | python-dotenv | ≥ 1.0 | `cli.py`, `config.py` | `.env` loaded from the working directory upwards; shell variables take precedence |
-| Source texts | Project Gutenberg plain text, fetched with `requests` | ≥ 2.31 | `sources.py`, `sources.yaml` | Seven files, about 18 MB, each pinned by SHA-256; network needed only for `fetch`/`build` |
+| Source texts | Project Gutenberg plain text, fetched with `requests` | ≥ 2.31 | `sources.py`, `sources.yaml` | Seven files, about 18 MB, each pinned by SHA-256; network needed only for `fetch`/`build`. Gutenberg re-issues texts in place, so exact pinned copies are kept as assets of the `pinned-sources-v1` release, which CI uses |
 | Uploads | `.txt`, `.md`, `.pdf` (text layer via pypdf) | pypdf ≥ 6.0 (core dependency: the build reads PDFs too) | `sources.py`, `segment.parse_generic`, `pdftext.py` | PDFs read in a child process with time and page limits. No OCR, EPUB or DOCX yet |
 | Segmentation and entity extraction | Python `re`, curated YAML gazetteer (PyYAML) | PyYAML ≥ 6.0 | `segment.py`, `entities.py`, `normalize.py` | Deterministic; no NLP or NER library |
 | Retrieval | BM25 implemented in the project (k1 = 1.5, b = 0.75), stored as a pickle | none (no search library) | `retrieve.py` | Gazetteer query expansion and entity boost; no vector store yet |

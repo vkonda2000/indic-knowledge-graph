@@ -1,6 +1,7 @@
 # Runs on every pull request and on pushes to main.
 #   tests     - pytest on the oldest and newest supported Python (no network, no API key)
-#   eval-gate - builds the full corpus and fails if offline retrieval metrics drop below
+#   eval-gate - takes the pinned source texts from the pinned-sources-v1 release (not gutenberg.org),
+#               builds the full corpus and fails if offline retrieval metrics drop below
 #               eval/baseline.json (see docs/06-roadmap.md, Phase 0)
 name: CI
 
@@ -50,6 +51,13 @@ jobs:
         with:
           path: data/raw
           key: gutenberg-${{ hashFiles('src/ikg/data/sources.yaml') }}
+      # Gutenberg re-issues texts in place (pg15474 and pg15475 changed in November 2026), and a
+      # changed text changes frozen passage IDs (D11). So on a cache miss, take the exact pinned
+      # copies from this repo's release instead; `ikg fetch` then verifies each one against its pin.
+      - if: steps.raw-cache.outputs.cache-hit != 'true'
+        run: gh release download pinned-sources-v1 --dir data/raw --pattern 'pg*.txt'
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: ikg fetch
       - if: steps.raw-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
