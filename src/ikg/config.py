@@ -73,6 +73,9 @@ ANSWER_CACHE_SIZE = int(os.environ.get("IKG_ANSWER_CACHE_SIZE", "1000"))
 # to beat BM25 on the eval (docs/08 A3). `ikg build --embed` / `--no-embed` overrides IKG_EMBED.
 EMBED = os.environ.get("IKG_EMBED", "off").lower() in ("on", "1", "true", "yes")
 EMBED_MODEL = os.environ.get("IKG_EMBED_MODEL", "BAAI/bge-small-en-v1.5")  # or "ollama:<model>"
+# Where nearest-passage search runs (ikg.vectorstore; docs/08 A2): "file" (exact, in memory) or a
+# postgresql:// URL with pgvector (`docker compose up db`), which is synced from the build on first use.
+VECTOR_STORE = os.environ.get("IKG_VECTOR_STORE", "file")
 
 # Local model (Ollama) that screens uploads for relevance; see ikg.screen.
 SCREEN_ENABLED = os.environ.get("IKG_SCREEN", "on").lower() not in ("off", "0", "false", "no")

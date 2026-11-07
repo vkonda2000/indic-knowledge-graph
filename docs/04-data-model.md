@@ -106,6 +106,13 @@ All paths are under `IKG_DATA` (default `data/`) unless noted.
 | `reports/corpus-analysis.md` | Markdown | `analyze` | people | yes |
 | `eval/results/run-*.json` | JSON | `eval` | people | no |
 
+**Postgres (optional vector store, docs/08 A2).** With `IKG_VECTOR_STORE=postgresql://...`,
+`ikg_passage_vectors` holds one row per passage (`row_id` in build order, `passage_id`, `work`, `kind`,
+`embedding vector(dim)`, 384 for the default model, HNSW index on inner product, B-tree indexes on `work` and `kind`), and
+`ikg_vector_build` one row with the `sha256` of the `embeddings.npy` it was loaded from, the `model`,
+`dim` and `rows`. Both are a copy of the build, never a source: they are dropped and reloaded when the
+checksum differs.
+
 `bm25.pkl` is a pickle. Only load files this application wrote itself; never accept one from
 elsewhere.
 

@@ -9,9 +9,11 @@ from ikg.sources import Work
 
 @pytest.fixture(autouse=True)
 def _no_real_embeddings(tmp_path, monkeypatch):
-    """Whatever IKG_EMBED says in the shell or .env, tests never load an embedding model, and a build
+    """Whatever IKG_EMBED or IKG_VECTOR_STORE say in the shell or .env, tests never load an embedding
+    model or use a configured Postgres, and a build
     in a test never touches the developer's data/processed embeddings."""
     monkeypatch.setattr(config, "EMBED", False)
+    monkeypatch.setattr(config, "VECTOR_STORE", "file")  # never a developer's Postgres
     monkeypatch.setattr(config, "EMBEDDINGS_FILE", tmp_path / "_embeddings" / "embeddings.npy")
     monkeypatch.setattr(config, "EMBEDDINGS_META_FILE", tmp_path / "_embeddings" / "embeddings.json")
 

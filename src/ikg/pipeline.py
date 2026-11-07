@@ -29,6 +29,7 @@ from ikg.graph import build_cooccurrence, load_graph, save_graph, to_rdf
 from ikg.retrieve import BM25Index
 from ikg.segment import _SENTENCE_END_RE, ID_SCHEME, MAX_CHARS, Passage, read_passages, segment_work, write_passages
 from ikg.sources import Work, fetch, load_works
+from ikg.vectorstore import VectorStore, VectorStoreError, open_store
 
 LOCK_STALE_SECONDS = 30 * 60  # a full build takes seconds; an older lock was left by a crash
 
@@ -249,6 +250,8 @@ class Runtime:
     order: dict[str, int] = field(default_factory=dict)
     embeddings: object | None = None  # numpy (n, dim) matrix in passage order, if the build embedded
     embedding: dict | None = None     # its model, library and dimension, from the manifest
+    embeddings_sha256: str | None = None  # of embeddings.npy, from the manifest: what a vector store mirrors
+    _vector_store: VectorStore | None = field(default=None, repr=False)
 
     @classmethod
     def available(cls) -> bool:
@@ -288,7 +291,28 @@ class Runtime:
             except EmbedError as exc:  # numpy missing in this install
                 raise ValueError(f"the build has embeddings but they cannot be read: {exc}") from exc
             rt.embedding = manifest.get("embedding")
+            rt.embeddings_sha256 = manifest["artefacts"]["embeddings"]["sha256"]
         return rt
+
+    def close(self) -> None:
+        """Release what the runtime holds outside the process (a Postgres connection)."""
+        close = getattr(self._vector_store, "close", None)
+        if close:
+            close()
+
+    def vector_store(self, spec: str | None = None, log: Callable[[str], None] = print) -> VectorStore:
+        """The store for nearest-passage search (IKG_VECTOR_STORE unless `spec`), opened on first use.
+        A Postgres store is loaded with this build's vectors if it holds another build's."""
+        spec = spec or config.VECTOR_STORE
+        if spec == config.VECTOR_STORE and self._vector_store is not None:
+            return self._vector_store
+        if self.embeddings is None:
+            raise VectorStoreError("this build has no embeddings: rebuild with `ikg build --embed`")
+        store = open_store(spec, self.embeddings, self.index.passages, self.embeddings_sha256,
+                           self.embedding["model"], log)
+        if spec == config.VECTOR_STORE:
+            self._vector_store = store
+        return store
 
     def neighbour_passages(self, pid: str) -> tuple[Passage | None, Passage | None]:
         i = self.order[pid]
