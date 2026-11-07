@@ -73,6 +73,9 @@ def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False
             row.update(answer=ans.text, cited=cited, abstained=ans.abstained, refused=ans.refused,
                        truncated=ans.truncated, model=ans.model, effort=ans.effort,
                        input_tokens=ans.input_tokens, output_tokens=ans.output_tokens, cost_usd=ans.cost_usd)
+            if ans.dropped_sentences is not None:  # a local model (ikg.localqa)
+                row["dropped_sentences"] = ans.dropped_sentences
+                row["model_abstained"] = ans.model_abstained
             if item.type == "retrieval":
                 row["cites_expected"] = any(_matches(pid, item.expected) for pid in cited)
                 row["citation_precision"] = (sum(_matches(pid, item.expected) for pid in cited) / len(cited)) if cited else 0.0
@@ -93,7 +96,7 @@ def run(items, index, gazetteer, passage_entities, k: int = 8, llm: bool = False
 # Item counts (n_retrieval, n_adversarial) belong in the baseline too, so that deleting a
 # failing question does not pass the gate.
 LOWER_IS_BETTER = {"false_abstain_rate", "truncated_rate", "mean_input_tokens", "mean_output_tokens",
-                   "total_cost_usd", "mean_cost_usd"}
+                   "total_cost_usd", "mean_cost_usd", "mean_dropped_sentences"}
 
 
 def regressions(summary: dict, baseline: dict) -> list[str]:
@@ -146,4 +149,9 @@ def summarize(rows: list[dict]) -> dict:
             total_cost_usd=round(sum(costs), 4) if costs else None,
             mean_cost_usd=round(sum(costs) / len(costs), 5) if costs else None,
         )
+        dropped = [r["dropped_sentences"] for r in answered if "dropped_sentences" in r]
+        if dropped:  # local models: sentences removed because their citation could not be verified
+            summary["mean_dropped_sentences"] = round(sum(dropped) / len(dropped), 2)
+            # `abstained` also counts answers whose every sentence was dropped; this is the model alone.
+            summary["adversarial_model_abstain_rate"] = rate(adversarial, "model_abstained")
     return summary

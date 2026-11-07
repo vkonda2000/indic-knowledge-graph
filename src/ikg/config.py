@@ -35,6 +35,10 @@ EVAL_RESULTS_DIR = Path("eval") / "results"
 MODEL = os.environ.get("IKG_ANSWER_MODEL", "claude-haiku-5-5")
 EFFORT = os.environ.get("IKG_ANSWER_EFFORT", "low")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
+# A local model through Ollama answers instead when the model is "ollama:<name>" (e.g.
+# IKG_ANSWER_MODEL=ollama:qwen3.5:9B). No API cost; citations are checked in code (ikg.localqa).
+LOCAL_ANSWER_TIMEOUT = float(os.environ.get("IKG_LOCAL_ANSWER_TIMEOUT", "180"))  # seconds per answer
+LOCAL_ANSWER_CONTEXT = int(os.environ.get("IKG_LOCAL_ANSWER_CONTEXT", "16384"))  # tokens; 8 passages need ~4K
 
 # USD per million (input, output) tokens, first-party API, for cost estimates in answers and eval
 # results. Haiku 5.5 has a higher price for prompts over 100K tokens (PRICES_LONG_PROMPT).

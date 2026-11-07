@@ -59,7 +59,7 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | `ikg build` | Segment, extract, index, graph, RDF; with `--embed`, passage embeddings | `--works ID...`, `--with-passages` (passages in RDF), `--embed` / `--no-embed` (overrides `IKG_EMBED`) | raw texts; `--embed` needs the `[embed]` extra and, the first time, a network to download the model |
 | `ikg stats` | Passages per work and kind | none | built corpus |
 | `ikg search "Q"` | Ranked passages, no API call | `-k`, `--works`, `--primary-only` | built corpus |
-| `ikg ask "Q"` | Cited answer, then the model, tokens and estimated cost | `-k`, `--works`, `--primary-only`, `--show-retrieval`, `--model`, `--effort` | `ANTHROPIC_API_KEY` |
+| `ikg ask "Q"` | Cited answer, then the model, tokens and estimated cost | `-k`, `--works`, `--primary-only`, `--show-retrieval`, `--model`, `--effort` | `ANTHROPIC_API_KEY`, or Ollama with `--model ollama:<model>` |
 | `ikg analyze` | Write `reports/corpus-analysis.md` | none | built corpus |
 | `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand`, `--model`, `--effort` (with `--llm`), `--check BASELINE` (exit 1 if any baseline metric got worse; used by CI) | built corpus (+ API key with `--llm`) |
 | `ikg eval --fidelity` | SOT-fidelity benchmark: pass/fail per item and check, rates per property | `--baseline` (plain model, no retrieval), `--include-drafts`, `--judge-model`, `--model`, `--effort`, `-k`; not combinable with `--check`, `--llm`, `--no-expand` | API key; built corpus unless `--baseline`; at least one approved item |
@@ -84,8 +84,10 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_CONTRIBUTOR_TOKEN` | unset (open uploads) | Token required on `/contribute` |
 | `IKG_ASK_LIMIT` | `20` | Ask requests per hour per client IP for non-admins; `0` = admins only |
 | `ANTHROPIC_API_KEY` | none | Claude API key for Ask |
-| `IKG_ANSWER_MODEL` | `claude-haiku-5-5` | Claude model for cited answers (D13) |
-| `IKG_ANSWER_EFFORT` | `low` | `low`, `medium`, `high`, `xhigh` or `max` |
+| `IKG_ANSWER_MODEL` | `claude-haiku-5-5` | Model for cited answers: a Claude model (D13), or `ollama:<model>` for a local model through Ollama, e.g. `ollama:qwen3.5:9B` (no API key or cost; citations checked in code, docs/03 §6.1) |
+| `IKG_ANSWER_EFFORT` | `low` | `low`, `medium`, `high`, `xhigh` or `max` (Claude only) |
+| `IKG_LOCAL_ANSWER_TIMEOUT` | `180` | Seconds a local model may take per answer |
+| `IKG_LOCAL_ANSWER_CONTEXT` | `16384` | Context window (tokens) requested from Ollama for local answers |
 | `IKG_ASK_BUDGET_USD` | `5` | Estimated Ask spend per UTC day, all visitors together, before Ask stops |
 | `IKG_ANSWER_CACHE_SIZE` | `1000` | Answers kept in memory for repeated questions; `0` disables the cache |
 | `IKG_JUDGE_MODEL` | `claude-opus-5-5` | Judge for `ikg eval --fidelity` |

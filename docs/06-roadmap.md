@@ -81,6 +81,27 @@ k = 4, cites_expected fell to 0.833 and false abstentions rose to 0.167, at $0.0
 k stays 8 (Phase 0 row "Send fewer passages"). Book-level hit@k can't tell whether the model
 has enough supporting passages to answer.
 
+**A local model** (`IKG_ANSWER_MODEL=ollama:qwen3.5:9B`, citations verified in code by quote
+matching, docs/03 §6.1; 2026-11-07, one run at temperature 0, $0; a few seconds a question once
+the model is loaded on this laptop's GPU, about 45 s for the first):
+
+| Items | Model | cites_expected | citation_precision | has_citations | false_abstain | adversarial_abstain (model alone) | Dropped sentences / answer |
+|---|---|---|---|---|---|---|---|
+| first 57 | Haiku 5.5 low (baseline above) | **0.660** | 0.463 | 0.787 | 0.277 | 1.0 | n/a |
+| first 57 | Qwen 3.5 9B, local | 0.617 | **0.532** | **0.851** | **0.149** | 1.0 (0.9) | 0.26 |
+| all 86 | Qwen 3.5 9B, local | 0.577 | 0.486 | 0.845 | 0.155 | 0.933 (0.8) | 0.26 |
+
+Qwen cites an expected passage a little less often than Haiku (29 vs 31 of 47), with higher
+precision, and refuses answerable questions about half as often. On the adversarial items the code
+does part of the work: the model itself declined 12 of 15; two more had every sentence removed for
+an unverifiable quote; `adv-12` (Hanuman in the Isa Upanishad) got "the provided texts do not
+mention Hanuman…" with a citation, a refusal in prose that the metric counts as an answer. 19 of 86
+answers lost at least one sentence to the quote check, and 9 lost all of them. An earlier run of
+this table cited every passage a sentence listed, verified or not, and accepted two-word quotes;
+the review caught it and these numbers are from the corrected check. Caveats: the Haiku row is
+from 2026-10-24 and was not re-run (the API key had expired), and both are single runs. Good enough
+for an offline, no-cost Ask; Haiku stays the default.
+
 The default retrieval row is committed as `eval/baseline.json`. CI rebuilds the corpus on every pull
 request and fails if either number drops ([03 §11](03-design.md#11-evaluation-evaluatepy)).
 
@@ -330,7 +351,7 @@ recorded for researchers.
 | Re-ranking | Cross-encoder or a small local model over the top 50 | `retrieve.search` |
 | **Speaker- and SOT-aware answering** | Pass speaker, SOT, thinker and debate role in each document's context; the prompt requires per-SOT attribution and separation | `qa._documents`, `SYSTEM_PROMPT` |
 | **Multi-turn** | Conversation state; rewrite each follow-up as a standalone question; retrieve per turn; citations persist across turns | `/api/ask`, `qa.py`, UI |
-| **Sentence-level citation verification** | A local model checks that each answer sentence is supported by its cited passage. Unsupported sentences are flagged or removed; the rate is a metric | new `verify.py`, `qa.ask` |
+| **Sentence-level citation verification** | A local model checks that each answer sentence is supported by its cited passage. Unsupported sentences are flagged or removed; the rate is a metric. *First step:* local-model answers already drop any sentence whose verbatim quote is not in its cited passage (`localqa.py`, `mean_dropped_sentences`); that checks provenance, not support | new `verify.py`, `qa.ask` |
 | **Knowledge-gap reporting** | Log abstentions, unsupported sentences and low-confidence retrievals. Aggregate them by concept, SOT and work into a gap report for researchers | new `gaps.py`, admin page |
 | Sanskrit input | IAST or Devanagari queries, transliterated before alias matching | `normalize.py` |
 | Provider abstraction | Claude by default; local or other models selectable to suit data governance and for comparison in evaluation | `qa.ask` |

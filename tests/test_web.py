@@ -227,6 +227,44 @@ def test_ask_failure_returns_503(client, monkeypatch):
     assert r.status_code == 503 and "no API key" in r.json()["detail"]
 
 
+
+def test_ask_with_a_local_model(client, monkeypatch):
+    """IKG_ANSWER_MODEL=ollama:... answers through Ollama: no budget is spent, and a failure names
+    Ollama rather than the Claude API key."""
+    import json as _json
+
+    import requests
+    from ikg import localqa
+
+    monkeypatch.setattr(config, "MODEL", "ollama:qwen3.5:9B")
+    build_sample(client)
+    passage = client.post("/api/ask", json={"question": "zzzz"})  # warm-up: no hits, no model call
+    assert passage.json()["abstained"]
+
+    def ollama(url, json, timeout):
+        user = json["messages"][1]["content"]
+        quote = " ".join(user.splitlines()[2].split()[:8])  # the first words of passage 1's text
+        reply = {"abstain": False, "sentences": [{"text": "Krishna speaks of duty.", "passages": [1], "quote": quote}]}
+        body = {"message": {"content": _json.dumps(reply)}, "prompt_eval_count": 900, "eval_count": 20}
+        return type("R", (), {"raise_for_status": lambda s: None, "json": lambda s: body})()
+
+    monkeypatch.setattr(localqa.requests, "post", ollama)
+    r = client.post("/api/ask", json={"question": "What did Krishna say about duty?"})
+    assert r.status_code == 200 and r.json()["citations"]
+    assert client.app_ref.state.budget.spent == 0.0
+
+    def down(*args, **kwargs):
+        raise requests.ConnectionError("connection refused")
+
+    monkeypatch.setattr(localqa.requests, "post", down)
+    page = client.post("/", data={"q": "What did Krishna say about attachment?", "mode": "ask"}).text
+    assert "local Ollama server" in page and "ANTHROPIC_API_KEY" not in page
+    assert config.OLLAMA_HOST not in page  # no internal host name for visitors
+    r = client.post("/api/ask", json={"question": "What did Krishna say about anger?"})
+    assert r.status_code == 503 and config.OLLAMA_HOST not in r.text
+    assert client.app_ref.state.budget.spent == 0.0  # a local failure is never charged
+
+
 def test_oversized_upload_rejected(client, monkeypatch):
     monkeypatch.setattr(sources, "MAX_UPLOAD_BYTES", 1024)
     r = client.post("/contribute", data={"title": "big"}, files={"file": ("big.txt", b"a" * 5000, "text/plain")})
