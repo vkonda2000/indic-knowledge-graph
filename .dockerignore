@@ -7,6 +7,7 @@ data
 eval
 reports
 docs
+# ontology/ is copied: the MCP server serves it as a resource
 tests
 .github
 .claude

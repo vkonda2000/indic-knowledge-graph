@@ -9,6 +9,7 @@ data/works.yaml
 data/gazetteer.yaml
 data/curators.yaml
 data/provenance.jsonl
+data/mcp-calls.jsonl
 eval/results/
 
 # Local secrets and settings

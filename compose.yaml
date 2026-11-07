@@ -50,6 +50,38 @@ services:
     ports:
       - "127.0.0.1:${IKG_APP_PORT:-8000}:8000"
 
+  # The corpus as MCP tools over Streamable HTTP (docs/08 B1), for Claude, ChatGPT or another MCP client.
+  # Opt in: set IKG_MCP_TOKEN (16+ random characters) in .env, then `docker compose --profile mcp up -d mcp`.
+  mcp:
+    profiles: ["mcp"]
+    image: ikg-app:local
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      IKG_DATA: /app/data
+      IKG_VECTOR_STORE: postgresql://ikg:${IKG_PG_PASSWORD:-ikg}@db:5432/ikg
+      OLLAMA_HOST: http://host.docker.internal:11434
+      IKG_MCP_TOKEN: ${IKG_MCP_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+      - ikg-models:/home/ikg/.cache
+    command: ["ikg", "mcp", "--http", "--host", "0.0.0.0", "--port", "8001"]
+    healthcheck:  # the image's check is for the web app on 8000; this one only asks whether 8001 accepts
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8001), 2)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 5
+    ports:
+      - "127.0.0.1:${IKG_MCP_PORT:-8001}:8001"
+
 volumes:
   ikg-pg:
   ikg-models:

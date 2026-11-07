@@ -71,6 +71,16 @@ provenance log with the caller, the tool and the cost.
 **Tests:** an in-process MCP client calls each tool against the test fixtures; the SPARQL guard is
 tested with `INSERT`, `DELETE`, `LOAD`, `SERVICE` and a slow query.
 
+*Done 2026-11-07* (docs/03 §13), with these differences from the plan above:
+- Tools are prefixed `ikg_` (`ikg_search_passages`, …), so they don't collide with other servers' tools
+  in a client.
+- Calls go to their own log (`data/mcp-calls.jsonl`), not the provenance log, which records curation
+  (who changed what). A search is not a curation act, and logging every one there would bury the edits.
+- The daily budget and the hourly limit are per server process, like the web app's, not shared with it.
+- The HTTP token is a single static token for now; OAuth 2.1 comes with the remote connectors (B2–B4).
+- Built on the MCP Python SDK v2 (`MCPServer`), which needs Python 3.11+, so the `[mcp]` extra and its
+  tests are skipped on Python 3.10.
+
 ### B2–B4. The same backend on three platforms
 
 One backend, two published faces: the MCP server, and the existing FastAPI JSON API with its

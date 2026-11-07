@@ -35,8 +35,10 @@ from starlette.concurrency import run_in_threadpool
 
 from ikg import config, curators, screen, sources
 from ikg.entities import Gazetteer
+from ikg.describe import entity_info, snippet
 from ikg.graph import neighbours
 from ikg.embed import EmbedError
+from ikg.limits import RateLimiter, SpendBudget
 from ikg.localqa import LocalAnswerError
 from ikg.pipeline import Runtime, build
 from ikg.retrieve import search
@@ -52,63 +54,6 @@ SESSION_TTL = 12 * 3600
 MAX_SEARCH_K = 50
 MAX_ASK_K = 20
 MAX_QUESTION_CHARS = 2000
-
-
-class RateLimiter:
-    """Sliding one-hour window of events per key, kept in memory."""
-
-    def __init__(self, per_hour: int):
-        self.per_hour = per_hour
-        self.lock = threading.Lock()
-        self.events: dict[str, deque] = {}
-        self.calls = 0
-
-    def has_room(self, key: str) -> bool:
-        """Whether `allow(key)` would succeed now, without recording anything."""
-        now = time.time()
-        with self.lock:
-            return sum(t > now - 3600 for t in self.events.get(key, ())) < self.per_hour
-
-    def allow(self, key: str) -> bool:
-        now = time.time()
-        with self.lock:
-            self.calls += 1
-            if self.calls % 256 == 0:  # forget clients idle for an hour, so memory stays bounded
-                for idle in [k for k, q in self.events.items() if not q or q[-1] <= now - 3600]:
-                    del self.events[idle]
-            q = self.events.setdefault(key, deque())
-            while q and q[0] <= now - 3600:
-                q.popleft()
-            if len(q) >= self.per_hour:
-                return False
-            q.append(now)
-            return True
-
-
-class SpendBudget:
-    """Estimated Claude spend per UTC day, shared by every visitor, kept in memory."""
-
-    UNKNOWN_COST = 0.25  # charged when an answer reports no cost (unpriced model, or an error)
-
-    def __init__(self, usd_per_day: float):
-        self.limit = usd_per_day
-        self.lock = threading.Lock()
-        self.day, self.spent = "", 0.0
-
-    def _roll(self):
-        today = time.strftime("%Y-%m-%d", time.gmtime())
-        if today != self.day:
-            self.day, self.spent = today, 0.0
-
-    def available(self) -> bool:
-        with self.lock:
-            self._roll()
-            return self.spent < self.limit
-
-    def charge(self, usd: float | None):
-        with self.lock:
-            self._roll()
-            self.spent += self.UNKNOWN_COST if usd is None else usd
 
 
 class AnswerCache:
@@ -224,11 +169,6 @@ class BuildJob:
 
         threading.Thread(target=work, daemon=True).start()
         return True
-
-
-def snippet(text: str, n: int = 320) -> str:
-    flat = " ".join(text.split())
-    return flat if len(flat) <= n else flat[:n].rsplit(" ", 1)[0] + "..."
 
 
 def clamp_k(k, upper: int) -> int:
@@ -365,6 +305,7 @@ def create_app() -> FastAPI:
         def ask_with(retrieval):
             return ask(q, rt.index, rt.gazetteer, graph=rt.graph, passage_entities=rt.passage_entities,
                        k=k, works=works, primary_only=primary_only, retrieval=retrieval)
+        from ikg.qa import may_have_been_billed
         try:
             try:
                 ans = ask_with(rt.retrieval())
@@ -372,14 +313,9 @@ def create_app() -> FastAPI:
                 rt.dense_error = str(exc)
                 print(f"Dense search failed, serving BM25: {exc}", flush=True)
                 ans = ask_with({"mode": "bm25"})
-        except anthropic.APITimeoutError:  # a subclass of APIConnectionError, but may have been billed
-            budget.charge(None)
-            raise
-        except (ValueError, LocalAnswerError, anthropic.BadRequestError, anthropic.AuthenticationError,
-                anthropic.PermissionDeniedError, anthropic.NotFoundError, anthropic.APIConnectionError):
-            raise  # rejected, never sent, or a local model: not billed
-        except Exception:
-            budget.charge(None)  # e.g. a server error: the request may still have been billed
+        except Exception as exc:
+            if may_have_been_billed(exc):  # e.g. a timeout or a server error
+                budget.charge(None)
             raise
         budget.charge(ans.cost_usd)
         if state["generation"] == generation:  # a rebuild during the call makes this answer stale
@@ -751,28 +687,3 @@ def create_app() -> FastAPI:
     app.state.sessions = sessions
     app.state.ask_limiter = ask_limiter
     return app
-
-
-def entity_info(rt: Runtime, entity_id: str, passages: int) -> dict:
-    e = rt.gazetteer.entities[entity_id]
-    node = rt.graph.nodes[entity_id] if entity_id in rt.graph else {}
-    works = {}
-    for part in str(node.get("works", "")).split(";"):
-        if part:
-            w, _, c = part.partition(":")
-            works[w] = int(c)
-    renders = {}
-    for m in rt.mentions:
-        if m.entity == entity_id:
-            renders[(m.surface.lower(), m.via)] = renders.get((m.surface.lower(), m.via), 0) + 1
-    return {
-        "id": e.id, "label": e.label, "type": e.type, "iast": e.iast,
-        "aliases": e.aliases + e.aliases_cs, "renderings": e.renderings,
-        "mentions": int(node.get("mentions", 0)), "works": works,
-        "surface_forms": [{"surface": s, "via": v, "count": c}
-                          for (s, v), c in sorted(renders.items(), key=lambda x: -x[1])[:15]],
-        "neighbours": [{"id": nb, "label": rt.gazetteer.entities[nb].label, "weight": int(w)}
-                       for nb, w in neighbours(rt.graph, entity_id, 12)],
-        "passages": [{"id": p.id, "ref": p.ref, "kind": p.kind, "snippet": snippet(p.text, 200)}
-                     for p in rt.passages_for_entity(entity_id, passages)],
-    }

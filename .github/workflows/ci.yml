@@ -32,7 +32,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: pip install -e ".[web,dev]"
+      - run: pip install -e ".[web,dev,mcp]"  # the MCP SDK installs on 3.11+ only; its tests skip on 3.10
       - run: pytest -q
 
   # The app image builds and a container serves the home page (with no corpus mounted).

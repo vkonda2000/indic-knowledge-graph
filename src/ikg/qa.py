@@ -60,6 +60,21 @@ class Answer:
     model_abstained: bool | None = None   # local models only: the model itself said it can't answer
 
 
+def may_have_been_billed(exc: Exception) -> bool:
+    """Whether a failed `ask` may still have cost money, so a spend budget should count it (as unknown).
+    Requests the API rejected or never received, local models, and retrieval failures cost nothing;
+    a timeout or a server error may have been billed."""
+    from ikg.embed import EmbedError
+    from ikg.localqa import LocalAnswerError
+    from ikg.vectorstore import VectorStoreError
+    if isinstance(exc, anthropic.APITimeoutError):  # a subclass of APIConnectionError, but may have run
+        return True
+    return not isinstance(exc, (ValueError, LocalAnswerError, EmbedError, VectorStoreError,
+                                anthropic.BadRequestError, anthropic.AuthenticationError,
+                                anthropic.PermissionDeniedError, anthropic.NotFoundError,
+                                anthropic.APIConnectionError))
+
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
     """Estimated USD cost from first-party list prices; None for a model without a known price."""
     price = config.PRICES.get(model)

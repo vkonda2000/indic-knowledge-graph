@@ -12,6 +12,7 @@ USER_WORKS_FILE = DATA_DIR / "works.yaml"          # works added through the web
 USER_GAZETTEER_FILE = DATA_DIR / "gazetteer.yaml"  # admin-edited gazetteer (overrides the bundled one)
 CURATORS_FILE = DATA_DIR / "curators.yaml"          # named curators: name and token SHA-256 (D12)
 PROVENANCE_FILE = DATA_DIR / "provenance.jsonl"     # append-only log of who did what (D12)
+MCP_LOG_FILE = DATA_DIR / "mcp-calls.jsonl"         # append-only log of MCP tool calls: caller, tool, cost
 
 PASSAGES_FILE = PROCESSED_DIR / "passages.jsonl"
 MENTIONS_FILE = PROCESSED_DIR / "mentions.jsonl"

@@ -1,4 +1,4 @@
-"""Command-line interface: ikg fetch | build | stats | search | ask | analyze | eval | sparql | serve."""
+"""Command-line interface: ikg fetch | build | stats | search | ask | analyze | eval | sparql | mcp | serve."""
 
 import argparse
 import json
@@ -237,6 +237,15 @@ def cmd_provenance(args):
         print(f"{e['time']}  {e['curator']:<16} {e['action']:<18} {e['target']}  {e['detail']}".rstrip())
 
 
+def cmd_mcp(args):
+    try:
+        from ikg.mcp_server import serve
+    except ImportError as exc:
+        sys.exit(str(exc))
+    _verified()
+    serve(http=args.http, host=args.host, port=args.port)
+
+
 def cmd_serve(args):
     try:
         import uvicorn
@@ -329,6 +338,13 @@ def main(argv=None):
     p = sub.add_parser("provenance", help="show the provenance log (who did what, when)")
     p.add_argument("-n", type=int, default=50, help="number of entries (default 50)")
     p.set_defaults(func=cmd_provenance)
+
+    p = sub.add_parser("mcp", help="serve the corpus as MCP tools (stdio; --http for Streamable HTTP)")
+    p.add_argument("--http", action="store_true",
+                   help="serve Streamable HTTP at /mcp instead of stdio; needs IKG_MCP_TOKEN")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8001)
+    p.set_defaults(func=cmd_mcp)
 
     p = sub.add_parser("serve", help="run the web viewer and admin")
     p.add_argument("--host", default="127.0.0.1")

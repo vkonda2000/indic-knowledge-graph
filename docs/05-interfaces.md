@@ -65,6 +65,7 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | `ikg eval --fidelity` | SOT-fidelity benchmark: pass/fail per item and check, rates per property | `--baseline` (plain model, no retrieval), `--include-drafts`, `--judge-model`, `--model`, `--effort`, `-k`; not combinable with `--check`, `--llm`, `--no-expand` | API key; built corpus unless `--baseline`; at least one approved item |
 | `ikg vectors compare` | Recall@k of a vector store against exact search, and both latencies, over sampled passage vectors, unfiltered, primary only, and one work | `--store` (a `postgresql://` URL or `file`; default `IKG_VECTOR_STORE`), `-n` (200), `-k` (8) | a build with embeddings; for Postgres, the `[pg]` extra and `docker compose up -d db` |
 | `ikg sparql "QUERY"` | Query `processed/ikg.ttl` | none | built corpus |
+| `ikg mcp` | Serve the corpus as MCP tools (docs/03 §13): over stdio, or Streamable HTTP at `/mcp` | `--http`, `--host` (127.0.0.1), `--port` (8001) | built corpus; the `[mcp]` extra (Python 3.11+); `--http` needs `IKG_MCP_TOKEN` |
 | `ikg curator add\|remove\|list [NAME]` | Manage named curators; `add` prints the new login token once | none | none |
 | `ikg provenance` | Print the provenance log, oldest first | `-n` (50) | none |
 | `ikg serve` | Run the web app | `--host` (127.0.0.1), `--port` (8000) | `[web]` extras |
@@ -82,13 +83,13 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_DATA` | `data` | Data directory (raw, processed, uploads, registries) |
 | `IKG_ADMIN_TOKEN` | random, printed at startup | Admin login token; logs in as the curator "admin" |
 | `IKG_CONTRIBUTOR_TOKEN` | unset (open uploads) | Token required on `/contribute` |
-| `IKG_ASK_LIMIT` | `20` | Ask requests per hour per client IP for non-admins; `0` = admins only |
+| `IKG_ASK_LIMIT` | `20` | Ask requests per hour per client IP for non-admins; `0` = admins only. Also the MCP server's `ikg_ask`, per server process; `0` turns it off there. |
 | `ANTHROPIC_API_KEY` | none | Claude API key for Ask |
 | `IKG_ANSWER_MODEL` | `claude-haiku-5-5` | Model for cited answers: a Claude model (D13), or `ollama:<model>` for a local model through Ollama, e.g. `ollama:qwen3.5:9B` (no API key or cost; citations checked in code, docs/03 §6.1) |
 | `IKG_ANSWER_EFFORT` | `low` | `low`, `medium`, `high`, `xhigh` or `max` (Claude only) |
 | `IKG_LOCAL_ANSWER_TIMEOUT` | `180` | Seconds a local model may take per answer |
 | `IKG_LOCAL_ANSWER_CONTEXT` | `16384` | Context window (tokens) requested from Ollama for local answers |
-| `IKG_ASK_BUDGET_USD` | `5` | Estimated Ask spend per UTC day, all visitors together, before Ask stops |
+| `IKG_ASK_BUDGET_USD` | `5` | Estimated Ask spend per UTC day, all visitors together, before Ask stops. The MCP server keeps its own daily budget with this limit. |
 | `IKG_ANSWER_CACHE_SIZE` | `1000` | Answers kept in memory for repeated questions; `0` disables the cache |
 | `IKG_JUDGE_MODEL` | `claude-opus-5-5` | Judge for `ikg eval --fidelity` |
 | `IKG_JUDGE_EFFORT` | `medium` | Judge effort |
@@ -101,6 +102,10 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_PDF_MAX_MEMORY_MB` | `2048` | Memory cap for the PDF reader process (POSIX only) |
 | `IKG_PDF_MAX_PARALLEL` | `2` | PDFs read at the same time |
 | `IKG_EMBED` | `off` | `on`/`1`/`true`/`yes`: builds (CLI and admin Rebuild) also write passage embeddings |
+| `IKG_MCP_TOKEN` | unset | Bearer token `ikg mcp --http` requires from every client (16+ characters) |
+| `IKG_MCP_PORT` | `8001` | Host port of the `mcp` service in `compose.yaml` |
+| `IKG_SPARQL_TIMEOUT` | `10` | Seconds an MCP SPARQL query may take, including loading the graph in its child process |
+| `IKG_ONTOLOGY` | `ontology/ikg.ttl` in the source tree | Ontology file served as the MCP resource `ikg://ontology` (the Docker image sets it) |
 | `IKG_RETRIEVER` | `hybrid` | Retrieval for search, Ask and eval: `bm25`, `dense` or `hybrid` (docs/03 §5.3). Falls back to `bm25` when the build has no embeddings |
 | `IKG_VECTOR_STORE` | `file` | Nearest-passage search: `file` (exact, in memory) or a `postgresql://` URL with pgvector, loaded from the build on first use |
 | `IKG_PG_PORT`, `IKG_PG_PASSWORD` | `5433`, `ikg` | Host port and password of the Postgres in `compose.yaml` (local development) |

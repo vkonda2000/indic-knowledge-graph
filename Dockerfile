@@ -7,6 +7,7 @@
 #
 #   docker compose up -d --build        # db + app, site at http://127.0.0.1:8000
 #   docker compose exec app ikg vectors compare
+#   docker compose --profile mcp up -d mcp  # MCP over HTTP at http://127.0.0.1:8001/mcp (needs IKG_MCP_TOKEN)
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -14,6 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     IKG_DATA=/app/data \
+    IKG_ONTOLOGY=/app/ontology/ikg.ttl \
     FASTEMBED_CACHE_PATH=/home/ikg/.cache/fastembed
 
 WORKDIR /app
@@ -22,10 +24,11 @@ WORKDIR /app
 # embeddings like the host build does; without it a Rebuild would drop them.
 COPY pyproject.toml ./
 RUN mkdir -p src/ikg && touch src/ikg/__init__.py \
-    && pip install ".[web,pg,embed]" \
+    && pip install ".[web,pg,embed,mcp]" \
     && pip uninstall -y indic-knowledge-graph
 
 COPY src ./src
+COPY ontology ./ontology
 RUN pip install --no-deps . \
     && rm -rf build src pyproject.toml \
     && useradd --create-home --uid 1000 ikg \

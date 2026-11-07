@@ -19,6 +19,8 @@ web = ["fastapi>=0.110", "uvicorn>=0.29", "jinja2>=3.1", "python-multipart>=0.0.
 # (embed.reusable_embeddings), and the published seed vectors were made with this version.
 embed = ["fastembed==0.9.1", "numpy>=1.24"]  # dense embeddings at build time (docs/08 A1)
 pg = ["psycopg[binary]>=3.2", "pgvector>=0.4", "numpy>=1.24"]  # the Postgres vector store (docs/08 A2)
+# The MCP server (docs/08 B1): the official MCP Python SDK, v2, which needs Python 3.11+.
+mcp = ["mcp>=2.3,<3; python_version >= '3.11'", "uvicorn>=0.29"]
 dev = ["pytest>=7.0", "httpx>=0.27", "numpy>=1.24"]  # tests use a fake embedder, never a model
 
 [project.scripts]
