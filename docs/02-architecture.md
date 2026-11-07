@@ -252,7 +252,7 @@ request and on pushes to `main`:
 | `tests` | `pytest` on Python 3.10 and 3.12; no network or API key | Any test fails |
 | `image` | Builds the app image and checks that a container serves `/` (an empty corpus) | The image fails to build or start |
 | `pgvector` | The vector store tests (`tests/test_vectorstore.py`) against a `pgvector/pgvector:0.8.1-pg17` service container, including recall against exact search | Any of them fails |
-| `eval-gate` | Takes the bundled texts from the `pinned-sources-v1` release of this repository, not gutenberg.org, and verifies their checksums (cached on `sources.yaml`; if the release or an asset is missing, this step fails on a cache miss), runs `ikg build`, then `ikg eval --check eval/baseline.json` | An offline retrieval metric falls below the committed baseline |
+| `eval-gate` | Takes the bundled texts from the `pinned-sources-v1` release of this repository, not gutenberg.org, and verifies their checksums (cached on `sources.yaml`; if the release or an asset is missing, this step fails on a cache miss), runs `ikg build --embed` (vectors from the CI cache, else the `embeddings-bge-small-en-v1.5` seed release, else computed: over 45 minutes on the 2-core runner), then `ikg eval --check eval/baseline.json` against the hybrid baseline | An offline retrieval metric falls below the committed baseline |
 
 The gate covers offline retrieval metrics only. Answer-level metrics (`--llm`) call the Claude
 API and are not run in CI.

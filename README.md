@@ -199,6 +199,9 @@ gains Sanskrit-phrased, speaker and Vishnu Purana questions and loses two Ramaya
 ranks other passages that also describe the event first (Narad's summary in Bala Kanda 1, Sundara
 Kanda 55). Hybrid needs a build with embeddings (`pip install -e ".[embed]"`, `ikg build --embed`);
 without one, search falls back to BM25.
+Computing the embeddings takes about 10 minutes on a laptop. To skip that, take the published ones
+(the build checks they match your passages and model, and re-embeds if not):
+`gh release download embeddings-bge-small-en-v1.5 --dir data/processed --pattern 'embeddings.*'`, then `ikg build --embed`.
 
 What this shows so far:
 
