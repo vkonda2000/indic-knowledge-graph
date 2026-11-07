@@ -87,7 +87,7 @@ All paths are under `IKG_DATA` (default `data/`) unless noted.
 | `ontology/ikg.ttl` | Turtle/OWL | developers | people, SPARQL tools | yes |
 | `eval/questions.jsonl` | JSONL | developers | `evaluate` | yes |
 | `eval/baseline.json` | JSON | developers | `eval --check`, CI | yes |
-| `processed/manifest.json` | JSON: ID scheme, chunking, editions and sources, and a SHA-256 for each artefact | `build` (written last) | `Runtime` (verifies), people | no |
+| `processed/manifest.json` | JSON: ID scheme, chunking, editions and sources, the embedding model (`embedding`, when the build embedded), and a SHA-256 for each artefact | `build` (written last) | `Runtime` (verifies), people | no |
 | `processed/gazetteer.yaml` | YAML, a copy of the gazetteer the build used | `build` | `Runtime`, `analyze` | no |
 | `processed/.build.lock` | Text (process ID), present only during a build | `build` | `build` | no |
 | `works.yaml` | YAML | web admin / contribute | `sources` | no |
@@ -101,6 +101,8 @@ All paths are under `IKG_DATA` (default `data/`) unless noted.
 | `processed/bm25.pkl` | Python pickle of `BM25Index` (with passages) | `build` | `Runtime` | no |
 | `processed/cooccurrence.graphml` | GraphML | `build` | `Runtime` | no |
 | `processed/ikg.ttl` | Turtle | `build` | `ikg sparql` | no |
+| `processed/embeddings.npy` | NumPy float32 matrix, one L2-normalised row per passage, in `passages.jsonl` order. Only with `build --embed` | `build` | `Runtime` | no |
+| `processed/embeddings.json` | JSON: `model`, `library`, `dim`, `normalized`, `text`, and `ids` (the passage ID of each row) | `build` | `Runtime` (checks `ids` against the passages) | no |
 | `reports/corpus-analysis.md` | Markdown | `analyze` | people | yes |
 | `eval/results/run-*.json` | JSON | `eval` | people | no |
 

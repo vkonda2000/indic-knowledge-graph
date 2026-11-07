@@ -56,7 +56,7 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | Command | Purpose | Key options | Needs |
 |---|---|---|---|
 | `ikg fetch` | Download registered Gutenberg texts | `--works ID...`, `--force` | network |
-| `ikg build` | Segment, extract, index, graph, RDF | `--works ID...`, `--with-passages` (passages in RDF) | raw texts |
+| `ikg build` | Segment, extract, index, graph, RDF; with `--embed`, passage embeddings | `--works ID...`, `--with-passages` (passages in RDF), `--embed` / `--no-embed` (overrides `IKG_EMBED`) | raw texts; `--embed` needs the `[embed]` extra and, the first time, a network to download the model |
 | `ikg stats` | Passages per work and kind | none | built corpus |
 | `ikg search "Q"` | Ranked passages, no API call | `-k`, `--works`, `--primary-only` | built corpus |
 | `ikg ask "Q"` | Cited answer, then the model, tokens and estimated cost | `-k`, `--works`, `--primary-only`, `--show-retrieval`, `--model`, `--effort` | `ANTHROPIC_API_KEY` |
@@ -97,6 +97,8 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_PDF_MAX_CHARS` | `50000000` | PDFs with more text are rejected |
 | `IKG_PDF_MAX_MEMORY_MB` | `2048` | Memory cap for the PDF reader process (POSIX only) |
 | `IKG_PDF_MAX_PARALLEL` | `2` | PDFs read at the same time |
+| `IKG_EMBED` | `off` | `on`/`1`/`true`/`yes`: builds (CLI and admin Rebuild) also write passage embeddings |
+| `IKG_EMBED_MODEL` | `BAAI/bge-small-en-v1.5` | fastembed model for embeddings, or `ollama:<model>` (e.g. `ollama:nomic-embed-text`) for a local Ollama |
 | `IKG_SCREEN` | `on` | `off`/`0`/`false`/`no` disables upload screening |
 | `IKG_SCREEN_MODEL` | `qwen3.5:9B` | Ollama model for screening |
 | `OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama server URL |

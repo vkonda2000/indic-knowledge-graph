@@ -105,11 +105,19 @@ flowchart LR
     P --> idx[BM25 index] --> B[(bm25.pkl)]
     M --> co[co-occurrence] --> G[(cooccurrence.graphml)]
     P & M & G & gz & reg --> rdf[RDF export] --> T[(ikg.ttl)]
+    P -. "--embed" .-> emb[embed passages] -.-> E[(embeddings.npy<br/>+ embeddings.json)]
 ```
 
 `pipeline.build()` runs every step in one pass, in about 10 seconds for the full corpus. It
 fails the whole build on a parse error in any work, naming that work, and on duplicate passage
-IDs. Nothing in the build calls a model, so builds are reproducible (NFR-2).
+IDs. Nothing in the build calls a generative model, so builds are reproducible (NFR-2).
+
+With `--embed` (or `IKG_EMBED=on`) the build also embeds every passage's text with a local
+embedding model (`embed.py`, default `BAAI/bge-small-en-v1.5` through fastembed on the CPU) and
+writes `embeddings.npy` and `embeddings.json` (docs/08 A1). The model is fixed and runs offline after
+its first download; the manifest records it and the library version. Embeddings are off by default
+and search does not use them yet: hybrid retrieval is adopted only if it beats BM25 on the eval
+(docs/08 A3). A build without embeddings removes the files of an earlier one.
 
 A build is **all-or-nothing and self-describing** (L19):
 
@@ -237,7 +245,7 @@ API and are not run in CI.
 |---|---|---|---|
 | D1 | Deterministic, gazetteer-based entity extraction rather than an LLM or NER model | Every mention traces to an exact surface form, builds are reproducible, and evaluation can separate retrieval errors from extraction errors | Recall is limited to curated aliases; no pronouns or epithets beyond the list |
 | D2 | Model translator renderings explicitly | Keeps translation choices visible: Ganguli's "righteousness" is recorded as a rendering of *dharma*, not as *dharma* itself | Renderings like "duty" also match non-technical uses (precision cost) |
-| D3 | Sparse BM25 with gazetteer expansion, not dense embeddings | No GPU or model in the build, inspectable expansion terms, millisecond queries | Weaker on paraphrase; expansion shows no measurable gain on the current eval set (06 §1) |
+| D3 | Sparse BM25 with gazetteer expansion, not dense embeddings | No GPU or model in the build by default (optional CPU embeddings, D14), inspectable expansion terms, millisecond queries | Weaker on paraphrase; expansion shows no measurable gain on the current eval set (06 §1) |
 | D4 | Claude's native document citations | Citations are produced by the API rather than parsed from text, and map exactly to a passage | Depends on one provider's API |
 | D5 | Passage-level co-occurrence graph rather than extracted relations | Cheap, complete, and reproducible; good for exploration and orientation | Edges say "appear together", not how they are related |
 | D6 | Files on disk (JSONL, YAML, pickle, GraphML, Turtle), no database | Zero setup, easy to diff and inspect, fast full rebuilds | Single-host, single-writer; registry writes need a lock |
@@ -263,6 +271,7 @@ D11 and D12 are in the code; until D9 is done, the namespace is still `example.o
 | # | Decision | Why | Trade-off |
 |---|---|---|---|
 | D13 | **Answer with Claude Haiku 5.5 at effort `low` by default**; Opus 5.5 and Sonnet 5.5 stay selectable (`IKG_ANSWER_MODEL`, `IKG_ANSWER_EFFORT`) | The agreed bar for a cheaper default: citation metrics within 5 points of Opus 5.5 at effort `high`, adversarial abstention no lower, false abstentions no higher. On the 28-item eval (one run each) Haiku met it: citing the right book 0.917 vs 0.917, citation precision 0.747 vs 0.702, abstaining on unanswerable questions 1.0 vs 1.0, false abstentions 0.083 vs 0.167 (2 vs 4 of 24), at $0.0012 instead of $0.051 a question | One run per setting, and the differences are 1–2 items; Opus was tried only at `high`. The eval checks books, not exact passages, and doesn't yet measure SOT fidelity (C1), where a larger model may matter. Re-run the comparison, several times, when the fidelity benchmark exists. Haiku has no server-side refusal fallback |
+| D14 | Optional dense embeddings written at build time by a fixed local model (docs/08 A1) | Relaxes "the build never calls a model" to "never a generative model": an embedding model only maps text to a vector, adds nothing to passages, IDs, mentions or answers, and is pinned by name and library version in the manifest. Computing vectors once at build keeps queries cheap and the CI eval reproducible | Off by default; a build with `--embed` takes minutes, not seconds, and its vectors can differ in the last bits across CPUs |
 
 ## 7. Technology stack
 
@@ -277,7 +286,8 @@ and are not part of the system until they appear in this table.
 | Source texts | Project Gutenberg plain text, fetched with `requests` | ≥ 2.31 | `sources.py`, `sources.yaml` | Seven files, about 18 MB, each pinned by SHA-256; network needed only for `fetch`/`build` |
 | Uploads | `.txt`, `.md`, `.pdf` (text layer via pypdf) | pypdf ≥ 6.0 (core dependency: the build reads PDFs too) | `sources.py`, `segment.parse_generic`, `pdftext.py` | PDFs read in a child process with time and page limits. No OCR, EPUB or DOCX yet |
 | Segmentation and entity extraction | Python `re`, curated YAML gazetteer (PyYAML) | PyYAML ≥ 6.0 | `segment.py`, `entities.py`, `normalize.py` | Deterministic; no NLP or NER library |
-| Retrieval | BM25 implemented in the project (k1 = 1.5, b = 0.75), stored as a pickle | none (no search library) | `retrieve.py` | Gazetteer query expansion and entity boost; no embeddings or vector store |
+| Retrieval | BM25 implemented in the project (k1 = 1.5, b = 0.75), stored as a pickle | none (no search library) | `retrieve.py` | Gazetteer query expansion and entity boost; no vector store yet |
+| Embeddings (optional) | fastembed (ONNX Runtime, CPU) with `BAAI/bge-small-en-v1.5`, 384 dimensions; numpy for the matrix; or Ollama | fastembed ≥ 0.4, numpy ≥ 1.24 | `embed.py`, `pipeline.py` | `[embed]` extra; only with `ikg build --embed`. Written at build time, not used by search yet (docs/08 A1–A3) |
 | Knowledge graph | networkx co-occurrence graph, saved as GraphML | networkx ≥ 3.0 | `graph.py` | Not a graph database |
 | Ontology and linked data | OWL ontology in Turtle; RDF export and SPARQL with rdflib | rdflib ≥ 7.0 | `ontology/ikg.ttl`, `graph.to_rdf`, `ikg sparql` | Namespace is the placeholder `https://example.org/ikg#` (L13) |
 | Answer generation | Claude API through the `anthropic` SDK, native document citations | `claude-haiku-5-5` at effort `low` by default (D13); configurable | `qa.py`, `config.py` | Needs `ANTHROPIC_API_KEY`; the only paid call. Cost estimated per answer from `config.PRICES` |

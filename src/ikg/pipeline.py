@@ -5,6 +5,9 @@ every artefact to a temporary file first and swaps them in only after all of the
 writes the manifest last, with each artefact's SHA-256. `Runtime.load` refuses artefacts that don't
 match the manifest, so a failure during the swap, a crash or a stray edit can't serve a mix of
 two builds. One lock file keeps a CLI build and a web rebuild from running at the same time.
+
+Embeddings (ikg.embed) are optional artefacts: written and checksummed when the build embeds, removed
+when it doesn't, so a manifest never lists vectors from a different build.
 """
 
 import hashlib
@@ -20,6 +23,7 @@ from typing import Callable
 import networkx as nx
 
 from ikg import config
+from ikg.embed import Embedder, EmbedError, embed_passages, load_embedder, read_embeddings, write_embeddings
 from ikg.entities import Gazetteer, Mention, extract, mentions_by_passage, read_mentions, write_mentions
 from ikg.graph import build_cooccurrence, load_graph, save_graph, to_rdf
 from ikg.retrieve import BM25Index
@@ -37,6 +41,11 @@ def artefacts() -> dict[str, Path]:
     """The files one build produces, by name. The manifest records a checksum for each."""
     return {"passages": config.PASSAGES_FILE, "mentions": config.MENTIONS_FILE, "index": config.INDEX_FILE,
             "graph": config.GRAPH_FILE, "rdf": config.RDF_FILE, "gazetteer": config.GAZETTEER_SNAPSHOT_FILE}
+
+
+def embedding_artefacts() -> dict[str, Path]:
+    """The files a build writes only when it embeds passages."""
+    return {"embeddings": config.EMBEDDINGS_FILE, "embeddings_meta": config.EMBEDDINGS_META_FILE}
 
 
 @contextmanager
@@ -73,8 +82,12 @@ def build_lock():
 
 
 def build(works: list[Work] | None = None, log: Callable[[str], None] = print,
-          with_passages: bool = False, download: bool = True) -> dict:
-    """Fetch missing sources, segment, extract entities, index, and write graph + RDF."""
+          with_passages: bool = False, download: bool = True, embed: bool | None = None,
+          embedder: Embedder | None = None) -> dict:
+    """Fetch missing sources, segment, extract entities, index, and write graph + RDF.
+
+    `embed` (default IKG_EMBED) also writes passage embeddings with the IKG_EMBED_MODEL model;
+    passing an `embedder` implies it."""
     t0 = time.time()
     try:
         works = works if works is not None else load_works()
@@ -87,11 +100,16 @@ def build(works: list[Work] | None = None, log: Callable[[str], None] = print,
             raise BuildError(f"fetch: {exc}") from exc
         if written:
             log(f"Downloaded {len(written)} file(s)")
+    if embedder is None and (config.EMBED if embed is None else embed):
+        try:  # before the lock too: the first use downloads the model
+            embedder = load_embedder()
+        except EmbedError as exc:
+            raise BuildError(f"embeddings: {exc}") from exc
     with build_lock():
-        return _build(works, log, with_passages, t0)
+        return _build(works, log, with_passages, t0, embedder)
 
 
-def _build(works, log, with_passages, t0) -> dict:
+def _build(works, log, with_passages, t0, embedder: Embedder | None = None) -> dict:
     passages: list[Passage] = []
     for w in works:
         try:
@@ -114,8 +132,19 @@ def _build(works, log, with_passages, t0) -> dict:
     log(f"{len(mentions):,} entity mentions")
     graph = build_cooccurrence(mentions, gazetteer)
     rdf = to_rdf(works, passages, mentions, gazetteer, graph, with_passages=with_passages)
+    vectors = None
+    if embedder is not None and not passages:
+        log("embeddings: skipped, no passages")
+    elif embedder is not None:
+        t_embed = time.time()
+        try:
+            vectors = embed_passages(passages, embedder, log)
+        except EmbedError as exc:
+            raise BuildError(f"embeddings: {exc}") from exc
+        log(f"embeddings: {vectors.shape[0]:,} x {vectors.shape[1]} with {embedder.name} "
+            f"in {time.time() - t_embed:.0f}s")
 
-    final = artefacts()
+    final = artefacts() | (embedding_artefacts() if vectors is not None else {})
     tmp = {name: path.with_name(path.name + ".tmp") for name, path in final.items()}
     try:
         tmp["passages"].parent.mkdir(parents=True, exist_ok=True)
@@ -125,9 +154,15 @@ def _build(works, log, with_passages, t0) -> dict:
         save_graph(graph, tmp["graph"])
         rdf.serialize(tmp["rdf"], format="turtle")
         tmp["gazetteer"].write_text(gazetteer_text, encoding="utf-8")
+        embedding = None
+        if vectors is not None:
+            embedding = write_embeddings(vectors, passages, embedder, tmp["embeddings"], tmp["embeddings_meta"])
+        else:  # vectors from an earlier build must not sit beside these passages. Removed before the
+            for path in embedding_artefacts().values():  # swap, so failing here changes nothing
+                _retry(lambda: path.unlink(missing_ok=True))
         for name, path in final.items():
             _replace(tmp[name], path)
-        write_manifest(works, passages)
+        write_manifest(works, passages, final, embedding)
     except OSError as exc:
         # Before the swap nothing changed. During it, the old manifest's checksums no longer match,
         # so Runtime refuses the mixed files with a message to rebuild.
@@ -137,18 +172,23 @@ def _build(works, log, with_passages, t0) -> dict:
             path.unlink(missing_ok=True)
     stats = {"works": len(works), "passages": len(passages), "mentions": len(mentions),
              "entities": graph.number_of_nodes(), "edges": graph.number_of_edges(),
-             "triples": len(rdf), "seconds": round(time.time() - t0, 1)}
+             "triples": len(rdf), "embedding_model": embedder.name if vectors is not None else None,
+             "seconds": round(time.time() - t0, 1)}
     log(f"graph: {stats['entities']} entities, {stats['edges']} edges; RDF: {stats['triples']:,} triples")
     log(f"built in {stats['seconds']}s")
     return stats
 
 
 def _replace(src: Path, dst: Path, attempts: int = 10) -> None:
-    """os.replace, retried briefly: on Windows it fails while another process (a search loading the
-    index, a virus scanner) has the target open."""
+    _retry(lambda: os.replace(src, dst), attempts)
+
+
+def _retry(op: Callable[[], None], attempts: int = 10) -> None:
+    """Run a file operation, retried briefly: on Windows replacing or deleting a file fails while
+    another process (a search loading the index, a virus scanner) has it open."""
     for attempt in range(1, attempts + 1):
         try:
-            os.replace(src, dst)
+            op()
             return
         except PermissionError:
             if attempt == attempts:
@@ -164,10 +204,13 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def write_manifest(works: list[Work], passages: list[Passage], files: dict[str, Path] | None = None) -> None:
+def write_manifest(works: list[Work], passages: list[Passage], files: dict[str, Path] | None = None,
+                   embedding: dict | None = None) -> None:
     """Record what the build was made from: the passage ID scheme and the chunking parameters
-    it depends on (D11), each edition with its pinned sources, and a checksum of every artefact
-    (`files`, by default all of them). No timestamp, so identical inputs give an identical file."""
+    it depends on (D11), each edition with its pinned sources, the embedding model if the build
+    embedded passages, and a checksum of every artefact (`files`, by default the core ones).
+    No timestamp, so identical inputs give an identical file on one machine. (Embeddings can differ
+    in the last float bits across CPUs, and with them their checksum.)"""
     counts = Counter(p.edition for p in passages)
     files = artefacts() if files is None else files
     manifest = {
@@ -177,6 +220,7 @@ def write_manifest(works: list[Work], passages: list[Passage], files: dict[str, 
                       "translator": w.translator, "parser": w.parser, "passages": counts[w.edition_id],
                       "sources": w.files} for w in works],
         "passages": len(passages),
+        **({"embedding": embedding} if embedding else {}),
         "artefacts": {name: {"file": path.name, "sha256": _sha256(path)} for name, path in files.items()},
     }
     config.MANIFEST_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -203,6 +247,8 @@ class Runtime:
     passages: dict[str, Passage] = field(default_factory=dict)
     passage_entities: dict[str, set[str]] = field(default_factory=dict)
     order: dict[str, int] = field(default_factory=dict)
+    embeddings: object | None = None  # numpy (n, dim) matrix in passage order, if the build embedded
+    embedding: dict | None = None     # its model, library and dimension, from the manifest
 
     @classmethod
     def available(cls) -> bool:
@@ -218,7 +264,7 @@ class Runtime:
         if not listed:
             raise FileNotFoundError("The corpus was built by an older version that recorded no checksums. "
                                     "Rebuild it with `ikg build` or Rebuild in the admin.")
-        paths = artefacts()
+        paths = artefacts() | embedding_artefacts()
         for name, info in listed.items():
             path = paths.get(name)
             if path is None or not path.exists() or _sha256(path) != info["sha256"]:
@@ -234,6 +280,14 @@ class Runtime:
         rt.passages = {p.id: p for p in index.passages}
         rt.order = {p.id: i for i, p in enumerate(index.passages)}
         rt.passage_entities = mentions_by_passage(mentions)
+        manifest = json.loads(config.MANIFEST_FILE.read_text(encoding="utf-8"))
+        if "embeddings" in manifest["artefacts"]:
+            try:
+                rt.embeddings, _ = read_embeddings(config.EMBEDDINGS_FILE, config.EMBEDDINGS_META_FILE,
+                                                   [p.id for p in index.passages])
+            except EmbedError as exc:  # numpy missing in this install
+                raise ValueError(f"the build has embeddings but they cannot be read: {exc}") from exc
+            rt.embedding = manifest.get("embedding")
         return rt
 
     def neighbour_passages(self, pid: str) -> tuple[Passage | None, Passage | None]:
