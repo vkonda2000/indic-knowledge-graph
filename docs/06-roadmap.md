@@ -14,11 +14,34 @@ it. Before 2026-10-23, `expected` named only the book, and the set had 28 items.
 
 | Configuration | hit@1 | hit@8 | MRR |
 |---|---|---|---|
-| BM25 + gazetteer expansion + entity boost (default) | 0.282 | 0.620 | 0.423 |
-| BM25 only (`ikg eval --no-expand`) | 0.296 | 0.620 | 0.420 |
-| *Original 24 items, book-level (old)* | *0.625* | *0.958* | – |
+| **Hybrid: BM25 + dense, reciprocal rank fusion, entity boost (default since 2026-11-07)** | **0.408** | **0.634** | **0.476** |
+| Dense only (`bge-small-en-v1.5`, `--retriever dense`) | 0.394 | 0.577 | 0.457 |
+| BM25 + gazetteer expansion + entity boost (`--retriever bm25`; default until 2026-11-07) | 0.282 | 0.620 | 0.423 |
+| BM25 only (`ikg eval --retriever bm25 --no-expand`) | 0.296 | 0.620 | 0.420 |
+| *Original 24 items, book-level (old, BM25)* | *0.625* | *0.958* | – |
 
-By question type (default configuration; `ikg eval` prints this as `retrieval_by_type`):
+**Hybrid vs BM25, per question type** (hit@8; `ikg eval --retriever all`):
+
+| Retriever | con | mbh | ram | skt | spk | upa | vp | xw |
+|---|---|---|---|---|---|---|---|---|
+| BM25 | 0.60 | 1.00 | **0.88** | 0.20 | 0.50 | 0.71 | 0.71 | 1.00 |
+| Dense | 0.40 | 1.00 | 0.62 | 0.07 | 0.50 | 0.71 | **1.00** | 1.00 |
+| Hybrid | 0.60 | 1.00 | 0.62 | **0.27** | **0.56** | 0.71 | 0.86 | 1.00 |
+
+Decision (docs/08 A3): hybrid became the default because it beats BM25 on both hit@8 and MRR.
+The gain is in ranking, not recall: the right passage comes first for 9 more of 71 questions, but
+reaches the top 8 for only one more (gained `vp-01`, `spk-02`, `skt-17`; lost `ram-03`, `ram-06`).
+Both losses rank other passages about the same event first: Narad's summary of the epic in Bala
+Kanda 1 ("Sprang at one wild tremendous leap / Two hundred leagues across the deep… The town he
+burnt with hostile flame") and Sundara Kanda 55 ("The flames o'er Lanká's city rise"). Whether
+those should count is a question for the eval set, reviewed separately, not changed here. Dense
+alone is weakest on Sanskrit-phrased questions (1 of 15): `bge-small` doesn't know that "krodha"
+is "anger", which is what the gazetteer expansion in the BM25 half supplies. One run (retrieval is
+deterministic); 71 items, so one item is 1.4 points.
+
+By question type (BM25, the default until 2026-11-07; `ikg eval --retriever bm25` prints this as
+`retrieval_by_type`). The findings below describe BM25; with hybrid, 26 of 71 items miss, 11 of 15
+Sanskrit-phrased and 7 of 16 speaker questions:
 
 | Type | Items | hit@1 | hit@8 | MRR |
 |---|---|---|---|---|
@@ -205,8 +228,9 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 - [x] **Cost control for answers**: configurable model and effort, per-answer token and cost tracking, answer cache, daily budget, POST-only Ask; Haiku 5.5 at low effort is the default after an eval comparison with Opus 5.5 (D13, NFR-5)
 - [x] **Answer-level baseline**: `ikg eval --llm` recorded for three model settings ([§1](#1-measured-baseline), `eval/baseline-llm.json`)
 - [x] **Text vs. translation in the data model (D10)** and **frozen v1 passage IDs with locators (D11)**: every passage records its work, edition and position; RDF renderings are per edition with counts, so translators' word choices can be compared with SPARQL (C2)
-- [x] **Passage embeddings at build time** (optional, `ikg build --embed`): normalised vectors with their model in the manifest, checksummed and row-checked on load; not yet used by search (docs/08 A1, D14) (T14)
-- [x] **Vector store** behind one interface: exact search over the matrix, or Postgres + pgvector with an HNSW index, filters by work and kind inside the store, recall measured with `ikg vectors compare` and tested in CI against a pgvector container; not yet used by search (docs/08 A2) (T14)
+- [x] **Passage embeddings at build time** (optional, `ikg build --embed`): normalised vectors with their model in the manifest, checksummed and row-checked on load, reused while passage texts are unchanged (docs/08 A1, D14) (T14)
+- [x] **Vector store** behind one interface: exact search over the matrix, or Postgres + pgvector with an HNSW index, filters by work and kind inside the store, recall measured with `ikg vectors compare` and tested in CI against a pgvector container; hybrid search uses it (docs/08 A2) (T14)
+- [x] **Hybrid retrieval is the default**: BM25 and dense (`bge-small-en-v1.5`) fused by reciprocal rank fusion; hit@1 0.282 → 0.408, hit@8 0.620 → 0.634, MRR 0.423 → 0.476; CI gates it with cached vectors (docs/08 A3, §1)
 - [x] **Independent review practice**: each PR is reviewed by a Fable subagent (`.claude/agents/fable-reviewer.md`) and the findings are summarised in the PR
 
 ### 3.2 Partial

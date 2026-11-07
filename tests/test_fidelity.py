@@ -55,7 +55,8 @@ class FakeClient:
 
 
 def runtime(gazetteer):
-    return SimpleNamespace(index=BM25Index(PASSAGES), gazetteer=gazetteer, graph=None, passage_entities=None)
+    return SimpleNamespace(index=BM25Index(PASSAGES), gazetteer=gazetteer, graph=None, passage_entities=None,
+                           retrieval=lambda: {"mode": "bm25"})
 
 
 def test_judge_is_blind_to_the_mode(gazetteer):

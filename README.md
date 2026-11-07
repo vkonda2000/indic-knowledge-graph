@@ -188,16 +188,25 @@ Only primary text counts as a hit, not commentary on the expected verse.
 
 | Retrieval (k = 8) | hit@1 | hit@8 | MRR |
 |---|---|---|---|
-| With gazetteer expansion | 28.2% | 62.0% | 0.423 |
-| Without (`--no-expand`) | 29.6% | 62.0% | 0.420 |
+| **Hybrid: BM25 + dense, fused (default)** | **40.8%** | **63.4%** | **0.476** |
+| Dense only (`bge-small-en-v1.5`) | 39.4% | 57.7% | 0.457 |
+| BM25 with gazetteer expansion | 28.2% | 62.0% | 0.423 |
+| BM25 without (`--no-expand`) | 29.6% | 62.0% | 0.420 |
+
+`ikg eval --retriever all` prints the first three side by side, per question type. Hybrid puts the
+right passage first for 9 more of 71 questions; it finds it in the top 8 for only one more. It
+gains Sanskrit-phrased, speaker and Vishnu Purana questions and loses two Ramayana ones, where it
+ranks other passages that also describe the event first (Narad's summary in Bala Kanda 1, Sundara
+Kanda 55). Hybrid needs a build with embeddings (`pip install -e ".[embed]"`, `ikg build --embed`);
+without one, search falls back to BM25.
 
 What this shows so far:
 
 - **Finding the right passage is much harder than finding the right book.** On the original 24 items
-  with book-level expectations the same system scored 62.5% / 95.8%. Retrieval misses 27 of 71
-  items entirely; questions phrased with Sanskrit terms (12 of 15 miss) and questions about what
-  a named speaker says (8 of 16 miss) are the weakest.
-  Hybrid retrieval and re-ranking (Phase 3) are measured against these numbers.
+  with book-level expectations BM25 scored 62.5% / 95.8%. Hybrid retrieval still misses 26 of 71
+  items entirely; questions phrased with Sanskrit terms (11 of 15 miss) and questions about what
+  a named speaker says (7 of 16 miss) are the weakest. Hybrid helps most with ranking; a
+  re-ranker (Phase 3) is next.
 - **For the Upanishads, the translator's commentary outranks the verse itself**, because it is
   longer and wordier.
 - **Gazetteer expansion is mixed here:** the same hit@8, slightly better MRR, slightly worse hit@1;

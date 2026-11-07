@@ -173,7 +173,8 @@ def _answer(item, runtime, baseline, client, model, effort, k) -> dict:
         return baseline_answer(item.question, client, model, effort)
     from ikg.qa import ask
     ans = ask(item.question, runtime.index, runtime.gazetteer, graph=runtime.graph,
-              passage_entities=runtime.passage_entities, client=client, model=model, effort=effort, k=k)
+              passage_entities=runtime.passage_entities, client=client, model=model, effort=effort, k=k,
+              retrieval=runtime.retrieval())
     return {"text": ans.text, "cost": ans.cost_usd, "refused": ans.refused, "truncated": ans.truncated,
             "abstained": ans.abstained, "cited": [c.passage_id for c in ans.citations],
             "retrieved": [h.passage.id for h in ans.hits]}

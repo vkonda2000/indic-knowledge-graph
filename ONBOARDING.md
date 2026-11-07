@@ -120,8 +120,10 @@ similarity ranks results. Then read [src/ikg/embed.py](src/ikg/embed.py): `pip i
 run `ikg build --embed`, and compare `IKG_EMBED_MODEL=ollama:nomic-embed-text` after
 `ollama pull nomic-embed-text`. Then [src/ikg/vectorstore.py](src/ikg/vectorstore.py): run
 `docker compose up -d db` and `ikg vectors compare --store postgresql://ikg:ikg@127.0.0.1:5433/ikg`
-to see what an approximate (HNSW) index gives up against exact search. Search does not use the
-vectors yet (docs/08 A3).
+to see what an approximate (HNSW) index gives up against exact search. Finally
+`ikg eval --retriever all` compares BM25, dense and hybrid search per question type, and
+`ikg search "..." --mode dense` shows what meaning-based search finds that keywords miss
+(docs/03 §5.3).
 
 ### 4.5 Domain knowledge: enough to judge results
 

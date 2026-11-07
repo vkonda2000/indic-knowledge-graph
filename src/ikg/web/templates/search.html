@@ -16,6 +16,7 @@
 </form>
 
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+{% if retrieval_notice %}<div class="notice">{{ retrieval_notice }}</div>{% endif %}
 {% if ask_pending %}<div class="notice">Press Go to get a cited answer to this question. Passages that match it are shown below.</div>{% endif %}
 
 {% if entities %}
@@ -57,7 +58,7 @@
         <div class="hit-head">
           <a href="/passage/{{ h.passage.id }}">{{ h.passage.ref }}</a>
           <span class="kind {{ h.passage.kind }}">{{ h.passage.kind }}</span>
-          <span class="score">{{ '%.1f' % h.score }}</span>
+          <span class="score">{{ ('%.1f' % h.score) if h.score >= 1 else ('%.3f' % h.score) }}</span>
         </div>
         <p>{{ h.passage.text | snippet(420) }}</p>
       </article>

@@ -106,6 +106,7 @@ def ask(
     client: anthropic.Anthropic | None = None,
     model: str | None = None,
     effort: str | None = None,
+    retrieval: dict | None = None,
 ) -> Answer:
     model, effort = model or config.MODEL, effort or config.EFFORT
     if is_local(model):
@@ -113,7 +114,7 @@ def ask(
     elif effort not in config.EFFORTS:
         raise ValueError(f"effort must be one of {', '.join(config.EFFORTS)}, not {effort!r}")
     hits = search(index, gazetteer, question, k=k, works=works, primary_only=primary_only,
-                  passage_entities=passage_entities)
+                  passage_entities=passage_entities, **(retrieval or {}))
     entities = gazetteer.entities_in(question)
     kg = graph_context(graph, entities, gazetteer) if graph is not None else ""
     answer = Answer(question=question, text="", hits=hits, entities=entities, model=model, effort=effort)

@@ -58,10 +58,10 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | `ikg fetch` | Download registered Gutenberg texts and verify pinned checksums | `--works ID...`, `--force` | network. If a pin fails because Gutenberg re-issued a text, take the pinned copies with `gh release download pinned-sources-v1 --dir data/raw --pattern 'pg*.txt' --clobber` |
 | `ikg build` | Segment, extract, index, graph, RDF; with `--embed`, passage embeddings | `--works ID...`, `--with-passages` (passages in RDF), `--embed` / `--no-embed` (overrides `IKG_EMBED`) | raw texts; `--embed` needs the `[embed]` extra and, the first time, a network to download the model |
 | `ikg stats` | Passages per work and kind | none | built corpus |
-| `ikg search "Q"` | Ranked passages, no API call | `-k`, `--works`, `--primary-only` | built corpus |
-| `ikg ask "Q"` | Cited answer, then the model, tokens and estimated cost | `-k`, `--works`, `--primary-only`, `--show-retrieval`, `--model`, `--effort` | `ANTHROPIC_API_KEY`, or Ollama with `--model ollama:<model>` |
+| `ikg search "Q"` | Ranked passages, no API call | `-k`, `--works`, `--primary-only`, `--mode bm25\|dense\|hybrid` | built corpus; dense and hybrid need embeddings |
+| `ikg ask "Q"` | Cited answer, then the model, tokens and estimated cost | `-k`, `--works`, `--primary-only`, `--show-retrieval`, `--mode`, `--model`, `--effort` | `ANTHROPIC_API_KEY`, or Ollama with `--model ollama:<model>` |
 | `ikg analyze` | Write `reports/corpus-analysis.md` | none | built corpus |
-| `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand`, `--model`, `--effort` (with `--llm`), `--check BASELINE` (exit 1 if any baseline metric got worse; used by CI) | built corpus (+ API key with `--llm`) |
+| `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand`, `--retriever bm25\|dense\|hybrid\|all` (`all`: a side-by-side table per question type, each run saved; not with `--llm` or `--check`), `--model`, `--effort` (with `--llm`), `--check BASELINE` (exit 1 if any baseline metric got worse, or the baseline was recorded with another retriever; used by CI) | built corpus (+ API key with `--llm`) |
 | `ikg eval --fidelity` | SOT-fidelity benchmark: pass/fail per item and check, rates per property | `--baseline` (plain model, no retrieval), `--include-drafts`, `--judge-model`, `--model`, `--effort`, `-k`; not combinable with `--check`, `--llm`, `--no-expand` | API key; built corpus unless `--baseline`; at least one approved item |
 | `ikg vectors compare` | Recall@k of a vector store against exact search, and both latencies, over sampled passage vectors, unfiltered, primary only, and one work | `--store` (a `postgresql://` URL or `file`; default `IKG_VECTOR_STORE`), `-n` (200), `-k` (8) | a build with embeddings; for Postgres, the `[pg]` extra and `docker compose up -d db` |
 | `ikg sparql "QUERY"` | Query `processed/ikg.ttl` | none | built corpus |
@@ -101,6 +101,7 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_PDF_MAX_MEMORY_MB` | `2048` | Memory cap for the PDF reader process (POSIX only) |
 | `IKG_PDF_MAX_PARALLEL` | `2` | PDFs read at the same time |
 | `IKG_EMBED` | `off` | `on`/`1`/`true`/`yes`: builds (CLI and admin Rebuild) also write passage embeddings |
+| `IKG_RETRIEVER` | `hybrid` | Retrieval for search, Ask and eval: `bm25`, `dense` or `hybrid` (docs/03 §5.3). Falls back to `bm25` when the build has no embeddings |
 | `IKG_VECTOR_STORE` | `file` | Nearest-passage search: `file` (exact, in memory) or a `postgresql://` URL with pgvector, loaded from the build on first use |
 | `IKG_PG_PORT`, `IKG_PG_PASSWORD` | `5433`, `ikg` | Host port and password of the Postgres in `compose.yaml` (local development) |
 | `IKG_APP_PORT` | `8000` | Host port of the app container in `compose.yaml` |

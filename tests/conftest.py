@@ -14,6 +14,7 @@ def _no_real_embeddings(tmp_path, monkeypatch):
     in a test never touches the developer's data/processed embeddings."""
     monkeypatch.setattr(config, "EMBED", False)
     monkeypatch.setattr(config, "VECTOR_STORE", "file")  # never a developer's Postgres
+    monkeypatch.setattr(config, "RETRIEVER", "bm25")  # hybrid would load the build's real embedding model
     monkeypatch.setattr(config, "EMBEDDINGS_FILE", tmp_path / "_embeddings" / "embeddings.npy")
     monkeypatch.setattr(config, "EMBEDDINGS_META_FILE", tmp_path / "_embeddings" / "embeddings.json")
 

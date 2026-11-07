@@ -40,7 +40,8 @@ The measured problem ([README](../README.md#evaluation)): hit@8 is 0.62; 12 of 1
 
 **Done when:** one table of BM25 / dense / hybrid on all 71 items, broken out by `skt-`, `spk-`,
 `xw-`, with the decision and its reason written under it. If hybrid loses, say so and keep BM25: the
-gate catching it is part of the story.
+gate catching it is part of the story. *Done 2026-11-07:* hybrid won on hit@8 (0.620 → 0.634) and
+MRR (0.423 → 0.476) and is the default; the table and the reason are in docs/06 §1.
 
 Later, not in this extension: a cross-encoder re-ranker over the top 50 (roadmap Phase 3).
 

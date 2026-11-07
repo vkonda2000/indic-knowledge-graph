@@ -13,6 +13,7 @@ when it doesn't, so a manifest never lists vectors from a different build.
 import hashlib
 import json
 import os
+import threading
 import time
 from collections import Counter
 from contextlib import contextmanager
@@ -23,7 +24,8 @@ from typing import Callable
 import networkx as nx
 
 from ikg import config
-from ikg.embed import Embedder, EmbedError, embed_passages, load_embedder, read_embeddings, write_embeddings
+from ikg.embed import (Embedder, EmbedError, embed_passages, embed_query, load_embedder, read_embeddings,
+                       reusable_embeddings, write_embeddings)
 from ikg.entities import Gazetteer, Mention, extract, mentions_by_passage, read_mentions, write_mentions
 from ikg.graph import build_cooccurrence, load_graph, save_graph, to_rdf
 from ikg.retrieve import BM25Index
@@ -138,12 +140,17 @@ def _build(works, log, with_passages, t0, embedder: Embedder | None = None) -> d
         log("embeddings: skipped, no passages")
     elif embedder is not None:
         t_embed = time.time()
-        try:
-            vectors = embed_passages(passages, embedder, log)
-        except EmbedError as exc:
-            raise BuildError(f"embeddings: {exc}") from exc
-        log(f"embeddings: {vectors.shape[0]:,} x {vectors.shape[1]} with {embedder.name} "
-            f"in {time.time() - t_embed:.0f}s")
+        vectors = reusable_embeddings(passages, embedder, config.EMBEDDINGS_FILE, config.EMBEDDINGS_META_FILE)
+        if vectors is not None:
+            log(f"embeddings: reused {vectors.shape[0]:,} x {vectors.shape[1]} from the previous build "
+                f"(same {embedder.name}, same passage texts)")
+        else:
+            try:
+                vectors = embed_passages(passages, embedder, log)
+            except EmbedError as exc:
+                raise BuildError(f"embeddings: {exc}") from exc
+            log(f"embeddings: {vectors.shape[0]:,} x {vectors.shape[1]} with {embedder.name} "
+                f"in {time.time() - t_embed:.0f}s")
 
     final = artefacts() | (embedding_artefacts() if vectors is not None else {})
     tmp = {name: path.with_name(path.name + ".tmp") for name, path in final.items()}
@@ -252,6 +259,9 @@ class Runtime:
     embedding: dict | None = None     # its model, library and dimension, from the manifest
     embeddings_sha256: str | None = None  # of embeddings.npy, from the manifest: what a vector store mirrors
     _vector_store: VectorStore | None = field(default=None, repr=False)
+    _query_embedder: Embedder | None = field(default=None, repr=False)
+    _dense_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    dense_error: str = ""  # why dense search is unavailable, if it was tried and failed
 
     @classmethod
     def available(cls) -> bool:
@@ -291,8 +301,47 @@ class Runtime:
             except EmbedError as exc:  # numpy missing in this install
                 raise ValueError(f"the build has embeddings but they cannot be read: {exc}") from exc
             rt.embedding = manifest.get("embedding")
-            rt.embeddings_sha256 = manifest["artefacts"]["embeddings"]["sha256"]
+            # The store must mirror the vectors and their row ids: an id change can leave the matrix
+            # bytes identical, so both checksums identify what it holds.
+            rt.embeddings_sha256 = (manifest["artefacts"]["embeddings"]["sha256"] + ":"
+                                    + manifest["artefacts"]["embeddings_meta"]["sha256"])
         return rt
+
+    def prepare_dense(self) -> bool:
+        """Load the query model and open the vector store, once, under a lock. The web app calls this
+        when it loads a build, so the first visitor doesn't wait for it. On failure `dense_error` says
+        why and the default retrieval falls back to BM25. Returns whether dense search is ready."""
+        if self.embeddings is None:
+            self.dense_error = "this build has no embeddings: rebuild with `ikg build --embed`"
+            return False
+        with self._dense_lock:
+            if self._query_embedder is not None:
+                return True
+            try:
+                self.vector_store(log=lambda _: None)
+                self._query_embedder = load_embedder(self.embedding["model"])
+                self.dense_error = ""
+                return True
+            except (EmbedError, VectorStoreError) as exc:
+                self.dense_error = str(exc)
+                return False
+
+    def dense(self, question: str, n: int, works=None, kinds=None) -> list[tuple[str, float]]:
+        """Nearest passages to the question, embedded with the model the build used (retrieve.DenseSearch).
+        Raises EmbedError or VectorStoreError if that can't be done."""
+        if not self.prepare_dense():
+            raise VectorStoreError(self.dense_error)
+        vector = embed_query(question, self._query_embedder)
+        return [(h.passage_id, h.score) for h in self.vector_store().search(vector, n, works, kinds)]
+
+    def retrieval(self, mode: str | None = None) -> dict:
+        """Keyword arguments for retrieve.search: `mode` (default IKG_RETRIEVER) and its dense search.
+        The default falls back to BM25 when the build has no embeddings or dense search failed to start
+        (`dense_error`); an explicit dense or hybrid mode is never changed."""
+        requested = mode or config.RETRIEVER
+        if requested == "bm25" or (mode is None and (self.embeddings is None or self.dense_error)):
+            return {"mode": "bm25"}
+        return {"mode": requested, "dense": self.dense if self.embeddings is not None else None}
 
     def close(self) -> None:
         """Release what the runtime holds outside the process (a Postgres connection)."""

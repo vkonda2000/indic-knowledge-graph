@@ -36,10 +36,15 @@ from starlette.concurrency import run_in_threadpool
 from ikg import config, curators, screen, sources
 from ikg.entities import Gazetteer
 from ikg.graph import neighbours
+from ikg.embed import EmbedError
 from ikg.localqa import LocalAnswerError
 from ikg.pipeline import Runtime, build
 from ikg.retrieve import search
 from ikg.segment import KINDS, PARSERS, WORK_LABELS
+from ikg.vectorstore import VectorStoreError
+
+DENSE_ERRORS = (EmbedError, VectorStoreError)
+DENSE_NOTICE = "Meaning-based search is unavailable right now, so these are keyword (BM25) results."
 
 HERE = Path(__file__).parent
 SESSION_COOKIE = "ikg_admin"
@@ -293,6 +298,9 @@ def create_app() -> FastAPI:
             if state["runtime"] is None:
                 state["error"] = str(exc)
             return str(exc)
+        if config.RETRIEVER != "bm25" and runtime.embeddings is not None and not runtime.prepare_dense():
+            # Load the query model and the vector store now, not on a visitor's first search.
+            print(f"Dense search unavailable, serving BM25: {runtime.dense_error}", flush=True)
         state["generation"] += 1
         previous = state["runtime"]
         state["runtime"], state["error"] = runtime, ""
@@ -337,13 +345,33 @@ def create_app() -> FastAPI:
     def cached(q: str, k: int, works, primary_only: bool):
         return answer_cache.get(AnswerCache.key(q, k, works, primary_only, state["generation"]))
 
+    def find(rt, q: str, **kwargs) -> tuple[list, str]:
+        """Search with the default retriever, and the mode used. If dense search fails, BM25 for this
+        and later requests (until the next build loads), rather than an error page."""
+        retrieval = rt.retrieval()
+        try:
+            return search(rt.index, rt.gazetteer, q, passage_entities=rt.passage_entities, **kwargs,
+                          **retrieval), retrieval["mode"]
+        except DENSE_ERRORS as exc:
+            rt.dense_error = str(exc)
+            print(f"Dense search failed, serving BM25: {exc}", flush=True)
+            return search(rt.index, rt.gazetteer, q, passage_entities=rt.passage_entities, **kwargs), "bm25"
+
     def answer(request: Request, q: str, k: int, works, primary_only: bool):
         rt = runtime()
         from ikg.qa import ask
         generation = state["generation"]
+
+        def ask_with(retrieval):
+            return ask(q, rt.index, rt.gazetteer, graph=rt.graph, passage_entities=rt.passage_entities,
+                       k=k, works=works, primary_only=primary_only, retrieval=retrieval)
         try:
-            ans = ask(q, rt.index, rt.gazetteer, graph=rt.graph, passage_entities=rt.passage_entities,
-                      k=k, works=works, primary_only=primary_only)
+            try:
+                ans = ask_with(rt.retrieval())
+            except DENSE_ERRORS as exc:  # retrieval failed before any model call: retry with BM25
+                rt.dense_error = str(exc)
+                print(f"Dense search failed, serving BM25: {exc}", flush=True)
+                ans = ask_with({"mode": "bm25"})
         except anthropic.APITimeoutError:  # a subclass of APIConnectionError, but may have been billed
             budget.charge(None)
             raise
@@ -437,8 +465,9 @@ def create_app() -> FastAPI:
                     ctx["error"] = (f"Answering failed: {exc}. Cited answers need Claude API credentials "
                                     "(set ANTHROPIC_API_KEY before starting the server). Search still works.")
             ctx["hits"] = (ctx["answer"].hits if ctx["answer"] else
-                           search(rt.index, rt.gazetteer, q, k=k, works=works, primary_only=primary_only,
-                                  passage_entities=rt.passage_entities))
+                           find(rt, q, k=k, works=works, primary_only=primary_only)[0])
+            if config.RETRIEVER != "bm25" and rt.embeddings is not None and rt.dense_error:
+                ctx["retrieval_notice"] = DENSE_NOTICE
             ctx["entities"] = [rt.gazetteer.entities[e] for e in rt.gazetteer.entities_in(q)]
         return render(request, "search.html", **ctx)
 
@@ -632,9 +661,9 @@ def create_app() -> FastAPI:
     @app.get("/api/search")
     def api_search(request: Request, q: str, k: int = 8, primary_only: bool = False):
         rt = runtime()
-        hits = search(rt.index, rt.gazetteer, q, k=clamp_k(k, MAX_SEARCH_K), works=request.query_params.getlist("works") or None,
-                      primary_only=primary_only, passage_entities=rt.passage_entities)
-        return {"query": q, "entities": rt.gazetteer.entities_in(q), "results": [
+        hits, mode = find(rt, q, k=clamp_k(k, MAX_SEARCH_K), works=request.query_params.getlist("works") or None,
+                          primary_only=primary_only)
+        return {"query": q, "retriever": mode, "entities": rt.gazetteer.entities_in(q), "results": [
             {"id": h.passage.id, "ref": h.passage.ref, "kind": h.passage.kind, "score": round(h.score, 3),
              "text": h.passage.text} for h in hits]}
 

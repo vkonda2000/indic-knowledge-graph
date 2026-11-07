@@ -70,19 +70,31 @@ def cmd_stats(args):
         print(f"{w:<20} {n:>6} passages  ({detail})")
 
 
+def _retrieval(rt, mode):
+    """retrieve.search's mode and dense search; exits with a message if they can't be used."""
+    retrieval = rt.retrieval(mode)
+    if retrieval["mode"] != "bm25" and retrieval.get("dense") is None:
+        sys.exit(f"{retrieval['mode']} retrieval needs embeddings: rebuild with `ikg build --embed`")
+    if retrieval["mode"] != "bm25" and not rt.prepare_dense():  # fail here, clearly, not on the first question
+        sys.exit(f"{retrieval['mode']} retrieval is unavailable: {rt.dense_error}")
+    return retrieval
+
+
 def cmd_search(args):
     rt = _runtime()
     for h in search(rt.index, rt.gazetteer, args.question, k=args.k, works=args.works,
-                    primary_only=args.primary_only, passage_entities=rt.passage_entities):
+                    primary_only=args.primary_only, passage_entities=rt.passage_entities,
+                    **_retrieval(rt, args.mode)):
         snippet = " ".join(h.passage.text.split())[:240]
-        print(f"{h.score:6.2f}  {h.passage.id}  {h.passage.ref}\n        {snippet}...\n")
+        print(f"{h.score:7.3f}  {h.passage.id}  {h.passage.ref}\n        {snippet}...\n")
 
 
 def cmd_ask(args):
     from ikg.qa import ask
     rt = _runtime()
     ans = ask(args.question, rt.index, rt.gazetteer, graph=rt.graph, passage_entities=rt.passage_entities,
-              k=args.k, works=args.works, primary_only=args.primary_only, model=args.model, effort=args.effort)
+              k=args.k, works=args.works, primary_only=args.primary_only, model=args.model, effort=args.effort,
+              retrieval=_retrieval(rt, args.mode))
     print("The model declined to answer this question." if ans.refused else ans.text)
     cost = f", about ${ans.cost_usd:.4f}" if ans.cost_usd is not None else ""
     print(f"\n({ans.model}, effort {ans.effort}: {ans.input_tokens:,} input + {ans.output_tokens:,} output tokens{cost})")
@@ -136,9 +148,18 @@ def cmd_eval(args):
         if baseline.get("k", args.k) != args.k:
             sys.exit(f"Baseline was recorded with k={baseline['k']}; run with -k {baseline['k']}.")
     rt = _runtime()
-    result = run(load_items(config.EVAL_FILE), rt.index, rt.gazetteer, rt.passage_entities, k=args.k,
+    items = load_items(config.EVAL_FILE)
+    if args.retriever == "all":
+        if args.llm or baseline is not None:
+            sys.exit("--retriever all compares retrieval only; run --llm or --check with one retriever")
+        return _compare_retrievers(rt, items, args)
+    retrieval = _retrieval(rt, args.retriever)
+    if baseline is not None and baseline.get("retriever", "bm25") != retrieval["mode"]:
+        sys.exit(f"Baseline was recorded with the {baseline.get('retriever', 'bm25')} retriever, this run uses "
+                 f"{retrieval['mode']}. Pass --retriever, or build with `ikg build --embed` for hybrid.")
+    result = run(items, rt.index, rt.gazetteer, rt.passage_entities, k=args.k,
                  llm=args.llm, graph=rt.graph, out_dir=config.EVAL_RESULTS_DIR, expand=not args.no_expand,
-                 model=args.model, effort=args.effort)
+                 model=args.model, effort=args.effort, retrieval=retrieval)
     for row in result["rows"]:
         if row["type"] == "retrieval" and not row["hit_at_k"]:
             print(f"MISS  {row['id']}: top={row['retrieved'][:3]}")
@@ -148,6 +169,24 @@ def cmd_eval(args):
         if worse:
             sys.exit("Regression against " + str(args.check) + ":\n  " + "\n  ".join(worse))
         print(f"No regression against {args.check}.")
+
+
+def _compare_retrievers(rt, items, args):
+    """One table: BM25, dense and hybrid on every question type."""
+    from ikg.evaluate import run
+    summaries = {}
+    for mode in ("bm25", "dense", "hybrid"):
+        summaries[mode] = run(items, rt.index, rt.gazetteer, rt.passage_entities, k=args.k,
+                              expand=not args.no_expand, retrieval=_retrieval(rt, mode),
+                              out_dir=config.EVAL_RESULTS_DIR)["summary"]
+    types = sorted(summaries["bm25"]["retrieval_by_type"])
+    print(f"{'retriever':<10} {'hit@1':>6} {'hit@' + str(args.k):>6} {'MRR':>6}   " + " ".join(f"{t:>5}" for t in types))
+    for mode, s in summaries.items():
+        by = s["retrieval_by_type"]
+        print(f"{mode:<10} {s['retrieval_hit_at_1']:>6.3f} {s['retrieval_hit_at_k']:>6.3f} {s['retrieval_mrr']:>6.3f}   "
+              + " ".join(f"{by[t]['hit_at_k']:>5.2f}" for t in types))
+    print(f"\nPer type: hit@{args.k}. Items: {summaries['bm25']['n_retrieval']} retrieval. "
+          f"Each run is saved in {config.EVAL_RESULTS_DIR}.")
 
 
 def cmd_vectors(args):
@@ -242,6 +281,9 @@ def main(argv=None):
         p.add_argument("-k", type=int, default=8)
         p.add_argument("--works", nargs="*")
         p.add_argument("--primary-only", action="store_true", help="exclude commentary, introductions, scholarship")
+        p.add_argument("--mode", choices=["bm25", "dense", "hybrid"],
+                       help=f"retrieval mode (default {config.RETRIEVER}; env IKG_RETRIEVER; "
+                            "bm25 if the build has no embeddings)")
         if name == "ask":
             p.add_argument("--show-retrieval", action="store_true")
             _model_args(p)
@@ -253,6 +295,8 @@ def main(argv=None):
     p.add_argument("-k", type=int, default=8)
     p.add_argument("--llm", action="store_true", help="also evaluate answers and citations (calls Claude)")
     p.add_argument("--no-expand", action="store_true", help="ablation: disable knowledge-graph query expansion")
+    p.add_argument("--retriever", choices=["bm25", "dense", "hybrid", "all"],
+                   help=f"retrieval mode (default {config.RETRIEVER}); 'all' prints BM25, dense and hybrid side by side")
     _model_args(p)
     p.add_argument("--fidelity", action="store_true",
                    help="run the SOT-fidelity benchmark instead (calls Claude to answer and to judge)")
