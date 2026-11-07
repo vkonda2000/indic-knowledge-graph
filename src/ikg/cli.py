@@ -150,6 +150,19 @@ def cmd_eval(args):
         print(f"No regression against {args.check}.")
 
 
+def cmd_vectors(args):
+    from ikg.segment import PRIMARY_KINDS
+    from ikg.vectorstore import VectorStoreError, compare
+    rt = _runtime()
+    try:
+        exact = rt.vector_store("file")
+        other = rt.vector_store(args.store, log=lambda m: print(m, file=sys.stderr))
+        report = compare(exact, other, rt.embeddings, rt.index.passages, PRIMARY_KINDS, n=args.n, k=args.k)
+    except VectorStoreError as exc:
+        sys.exit(str(exc))
+    print(json.dumps(report, indent=2))
+
+
 def cmd_sparql(args):
     from rdflib import Graph
     _verified()
@@ -251,6 +264,14 @@ def main(argv=None):
     p.add_argument("--check", type=Path, metavar="BASELINE",
                    help="exit non-zero if any metric in this baseline JSON got worse (CI gate)")
     p.set_defaults(func=cmd_eval)
+
+    p = sub.add_parser("vectors", help="compare a vector store with exact search: recall@k and latency")
+    p.add_argument("action", choices=["compare"])
+    p.add_argument("--store", default=None,
+                   help="the store to measure: a postgresql:// URL, or 'file' (default: IKG_VECTOR_STORE)")
+    p.add_argument("-n", type=int, default=200, help="sampled queries (default 200)")
+    p.add_argument("-k", type=int, default=8)
+    p.set_defaults(func=cmd_vectors)
 
     p = sub.add_parser("sparql", help="run a SPARQL query over the RDF export")
     p.add_argument("query")

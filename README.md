@@ -117,6 +117,7 @@ ikg eval                          # retrieval metrics; add --llm for answer/cita
 ikg eval --no-expand              # ablation without gazetteer query expansion
 ikg eval --check eval/baseline.json   # regression gate used by CI
 ikg sparql "SELECT ?label WHERE { ?e a ikg:Concept ; rdfs:label ?label }"
+ikg vectors compare --store postgresql://ikg:ikg@127.0.0.1:5433/ikg   # pgvector recall vs exact search
 ikg stats
 ```
 

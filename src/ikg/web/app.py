@@ -293,7 +293,10 @@ def create_app() -> FastAPI:
                 state["error"] = str(exc)
             return str(exc)
         state["generation"] += 1
+        previous = state["runtime"]
         state["runtime"], state["error"] = runtime, ""
+        if previous is not None:
+            previous.close()
         answer_cache.clear()  # cached answers cite passages of the previous build
         return ""
 

@@ -1,0 +1,27 @@
+# Postgres with pgvector, for the optional vector store (docs/08 A2).
+#
+#   docker compose up -d db
+#   IKG_VECTOR_STORE=postgresql://ikg:ikg@127.0.0.1:5433/ikg ikg vectors compare
+#
+# Local development only: the password is a default and the port is bound to 127.0.0.1.
+# The table is a copy of the build's embeddings, reloaded when the build changes, so the
+# volume can be deleted at any time.
+services:
+  db:
+    image: pgvector/pgvector:0.8.1-pg17
+    environment:
+      POSTGRES_USER: ikg
+      POSTGRES_PASSWORD: ${IKG_PG_PASSWORD:-ikg}
+      POSTGRES_DB: ikg
+    ports:
+      - "127.0.0.1:${IKG_PG_PORT:-5433}:5432"  # 5433: a local Postgres often has 5432
+    volumes:
+      - ikg-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ikg -d ikg"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  ikg-pg:

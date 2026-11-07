@@ -117,7 +117,10 @@ Answer quality depends on search finding the right passages first.
 Needed for the next phase (hybrid search). Learn what an embedding is and how cosine
 similarity ranks results. Then read [src/ikg/embed.py](src/ikg/embed.py): `pip install -e ".[embed]"`,
 run `ikg build --embed`, and compare `IKG_EMBED_MODEL=ollama:nomic-embed-text` after
-`ollama pull nomic-embed-text`. Search does not use the vectors yet (docs/08 A2, A3).
+`ollama pull nomic-embed-text`. Then [src/ikg/vectorstore.py](src/ikg/vectorstore.py): run
+`docker compose up -d db` and `ikg vectors compare --store postgresql://ikg:ikg@127.0.0.1:5433/ikg`
+to see what an approximate (HNSW) index gives up against exact search. Search does not use the
+vectors yet (docs/08 A3).
 
 ### 4.5 Domain knowledge: enough to judge results
 

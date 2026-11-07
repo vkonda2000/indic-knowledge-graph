@@ -185,6 +185,7 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 - [x] **Answer-level baseline**: `ikg eval --llm` recorded for three model settings ([§1](#1-measured-baseline), `eval/baseline-llm.json`)
 - [x] **Text vs. translation in the data model (D10)** and **frozen v1 passage IDs with locators (D11)**: every passage records its work, edition and position; RDF renderings are per edition with counts, so translators' word choices can be compared with SPARQL (C2)
 - [x] **Passage embeddings at build time** (optional, `ikg build --embed`): normalised vectors with their model in the manifest, checksummed and row-checked on load; not yet used by search (docs/08 A1, D14) (T14)
+- [x] **Vector store** behind one interface: exact search over the matrix, or Postgres + pgvector with an HNSW index, filters by work and kind inside the store, recall measured with `ikg vectors compare` and tested in CI against a pgvector container; not yet used by search (docs/08 A2) (T14)
 - [x] **Independent review practice**: each PR is reviewed by a Fable subagent (`.claude/agents/fable-reviewer.md`) and the findings are summarised in the PR
 
 ### 3.2 Partial

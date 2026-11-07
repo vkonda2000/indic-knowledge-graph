@@ -193,7 +193,8 @@ sequenceDiagram
 
 | State | Where | Lifetime | Notes |
 |---|---|---|---|
-| Built corpus (`Runtime`) | Process memory, loaded from `data/processed/` | Until the next successful rebuild | BM25 index (~30 MB pickle), passages, mentions, graph. All read-only after load |
+| Built corpus (`Runtime`) | Process memory, loaded from `data/processed/` | Until the next successful rebuild | BM25 index (~30 MB pickle), passages, mentions, graph, and the embeddings matrix if the build has one (~22 MB). All read-only after load |
+| Vector store (optional) | Postgres with pgvector (`IKG_VECTOR_STORE=postgresql://...`; `compose.yaml`) | A copy of the current build's embeddings; reloaded in one transaction when the manifest's `embeddings.npy` checksum differs | Tables `ikg_passage_vectors` (HNSW index, inner product) and `ikg_vector_build`. Disposable: deleting it costs one reload |
 | Work registry | `data/works.yaml` | Persistent | Written under an in-process lock |
 | Gazetteer override | `data/gazetteer.yaml` | Persistent | Falls back to the bundled `src/ikg/data/gazetteer.yaml`. Takes effect at the next build |
 | Gazetteer of the current build | `data/processed/gazetteer.yaml` | Until the next build | What `Runtime` and `ikg analyze` use |
@@ -226,7 +227,8 @@ Current supported topology:
 - `ikg serve` binds `127.0.0.1` by default. Put a reverse proxy (Caddy, nginx) in front for
   HTTPS. uvicorn trusts `X-Forwarded-For` from 127.0.0.1, so per-client rate limits work.
 - Configuration is through environment variables only (listed in [05](05-interfaces.md#4-environment-variables)).
-- There is no container image yet; see [06](06-roadmap.md).
+- There is no container image for the app yet; see [06](06-roadmap.md). `compose.yaml` runs only
+  the optional Postgres for the vector store, bound to 127.0.0.1 (port 5433 by default).
 
 **Continuous integration** (`.github/workflows/ci.yml`, GitHub Actions) runs on every pull
 request and on pushes to `main`:
@@ -234,6 +236,7 @@ request and on pushes to `main`:
 | Job | What it does | Fails when |
 |---|---|---|
 | `tests` | `pytest` on Python 3.10 and 3.12; no network or API key | Any test fails |
+| `pgvector` | The vector store tests (`tests/test_vectorstore.py`) against a `pgvector/pgvector:0.8.1-pg17` service container, including recall against exact search | Any of them fails |
 | `eval-gate` | Takes the bundled texts from the `pinned-sources-v1` release of this repository, not gutenberg.org, and verifies their checksums (cached on `sources.yaml`; if the release or an asset is missing, this step fails on a cache miss), runs `ikg build`, then `ikg eval --check eval/baseline.json` | An offline retrieval metric falls below the committed baseline |
 
 The gate covers offline retrieval metrics only. Answer-level metrics (`--llm`) call the Claude
@@ -276,7 +279,7 @@ D11 and D12 are in the code; until D9 is done, the namespace is still `example.o
 ## 7. Technology stack
 
 What the project uses today. Anything not listed here is not used. Planned technologies
-(vector store, database, OIDC, triple store, Whisper, Docker) are in [06](06-roadmap.md)
+(an application database, OIDC, triple store, Whisper, an app container) are in [06](06-roadmap.md)
 and are not part of the system until they appear in this table.
 
 | Layer | Technology | Version / setting | Where | Notes |
@@ -286,8 +289,9 @@ and are not part of the system until they appear in this table.
 | Source texts | Project Gutenberg plain text, fetched with `requests` | ≥ 2.31 | `sources.py`, `sources.yaml` | Seven files, about 18 MB, each pinned by SHA-256; network needed only for `fetch`/`build`. Gutenberg re-issues texts in place, so exact pinned copies are kept as assets of the `pinned-sources-v1` release, which CI uses |
 | Uploads | `.txt`, `.md`, `.pdf` (text layer via pypdf) | pypdf ≥ 6.0 (core dependency: the build reads PDFs too) | `sources.py`, `segment.parse_generic`, `pdftext.py` | PDFs read in a child process with time and page limits. No OCR, EPUB or DOCX yet |
 | Segmentation and entity extraction | Python `re`, curated YAML gazetteer (PyYAML) | PyYAML ≥ 6.0 | `segment.py`, `entities.py`, `normalize.py` | Deterministic; no NLP or NER library |
-| Retrieval | BM25 implemented in the project (k1 = 1.5, b = 0.75), stored as a pickle | none (no search library) | `retrieve.py` | Gazetteer query expansion and entity boost; no vector store yet |
+| Retrieval | BM25 implemented in the project (k1 = 1.5, b = 0.75), stored as a pickle | none (no search library) | `retrieve.py` | Gazetteer query expansion and entity boost; search does not use the vector store yet (docs/08 A3) |
 | Embeddings (optional) | fastembed (ONNX Runtime, CPU) with `BAAI/bge-small-en-v1.5`, 384 dimensions; numpy for the matrix; or Ollama | fastembed ≥ 0.4, numpy ≥ 1.24 | `embed.py`, `pipeline.py` | `[embed]` extra; only with `ikg build --embed`. Written at build time, not used by search yet (docs/08 A1–A3) |
+| Vector store (optional) | Exact search over the matrix (`FileVectorStore`, default), or Postgres 17 with pgvector 0.8.1 and an HNSW index (`PgVectorStore`) through psycopg 3 | psycopg ≥ 3.2, pgvector (Python) ≥ 0.4; image `pgvector/pgvector:0.8.1-pg17` | `vectorstore.py`, `compose.yaml` | `[pg]` extra. Work and kind filters run inside the store (iterative HNSW scans). `ikg vectors compare` measures recall against exact search. Not used by search yet (A3) |
 | Knowledge graph | networkx co-occurrence graph, saved as GraphML | networkx ≥ 3.0 | `graph.py` | Not a graph database |
 | Ontology and linked data | OWL ontology in Turtle; RDF export and SPARQL with rdflib | rdflib ≥ 7.0 | `ontology/ikg.ttl`, `graph.to_rdf`, `ikg sparql` | Namespace is the placeholder `https://example.org/ikg#` (L13) |
 | Answer generation | Claude API through the `anthropic` SDK, native document citations | `claude-haiku-5-5` at effort `low` by default (D13); configurable | `qa.py`, `config.py` | Needs `ANTHROPIC_API_KEY`; the only paid call. Cost estimated per answer from `config.PRICES` |

@@ -63,6 +63,7 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | `ikg analyze` | Write `reports/corpus-analysis.md` | none | built corpus |
 | `ikg eval` | Retrieval metrics; failures listed as `MISS` | `-k`, `--llm`, `--no-expand`, `--model`, `--effort` (with `--llm`), `--check BASELINE` (exit 1 if any baseline metric got worse; used by CI) | built corpus (+ API key with `--llm`) |
 | `ikg eval --fidelity` | SOT-fidelity benchmark: pass/fail per item and check, rates per property | `--baseline` (plain model, no retrieval), `--include-drafts`, `--judge-model`, `--model`, `--effort`, `-k`; not combinable with `--check`, `--llm`, `--no-expand` | API key; built corpus unless `--baseline`; at least one approved item |
+| `ikg vectors compare` | Recall@k of a vector store against exact search, and both latencies, over sampled passage vectors, unfiltered, primary only, and one work | `--store` (a `postgresql://` URL or `file`; default `IKG_VECTOR_STORE`), `-n` (200), `-k` (8) | a build with embeddings; for Postgres, the `[pg]` extra and `docker compose up -d db` |
 | `ikg sparql "QUERY"` | Query `processed/ikg.ttl` | none | built corpus |
 | `ikg curator add\|remove\|list [NAME]` | Manage named curators; `add` prints the new login token once | none | none |
 | `ikg provenance` | Print the provenance log, oldest first | `-n` (50) | none |
@@ -98,6 +99,9 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_PDF_MAX_MEMORY_MB` | `2048` | Memory cap for the PDF reader process (POSIX only) |
 | `IKG_PDF_MAX_PARALLEL` | `2` | PDFs read at the same time |
 | `IKG_EMBED` | `off` | `on`/`1`/`true`/`yes`: builds (CLI and admin Rebuild) also write passage embeddings |
+| `IKG_VECTOR_STORE` | `file` | Nearest-passage search: `file` (exact, in memory) or a `postgresql://` URL with pgvector, loaded from the build on first use |
+| `IKG_PG_PORT`, `IKG_PG_PASSWORD` | `5433`, `ikg` | Host port and password of the Postgres in `compose.yaml` (local development) |
+| `IKG_TEST_PG_DSN` | unset | Tests only: a Postgres with pgvector for `tests/test_vectorstore.py`; unset skips those tests |
 | `IKG_EMBED_MODEL` | `BAAI/bge-small-en-v1.5` | fastembed model for embeddings, or `ollama:<model>` (e.g. `ollama:nomic-embed-text`) for a local Ollama |
 | `IKG_SCREEN` | `on` | `off`/`0`/`false`/`no` disables upload screening |
 | `IKG_SCREEN_MODEL` | `qwen3.5:9B` | Ollama model for screening |
