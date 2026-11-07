@@ -55,8 +55,8 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 
 | Command | Purpose | Key options | Needs |
 |---|---|---|---|
-| `ikg build` | Segment, extract, index, graph, RDF; with `--embed`, passage embeddings | `--works ID...`, `--with-passages` (passages in RDF), `--embed` / `--no-embed` (overrides `IKG_EMBED`) | raw texts; `--embed` needs the `[embed]` extra and, the first time, a network to download the model |
 | `ikg fetch` | Download registered Gutenberg texts and verify pinned checksums | `--works ID...`, `--force` | network. If a pin fails because Gutenberg re-issued a text, take the pinned copies with `gh release download pinned-sources-v1 --dir data/raw --pattern 'pg*.txt' --clobber` |
+| `ikg build` | Segment, extract, index, graph, RDF; with `--embed`, passage embeddings | `--works ID...`, `--with-passages` (passages in RDF), `--embed` / `--no-embed` (overrides `IKG_EMBED`) | raw texts; `--embed` needs the `[embed]` extra and, the first time, a network to download the model |
 | `ikg stats` | Passages per work and kind | none | built corpus |
 | `ikg search "Q"` | Ranked passages, no API call | `-k`, `--works`, `--primary-only` | built corpus |
 | `ikg ask "Q"` | Cited answer, then the model, tokens and estimated cost | `-k`, `--works`, `--primary-only`, `--show-retrieval`, `--model`, `--effort` | `ANTHROPIC_API_KEY` |
