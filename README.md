@@ -15,6 +15,27 @@ lose:
 3. **Which text, which speaker.** Answers keep views from different works and speakers separate
    instead of blending them.
 
+**What it does today:**
+
+- **Cited answers.** Every sentence of an answer cites a passage id, edition and translator. If the passages
+  don't answer the question, it says `NOT_IN_SOURCES` instead of guessing. Answers come from Claude
+  (Haiku 5.5, about $0.001 each), or free from a local model through Ollama (e.g. Qwen 3.5 9B), whose
+  citations are checked in code.
+- **Hybrid search.** Keyword (BM25 with gazetteer expansion) and meaning (dense embeddings) are fused. The
+  right passage comes first for 41% of the evaluation questions, up from 28% with keywords alone.
+- **A knowledge graph** of people, deities, places and concepts, exported as RDF/OWL for SPARQL.
+- **An MCP server** (`ikg mcp`), so AI assistants such as Claude, ChatGPT or Copilot can search, read
+  passages, look up entities, query the graph and get cited answers as tools.
+- **A web app and admin** for searching, asking, exploring the graph, contributing texts and curating
+  them, with named curators and an append-only provenance log.
+- **Measured.** An 86-question evaluation gates every pull request in CI.
+
+**Where it's going** ([docs/08](docs/08-agentic-extension.md)): the same backend as plugins for Claude,
+ChatGPT and Microsoft 365 Copilot, then an agent that plans multi-step questions and checks every citation,
+with claims entering the graph only after a curator approves them. [docs/09](docs/09-related-projects.md)
+looks at Sanskrit-side projects that could add the original text, and there is a
+[two-page brief](docs/briefs/ikg-brief.pdf) for readers outside the code.
+
 Specification, architecture, design, data model, interfaces and roadmap are in [`docs/`](docs/README.md).
 
 ## Corpus
@@ -35,12 +56,16 @@ public-domain edition is located; see `src/ikg/data/sources.yaml`.
 ```bash
 python -m venv .venv
 .venv/Scripts/activate            # Windows; on macOS/Linux: source .venv/bin/activate
-pip install -e ".[web,dev]"
+pip install -e ".[web,dev,embed]"   # add mcp for the MCP server (Python 3.11+), pg for Postgres
 
 gh release download pinned-sources-v1 --dir data/raw --pattern 'pg*.txt' --clobber
                                   # the exact pinned texts (~18 MB). Gutenberg re-issued two of them,
 ikg fetch                         # and a re-issued text changes passage IDs; fetch verifies the pins
-ikg build                         # segment, extract entities, index, build graph + RDF (~10 s)
+gh release download embeddings-bge-small-en-v1.5 --dir data/processed --pattern 'embeddings.*' --clobber
+                                  # optional: published passage embeddings, so the next step reuses
+ikg build --embed                 # them instead of computing them for ~10 minutes (it checks they
+                                  # match; the 65 MB model still downloads once). Plain `ikg build`
+                                  # works too, with keyword-only search
 ikg serve                         # web app at http://127.0.0.1:8000
 ```
 
@@ -130,9 +155,73 @@ ikg eval                          # retrieval metrics; add --llm for answer/cita
 ikg eval --no-expand              # ablation without gazetteer query expansion
 ikg eval --check eval/baseline.json   # regression gate used by CI
 ikg sparql "SELECT ?label WHERE { ?e a ikg:Concept ; rdfs:label ?label }"
+ikg search "What does Vidura say about krodha?" --mode dense       # bm25 | dense | hybrid (default)
+ikg eval --retriever all          # BM25, dense and hybrid side by side, per question type
+ikg ask "Who is Nachiketas?" --model ollama:qwen3.5:9B             # a local model, no API key
+ikg mcp                           # the corpus as MCP tools over stdio (--http for remote)
 ikg vectors compare --store postgresql://ikg:ikg@127.0.0.1:5433/ikg   # pgvector recall vs exact search
 ikg stats
 ```
+
+## Use it from an AI assistant (MCP)
+
+`ikg mcp` serves the corpus as [Model Context Protocol](https://modelcontextprotocol.io) tools. Install the
+extra first (`pip install -e ".[mcp]"`, Python 3.11+).
+
+| Tool | What it does | Cost |
+|---|---|---|
+| `ikg_search_passages` | Ranked passages for a question, with work, edition, translator and kind; filters by work and primary text | free |
+| `ikg_get_passage` | One passage with its entities, source URL and up to two neighbours each side | free |
+| `ikg_get_entity` | A person, place or concept by id or any alias: renderings by translator, mentions per work, strongest links | free |
+| `ikg_sparql_query` | Read-only SPARQL (SELECT or ASK; no updates, no SERVICE; time- and row-limited) | free |
+| `ikg_ask` | A cited answer, or `NOT_IN_SOURCES` | budgeted and rate-limited (free with a local model) |
+
+The resource `ikg://ontology` serves the ontology for writing SPARQL. Every tool output has a JSON schema,
+and every call is logged to `data/mcp-calls.jsonl` with the caller, tool and cost.
+
+**Local (stdio)**, for Claude Code, Claude Desktop or any MCP client that launches a command:
+
+```bash
+claude mcp add ikg -- ikg mcp          # Claude Code, from the project folder with the .venv activated
+                                       # (or give the full path to .venv/Scripts/ikg.exe)
+```
+
+For Claude Desktop, add to `claude_desktop_config.json`. It doesn't start in the project folder, so give
+full paths, and any settings `.env` would have provided:
+
+```json
+{"mcpServers": {"ikg": {"command": "D:/Projects/indic-knowledge-graph/.venv/Scripts/ikg.exe",
+                        "args": ["mcp"],
+                        "env": {"IKG_DATA": "D:/Projects/indic-knowledge-graph/data",
+                                "IKG_ANSWER_MODEL": "ollama:qwen3.5:9B"}}}}
+```
+
+**Remote (Streamable HTTP)** at `/mcp`, protected by a bearer token:
+
+```bash
+IKG_MCP_TOKEN=<16+ random characters> ikg mcp --http --port 8001
+# or with Docker, after setting IKG_MCP_TOKEN in .env:
+docker compose --profile mcp up -d mcp     # http://127.0.0.1:8001/mcp
+```
+
+Clients send `Authorization: Bearer <token>`. `ikg_ask`'s budget and hourly limit are per server, shared
+by every client of one token. Packaging as Claude, ChatGPT and Microsoft 365 Copilot
+plugins, which needs a public HTTPS address, is the next step ([docs/08 B2–B4](docs/08-agentic-extension.md)).
+
+## Roadmap: the agentic extension
+
+[docs/08](docs/08-agentic-extension.md) adds hybrid retrieval, an MCP server, three assistant platforms
+and an agent, one measured pull request at a time.
+
+| Step | What | Status |
+|---|---|---|
+| A1–A3 | Embeddings at build time; a vector store (exact, or Postgres + pgvector); hybrid retrieval, adopted because it beat BM25 on the evaluation | Done |
+| — | Cited answers from a local model (Ollama), citations checked in code | Done |
+| B1 | MCP server: search, passages, entities, SPARQL and answers as tools; stdio and HTTP with a token | Done |
+| E (local) | Docker image and compose stack (app, Postgres, MCP) | Done; public hosting and a runbook next |
+| B2–B4 | The same backend as a Claude connector and skill, a ChatGPT custom GPT, and a Microsoft 365 Copilot declarative agent | Next |
+| C1–C3 | A LangGraph agent that plans, gathers evidence through the MCP tools, drafts, and verifies every citation; curator approval before a claim enters the graph; an LLM-judge evaluation with calibration; versioned prompts | Planned |
+| D | A regulation corpus (31 CFR Chapter X), to show the design carries to compliance text | Optional |
 
 ## How it works
 
@@ -141,12 +230,15 @@ Gutenberg / uploads ──► segment ──► passages (id, work, book, sectio
                                       │
                gazetteer ──► entity extraction ──► mentions (alias | rendering)
                                       │
-             ┌────────────────────────┼─────────────────────────┐
-         BM25 index          co-occurrence graph           RDF (ontology/ikg.ttl)
-             │                  (networkx)                   SPARQL
-             └──── query expansion + entity boost ────┐
-                                                      ▼
-                      Claude with native citations → answer + passage references
+             ┌───────────────┬────────┼─────────────────────────┐
+         BM25 index   embeddings (bge-small)   co-occurrence graph   RDF (ontology/ikg.ttl)
+             │          + vector store            (networkx)          SPARQL
+             └── hybrid: rank fusion + query expansion + entity boost ──┐
+                                                                         ▼
+       Claude with native citations, or a local model with code-checked citations
+                                → answer + passage references
+                                                                         ▲
+           web app · CLI · MCP server (search, passages, entities, SPARQL, ask)
 ```
 
 - **Segmentation** (`segment.py`): one parser per edition keeps the text's own structure
@@ -165,10 +257,13 @@ Gutenberg / uploads ──► segment ──► passages (id, work, book, sectio
   and the bare name "Rama" is matched only there, because in the Mahabharata it often means
   Balarama or Parasurama. Matching is deterministic, so every graph edge traces back to a
   surface form in a passage.
-- **Retrieval** (`retrieve.py`): BM25, with the query expanded from the gazetteer: a question
-  about *dharma* also searches "righteousness" and "duty", and one about "Partha" also searches
-  "Arjuna". Passages mentioning the question's entities get a boost.
-- **Answering** (`qa.py`): the top passages go to Claude as documents with citations enabled,
+- **Retrieval** (`retrieve.py`): hybrid by default. BM25, with the query expanded from the
+  gazetteer (a question about *dharma* also searches "righteousness" and "duty", and one about
+  "Partha" also searches "Arjuna"), is fused with dense search over passage embeddings
+  (`embed.py`, `vectorstore.py`) by reciprocal rank fusion. Passages mentioning the question's
+  entities get a boost. Without embeddings it falls back to BM25.
+- **Answering** (`qa.py`, `localqa.py`): the top passages go to Claude as documents with citations
+  enabled, or to a local Ollama model whose cited quotes are verified in code,
   with a short knowledge-graph summary for orientation. The system prompt requires grounding,
   separate attribution for commentary and scholarship, no blending of views across works, and an
   explicit `NOT_IN_SOURCES` abstention. Refusals are handled, and server-side fallback is enabled.
@@ -256,8 +351,10 @@ What this shows so far:
 ## Limitations
 
 - The texts are 19th- and early-20th-century English translations. The system can surface
-  translation choices but cannot yet compare them against the Sanskrit. The next step is
-  aligning passages to Sanskrit originals from GRETIL or the Digital Corpus of Sanskrit.
+  translation choices but cannot yet compare them against the Sanskrit. Aligning passages to
+  Sanskrit originals from the Digital Corpus of Sanskrit is proposed in [docs/09](docs/09-related-projects.md).
+- Retrieval finds the answering passage in the top 8 for about two-thirds of the questions; ones
+  phrased with Sanskrit terms are the weakest (11 of 15 miss).
 - Entity matching is lexical. Epithets missing from the gazetteer are missed, and patronymics
   inflate some counts ("son of Pandu").
 - Claims and schools of thought are modelled in the ontology but not yet populated. They are
@@ -272,24 +369,27 @@ pytest
 ikg eval --check eval/baseline.json   # fails if retrieval got worse than the committed baseline
 ```
 
-132 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
+Over 200 tests cover the edition parsers (with fixtures that reproduce each edition's quirks), entity
 matching and gazetteer validation, checksum pinning of the source texts, retrieval and expansion, the graph and its RDF export
 (checked against the ontology), the analysis report, the CLI's `search` and `stats`, QA
 citation handling, model choice and cost with a mocked Claude client, and the web app end to end: contribute, review,
 rebuild, search, graph, auth, upload validation, HTML escaping, the answer cache, the daily
-budget, and that Ask never runs on a GET. No test needs a network
-connection or an API key.
+budget, and that Ask never runs on a GET; embeddings, the vector store and hybrid fusion with a
+fake embedder; local-model answers with a fake Ollama; and every MCP tool through an in-process MCP
+client. No test needs a network connection, a model or an API key.
 
 **Continuous integration.** GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml))
-runs the tests on Python 3.10 and 3.12 for every pull request. It also builds the full corpus
-and runs the eval check above. Every PR also gets an independent review by a Fable subagent
+runs the tests on Python 3.10 and 3.12 for every pull request, the vector-store tests against a
+pgvector container, and a Docker image build. It also builds the full corpus with embeddings and
+runs the eval check above against the hybrid baseline. Every PR also gets an independent review by a Fable subagent
 ([.claude/agents/fable-reviewer.md](.claude/agents/fable-reviewer.md)); see
 [ONBOARDING.md §7](ONBOARDING.md#7-how-we-work).
 
 ## Technology
 
-Python 3.10+, a BM25 index implemented in the project, a curated YAML gazetteer, networkx,
-rdflib (OWL, RDF, SPARQL), Claude (Haiku 5.5 by default) with native citations for answers,
-a local Ollama model for screening uploads, FastAPI with Jinja2, Cytoscape.js, pytest, and
-GitHub Actions. Data is stored as files, with no database. The full table with versions and
+Python 3.10+, a BM25 index implemented in the project, fastembed (`bge-small-en-v1.5`) for
+embeddings with an exact or Postgres + pgvector vector store, a curated YAML gazetteer, networkx,
+rdflib (OWL, RDF, SPARQL), Claude (Haiku 5.5 by default) with native citations for answers or a
+local Ollama model, the MCP Python SDK, FastAPI with Jinja2, Cytoscape.js, Docker, pytest, and
+GitHub Actions. The corpus is stored as files; Postgres is optional, a copy of the vectors. The full table with versions and
 where each technology is used is in [docs/02 §7](docs/02-architecture.md#7-technology-stack).

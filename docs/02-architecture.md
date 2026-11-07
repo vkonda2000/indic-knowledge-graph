@@ -84,6 +84,9 @@ flowchart TB
 | `analysis.py` | Markdown corpus report | `entities`, `segment` |
 | `evaluate.py` | Retrieval and answer metrics over `eval/questions.jsonl` | `retrieve`, `qa` |
 | `web/app.py` | HTTP routes, admin sessions, rate limiting, background rebuild | `pipeline`, `screen`, ... |
+| `mcp_server.py` | MCP tools over stdio or Streamable HTTP with a bearer token (docs/03 §13) | `pipeline`, `retrieve`, `qa`, `sparql`, `describe`, `limits` |
+| `sparql.py` | Read-only SPARQL in a time-limited child process | `rdflib` |
+| `limits.py`, `describe.py` | Rate limiter and spend budget; entity and snippet views, shared by the web app and the MCP server | `pipeline`, `graph` |
 | `cli.py` | `ikg` command | `pipeline`, ... |
 
 The core library has no web dependency. The web app and the CLI are thin layers over the
@@ -320,6 +323,7 @@ and are not part of the system until they appear in this table.
 | Answer generation (local, optional) | A model served by Ollama, e.g. `qwen3.5:9B`, with a JSON-schema reply; citations verified in code by quote matching | `IKG_ANSWER_MODEL=ollama:<model>` | `localqa.py` | No API key or cost; see docs/03 §6.1 and the eval comparison in docs/06 §1 |
 | Answer generation | Claude API through the `anthropic` SDK, native document citations | `claude-haiku-5-5` at effort `low` by default (D13); configurable | `qa.py`, `config.py` | Needs `ANTHROPIC_API_KEY`; the only paid call. Cost estimated per answer from `config.PRICES` |
 | Upload screening | Ollama (local) over HTTP | default model `qwen3.5:9B` | `screen.py` | Runs on the host; uploads are rejected if Ollama is unreachable |
+| MCP server | MCP Python SDK v2 (`MCPServer`), stdio and Streamable HTTP (stateless, JSON), bearer token | `mcp` ≥ 2.3 < 3 (Python 3.11+) | `mcp_server.py`, `sparql.py` | `[mcp]` extra; also the compose `mcp` service (profile `mcp`, port 8001) |
 | Web app | FastAPI, served by uvicorn; Jinja2 templates; python-multipart for forms | FastAPI ≥ 0.110, uvicorn ≥ 0.29, Jinja2 ≥ 3.1 | `web/app.py`, `web/templates/` | `[web]` extra. Sessions, rate limits and the build job live in process memory |
 | Graph explorer | Cytoscape.js from the jsDelivr CDN | 3.30.2 | `web/templates/graph.html`, `web/static/graph.js` | Only browser dependency |
 | Storage | Files on disk: JSONL, YAML, pickle, GraphML, Turtle, JSON (build manifest) | none | `data/` (D6) | No database |

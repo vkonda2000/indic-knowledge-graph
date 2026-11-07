@@ -92,6 +92,7 @@ All paths are under `IKG_DATA` (default `data/`) unless noted.
 | `processed/.build.lock` | Text (process ID), present only during a build | `build` | `build` | no |
 | `works.yaml` | YAML | web admin / contribute | `sources` | no |
 | `curators.yaml` | YAML: `name`, `token_sha256`, `added` per curator | `ikg curator` | login | no |
+| `mcp-calls.jsonl` | JSONL: `time` (UTC), `transport` (`stdio` or `http`), `caller` (`local` or `token`), `tool`, `summary` (first 200 characters of the query), `cost_usd`, `ok` | `ikg mcp` | people | no |
 | `provenance.jsonl` | JSONL: `time` (UTC), `curator`, `action`, `target`, `detail` | web app, `ikg curator` | admin page, `ikg provenance` | no |
 | `gazetteer.yaml` | YAML | web admin gazetteer editor | `entities` (takes precedence) | no |
 | `raw/pg<n>.txt` | Gutenberg text | `fetch` | `segment` | no |

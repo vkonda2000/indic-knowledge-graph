@@ -452,8 +452,8 @@ expert-approved, current-corpus items are scored; the command refuses to run oth
 
 ## 12. Testing
 
-`pytest` runs 132 tests in about 3 s, with no network or API key needed. CI runs them on
-Python 3.10 and 3.12:
+`pytest` runs over 200 tests in about 20 s, with no network, model or API key needed. CI runs them on
+Python 3.10 and 3.12 (the MCP tests need the SDK, Python 3.11+, and are skipped on 3.10):
 
 - Unit tests: normalisation, segmentation (all parsers, using fixture text), gazetteer
   matching, retrieval and graph, QA citation mapping with a fake client, screening with a
@@ -471,3 +471,45 @@ Python 3.10 and 3.12:
 Not covered by tests: `ikg fetch`, `build`, `ask`, `sparql` and `serve` as CLI commands
 (the functions behind `build` and `ask` are tested), and parsing of the full Gutenberg texts,
 which the CI eval gate exercises instead.
+
+## 13. MCP server (`mcp_server.py`, `sparql.py`)
+
+`ikg mcp` exposes one loaded build as Model Context Protocol tools, built with the MCP Python SDK v2
+(`MCPServer`). Over stdio there is no authentication (the client launched the process); over
+Streamable HTTP (`--http`, at `/mcp`, stateless, JSON responses) every request must carry
+`Authorization: Bearer $IKG_MCP_TOKEN`, compared in constant time, and DNS-rebinding protection checks
+the `Host` header when bound to localhost.
+
+| Tool | Returns (JSON schema) | Notes |
+|---|---|---|
+| `ikg_search_passages` | `query`, `retriever`, recognised `entities`, `results[]` with `passage_id`, `ref`, `work`, `edition`, `kind`, `translator`, `score`, `text` | `k` 1–20; `works`, `primary_only`, `mode` (default: `IKG_RETRIEVER`) |
+| `ikg_get_passage` | the passage, its `entities`, `source_url`, `previous_id`/`next_id`, and `before`/`after` neighbours (0–2) | same edition only |
+| `ikg_get_entity` | aliases, `renderings`, mentions per work, `surface_forms`, strongest co-occurrence `connections`, passage ids | by id or any alias ("Partha") |
+| `ikg_sparql_query` | `columns`, `rows`, `boolean` (ASK), `truncated` | see below |
+| `ikg_ask` | `text`, `abstained`, `refused`, `citations[]` (`n`, `passage_id`, `ref`, `cited_text`), `model`, `retriever`, `cost_usd` | budgeted, rate-limited |
+
+The resource `ikg://ontology` serves `ontology/ikg.ttl` (or `IKG_ONTOLOGY`). The server's instructions
+and every tool description carry the traceability rules, because the calling model sees nothing else:
+cite passage ids and translators, never present commentary or scholarship as the text, keep works and
+speakers apart, and report `NOT_IN_SOURCES` rather than answer from general knowledge.
+
+- **SPARQL** (`sparql.py`): the query must parse as SELECT or ASK (every update form fails to parse as a
+  query), must not contain SERVICE, and runs in a child process (`python -m ikg.sparql`) that is killed
+  after `IKG_SPARQL_TIMEOUT` seconds; at most 500 rows come back, with `truncated` set.
+- **Cost:** only `ikg_ask` can cost money. It is refused when the server's daily budget
+  (`IKG_ASK_BUDGET_USD`) is spent or `IKG_ASK_LIMIT` questions have been asked this hour, both per server
+  process: with one static token every HTTP client shares them, and `IKG_ASK_LIMIT=0` turns `ikg_ask`
+  off. A failed call counts against the budget only if it may have cost money (`qa.may_have_been_billed`,
+  shared with the web app): a timeout or a server error does; a rejected request, a local model or a
+  retrieval failure doesn't. If dense search fails, the answer is retried with BM25, as in the web app.
+  With a local answer model it costs nothing.
+- **Errors** name the kind of failure, never a host, path or traceback.
+- **Host checks:** bound to localhost (`127.0.0.1`, `localhost`, `::1`), the SDK refuses requests whose
+  `Host` header isn't local, against DNS rebinding. Behind a reverse proxy, which forwards its public
+  `Host`, bind to `0.0.0.0` (as the compose service does) and rely on the token.
+- **Call log:** every call appends `time`, `transport` (`stdio` or `http`), `caller` (`local`, or `token`
+  for the shared HTTP token; a client identity once OAuth arrives), `tool`, a short `summary`, `cost_usd`
+  and `ok` to `data/mcp-calls.jsonl` (separate from the provenance log, which records curation).
+- **Shared code:** the budget and rate limiter (`limits.py`) and the entity view (`describe.py`) are the
+  web app's own, moved out of `web/app.py` so the MCP server needs no web dependency.
+
