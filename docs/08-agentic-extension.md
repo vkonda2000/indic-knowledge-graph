@@ -171,7 +171,9 @@ A second, small corpus beside the Indic one, to show the transfer directly.
 ## E. Running it somewhere others can reach
 
 B2–B4 need a public HTTPS endpoint. A `Dockerfile` (the app, the MCP HTTP server, the built corpus),
-`compose.yaml` with Postgres + pgvector, and one small host behind HTTPS (or a tunnel). The existing
+`compose.yaml` with Postgres + pgvector, and one small host behind HTTPS (or a tunnel). *First step
+done:* a local app image and compose stack, with the corpus mounted from `./data` rather than baked
+in (docs/02 §5). The existing
 budget cap, rate limits and admin tokens apply; the corpus is public domain. A short `RUNBOOK.md`:
 start, stop, rebuild, rotate tokens, read the logs, what the budget alarm means.
 

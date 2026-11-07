@@ -101,6 +101,7 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_EMBED` | `off` | `on`/`1`/`true`/`yes`: builds (CLI and admin Rebuild) also write passage embeddings |
 | `IKG_VECTOR_STORE` | `file` | Nearest-passage search: `file` (exact, in memory) or a `postgresql://` URL with pgvector, loaded from the build on first use |
 | `IKG_PG_PORT`, `IKG_PG_PASSWORD` | `5433`, `ikg` | Host port and password of the Postgres in `compose.yaml` (local development) |
+| `IKG_APP_PORT` | `8000` | Host port of the app container in `compose.yaml` |
 | `IKG_TEST_PG_DSN` | unset | Tests only: a Postgres with pgvector for `tests/test_vectorstore.py`; unset skips those tests |
 | `IKG_EMBED_MODEL` | `BAAI/bge-small-en-v1.5` | fastembed model for embeddings, or `ollama:<model>` (e.g. `ollama:nomic-embed-text`) for a local Ollama |
 | `IKG_SCREEN` | `on` | `off`/`0`/`false`/`no` disables upload screening |

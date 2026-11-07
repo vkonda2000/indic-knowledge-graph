@@ -265,7 +265,7 @@ flowchart LR
 | Reject duplicate surface forms across entities in the gazetteer validator | L5 | `entities.py` | **Done** |
 | Measure rendering precision on a sample of 100 mentions per ambiguous rendering; scope or drop noisy ones | L6 | `gazetteer.yaml`, `analysis.py` | Not started |
 | Choose a permanent namespace; widen the `renders` range | L13, L14 | `graph.py`, ontology | Not started |
-| Dockerfile (app + optional Ollama sidecar) | Deployment | repo root | Not started |
+| Dockerfile (app + optional Ollama sidecar) | Deployment | repo root | **Partial**: app image and compose with Postgres, local only; Ollama stays on the host. Hosting and runbook in docs/08 §E |
 | **Review fixes, urgent**: stop citations to the graph summary; POST-only Ask, a global spend budget and limiter eviction; byte-wise token comparison | L20, L21, L25 | `qa.py`, `web/app.py` | **Done**, plus an answer cache and a configurable answering model |
 | **Self-describing, atomic builds**: build manifest (gazetteer hash, works, source checksums, chunking parameters), gazetteer snapshot, write every artefact to a temporary file and swap them in after all succeeded (a versioned directory with a pointer switch is the stronger option if more artefacts are added), shared lock | L19, L24 | `pipeline.py`, `sources.py`, `sources.yaml` | **Done** |
 | **Data-model decisions before eval growth**: edition on passages, v1 ID and locator scheme, per-edition renderings, permanent namespace | L27, L28, L29, L13 | [02 §6](02-architecture.md#6-key-decisions) D9–D11 | **Decided** 2026-10-23 |

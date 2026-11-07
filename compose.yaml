@@ -1,11 +1,16 @@
-# Postgres with pgvector, for the optional vector store (docs/08 A2).
+# Local stack: Postgres with pgvector (docs/08 A2) and the IKG app (docs/08 §E, local image).
 #
-#   docker compose up -d db
+#   docker compose up -d db                 # the database only, for `ikg` on the host:
 #   IKG_VECTOR_STORE=postgresql://ikg:ikg@127.0.0.1:5433/ikg ikg vectors compare
 #
-# Local development only: the password is a default and the port is bound to 127.0.0.1.
-# The table is a copy of the build's embeddings, reloaded when the build changes, so the
-# volume can be deleted at any time.
+#   docker compose up -d --build            # database + app; site at http://127.0.0.1:8000
+#   docker compose exec app ikg vectors compare
+#
+# Local development only: the password is a default and both ports are bound to 127.0.0.1.
+# The app serves the corpus built on the host (./data, mounted), so run `ikg build --embed` there
+# first. On Linux, ./data must be writable by uid 1000 (`sudo chown -R 1000:1000 data`), or the
+# container can serve but not rebuild, upload or log provenance. The vector table is a copy of
+# the build's embeddings, reloaded when the build changes, so the db volume can be deleted any time.
 services:
   db:
     image: pgvector/pgvector:0.8.1-pg17
@@ -23,5 +28,28 @@ services:
       timeout: 3s
       retries: 30
 
+  app:
+    build: .
+    image: ikg-app:local
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env          # ANTHROPIC_API_KEY, IKG_ADMIN_TOKEN, limits; optional
+        required: false
+    environment:
+      IKG_DATA: /app/data
+      IKG_VECTOR_STORE: postgresql://ikg:${IKG_PG_PASSWORD:-ikg}@db:5432/ikg
+      IKG_EMBED: "on"  # an admin Rebuild keeps the embeddings (minutes, not seconds)
+      OLLAMA_HOST: http://host.docker.internal:11434  # upload screening uses Ollama on the host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Docker Engine on Linux; Docker Desktop has it already
+    volumes:
+      - ./data:/app/data
+      - ikg-models:/home/ikg/.cache  # the embedding model, downloaded on the first Rebuild
+    ports:
+      - "127.0.0.1:${IKG_APP_PORT:-8000}:8000"
+
 volumes:
   ikg-pg:
+  ikg-models:

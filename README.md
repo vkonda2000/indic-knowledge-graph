@@ -52,6 +52,17 @@ and set `ANTHROPIC_API_KEY` and `IKG_ADMIN_TOKEN` there; `ikg` loads it from the
 directory, and `.env` is git-ignored. Variables set in the shell take precedence.
 Search, the graph explorer, analysis and the retrieval evaluation work without one.
 
+### With Docker
+
+After `ikg build --embed` on the host (the image serves the corpus in `./data`; an admin Rebuild
+from the site rebuilds it there, embeddings included). On Linux, `sudo chown -R 1000:1000 data` first:
+
+```bash
+docker compose up -d --build              # app on http://127.0.0.1:8000, Postgres + pgvector on 5433
+docker compose exec app ikg vectors compare   # pgvector recall against exact search, from the container
+docker compose down                       # add -v to delete the database volume (a disposable copy)
+```
+
 ## Web app
 
 | Page | Who | What it does |

@@ -227,8 +227,20 @@ Current supported topology:
 - `ikg serve` binds `127.0.0.1` by default. Put a reverse proxy (Caddy, nginx) in front for
   HTTPS. uvicorn trusts `X-Forwarded-For` from 127.0.0.1, so per-client rate limits work.
 - Configuration is through environment variables only (listed in [05](05-interfaces.md#4-environment-variables)).
-- There is no container image for the app yet; see [06](06-roadmap.md). `compose.yaml` runs only
-  the optional Postgres for the vector store, bound to 127.0.0.1 (port 5433 by default).
+- **Containers (local).** `Dockerfile` builds the app image (`python:3.12-slim`, the
+  `[web,pg,embed]` extras, uid 1000, `ikg serve` on port 8000 with a health check). The corpus is
+  not in the image: `compose.yaml` mounts `./data`, so the container serves the build made on the
+  host, and an admin Rebuild writes back to it with embeddings (`IKG_EMBED=on`; the model is cached
+  in the `ikg-models` volume, and such a Rebuild takes minutes). `docker compose up -d --build`
+  starts the app on `127.0.0.1:8000` and Postgres with pgvector on `127.0.0.1:5433`, with
+  `IKG_VECTOR_STORE` pointing the app at the database over Docker's network. On Linux, `./data` must
+  be writable by uid 1000, and `host.docker.internal` (Ollama for upload screening) is mapped to the
+  host gateway.
+  Behind Docker's port mapping every client has the gateway's address, so per-client limits are
+  shared: one visitor can use up the Ask and upload allowances, or lock admin login for an hour with
+  failed attempts, for everyone. That is acceptable only while the ports are bound to 127.0.0.1. With a
+  reverse proxy in front (docs/08 §E), set `FORWARDED_ALLOW_IPS` to the proxy's address as the
+  container sees it. Public hosting, HTTPS and a runbook are docs/08 §E.
 
 **Continuous integration** (`.github/workflows/ci.yml`, GitHub Actions) runs on every pull
 request and on pushes to `main`:
@@ -236,6 +248,7 @@ request and on pushes to `main`:
 | Job | What it does | Fails when |
 |---|---|---|
 | `tests` | `pytest` on Python 3.10 and 3.12; no network or API key | Any test fails |
+| `image` | Builds the app image and checks that a container serves `/` (an empty corpus) | The image fails to build or start |
 | `pgvector` | The vector store tests (`tests/test_vectorstore.py`) against a `pgvector/pgvector:0.8.1-pg17` service container, including recall against exact search | Any of them fails |
 | `eval-gate` | Takes the bundled texts from the `pinned-sources-v1` release of this repository, not gutenberg.org, and verifies their checksums (cached on `sources.yaml`; if the release or an asset is missing, this step fails on a cache miss), runs `ikg build`, then `ikg eval --check eval/baseline.json` | An offline retrieval metric falls below the committed baseline |
 
@@ -302,6 +315,7 @@ and are not part of the system until they appear in this table.
 | Tests | pytest; httpx for FastAPI's `TestClient` | pytest ≥ 7.0, httpx ≥ 0.27 | `tests/` | Models and HTTP are faked; no network or key needed |
 | Evaluation | `ikg eval` with committed baselines | `eval/baseline.json` (offline, CI), `eval/baseline-llm.json` (answers, by hand) | `evaluate.py` | `--check` is the regression gate |
 | Fidelity judge | Claude through the `anthropic` SDK with structured JSON output (`output_config.format`) | `claude-opus-5-5` at effort `medium` by default | `fidelity.py` | `ikg eval --fidelity` only; grades answers against expert-written checks |
+| Containers | Docker image from `python:3.12-slim`; Docker Compose for the app and Postgres | `ikg-app:local`, `pgvector/pgvector:0.8.1-pg17` | `Dockerfile`, `compose.yaml` | Local only so far; the corpus is mounted from `./data` |
 | CI | GitHub Actions | `actions/checkout@v4`, `setup-python@v5`, `cache/restore@v4`, `cache/save@v4` | `.github/workflows/ci.yml` | See §5 |
 | Code review | Independent review by a Fable subagent before each PR | `.claude/agents/fable-reviewer.md` | PR template | See ONBOARDING §7 |
 | Docs and diagrams | Markdown with Mermaid | none | `docs/` | Render on GitHub |
