@@ -24,7 +24,8 @@ The scope is in [docs/01 §0](docs/01-specification.md#0-target-system-and-this-
 
 ## 2. Set up (day 1)
 
-You need: Python 3.10+, Git, access to the GitHub repo (ask your mentor to add you), and an
+You need: Python 3.10+, Git, the GitHub CLI (`gh`, logged in with `gh auth login`), access to
+the GitHub repo (ask your mentor to add you), and an
 Anthropic API key with a spending limit (your mentor will arrange one).
 
 ```powershell
@@ -38,7 +39,9 @@ copy .env.example .env                 # macOS/Linux: cp .env.example .env
 # edit .env: set ANTHROPIC_API_KEY and IKG_ADMIN_TOKEN (a long random string)
 # for your own admin login, ask for a curator token: ikg curator add <your-name>
 
-ikg fetch                              # download the texts (~18 MB)
+gh release download pinned-sources-v1 --dir data/raw --pattern 'pg*.txt' --clobber
+                                       # the exact pinned texts (~18 MB); gutenberg.org has re-issued two
+ikg fetch                              # verify each text against its pinned checksum
 ikg build                              # build passages, index, graph (~10 s)
 pytest -q                              # all tests should pass
 ikg serve                              # open http://127.0.0.1:8000

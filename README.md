@@ -37,7 +37,9 @@ python -m venv .venv
 .venv/Scripts/activate            # Windows; on macOS/Linux: source .venv/bin/activate
 pip install -e ".[web,dev]"
 
-ikg fetch                         # download the texts (~18 MB) from Project Gutenberg
+gh release download pinned-sources-v1 --dir data/raw --pattern 'pg*.txt' --clobber
+                                  # the exact pinned texts (~18 MB). Gutenberg re-issued two of them,
+ikg fetch                         # and a re-issued text changes passage IDs; fetch verifies the pins
 ikg build                         # segment, extract entities, index, build graph + RDF (~10 s)
 ikg serve                         # web app at http://127.0.0.1:8000
 ```

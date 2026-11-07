@@ -226,7 +226,7 @@ request and on pushes to `main`:
 | Job | What it does | Fails when |
 |---|---|---|
 | `tests` | `pytest` on Python 3.10 and 3.12; no network or API key | Any test fails |
-| `eval-gate` | Takes the bundled texts from the `pinned-sources-v1` release of this repository, not gutenberg.org, and verifies their checksums (cached on `sources.yaml`), runs `ikg build`, then `ikg eval --check eval/baseline.json` | An offline retrieval metric falls below the committed baseline |
+| `eval-gate` | Takes the bundled texts from the `pinned-sources-v1` release of this repository, not gutenberg.org, and verifies their checksums (cached on `sources.yaml`; if the release or an asset is missing, this step fails on a cache miss), runs `ikg build`, then `ikg eval --check eval/baseline.json` | An offline retrieval metric falls below the committed baseline |
 
 The gate covers offline retrieval metrics only. Answer-level metrics (`--llm`) call the Claude
 API and are not run in CI.
