@@ -1,0 +1,15 @@
+# Only pyproject.toml and src/ go into the image; the corpus is mounted at run time.
+.git
+.venv
+.env
+.env.*
+data
+eval
+reports
+docs
+tests
+.github
+.claude
+**/__pycache__
+*.egg-info
+.pytest_cache

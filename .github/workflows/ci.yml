@@ -1,5 +1,6 @@
 # Runs on every pull request and on pushes to main.
 #   tests     - pytest on the oldest and newest supported Python (no network, no API key)
+#   image     - builds the app image and checks a container serves the home page
 #   pgvector  - the Postgres vector store tests, against a pgvector service container
 #   eval-gate - takes the pinned source texts from the pinned-sources-v1 release (not gutenberg.org),
 #               builds the full corpus and fails if offline retrieval metrics drop below
@@ -33,6 +34,21 @@ jobs:
           cache: pip
       - run: pip install -e ".[web,dev]"
       - run: pytest -q
+
+  # The app image builds and a container serves the home page (with no corpus mounted).
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ikg-app:ci .
+      - run: docker run -d --name ikg -p 127.0.0.1:8000:8000 ikg-app:ci
+      - run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/ | grep -q "not been built"; then exit 0; fi
+            sleep 1
+          done
+          docker logs ikg
+          exit 1
 
   # The Postgres vector store against a real pgvector (docs/08 A2). The tests above skip these.
   pgvector:
