@@ -15,7 +15,9 @@ dependencies = [
 
 [project.optional-dependencies]
 web = ["fastapi>=0.110", "uvicorn>=0.29", "jinja2>=3.1", "python-multipart>=0.0.9"]
-embed = ["fastembed>=0.4", "numpy>=1.24"]  # dense embeddings at build time (docs/08 A1)
+# fastembed is pinned exactly: vectors are reused across builds only if the library version matches
+# (embed.reusable_embeddings), and the published seed vectors were made with this version.
+embed = ["fastembed==0.9.1", "numpy>=1.24"]  # dense embeddings at build time (docs/08 A1)
 pg = ["psycopg[binary]>=3.2", "pgvector>=0.4", "numpy>=1.24"]  # the Postgres vector store (docs/08 A2)
 dev = ["pytest>=7.0", "httpx>=0.27", "numpy>=1.24"]  # tests use a fake embedder, never a model
 

@@ -76,15 +76,19 @@ jobs:
 
   eval-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45  # a cold run embeds all passages (~10 min); cached runs reuse the vectors
+    # Normally the vectors come from the cache or the seed release and the job takes minutes. If passage
+    # texts changed, the runner embeds all 14,617 passages itself, which on its 2 cores takes over 45 min.
+    timeout-minutes: 120
     env:
       FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.fastembed-cache
+      PYTHONUNBUFFERED: "1"  # show the build's progress lines as they happen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
+      # The [embed] extra pins fastembed to the version that made the seed vectors (pyproject.toml).
       - run: pip install -e ".[embed]"
       # The texts are pinned by sha256 in the source registry, so cache them on it rather than
       # downloading about 18 MB on every run. The cache is saved right after a verified fetch,
@@ -115,7 +119,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .fastembed-cache
-          key: fastembed-bge-small-en-v1.5
+          key: fastembed-bge-small-en-v1.5-${{ hashFiles('pyproject.toml') }}
       - id: vector-cache
         uses: actions/cache/restore@v4
         with:
@@ -124,12 +128,22 @@ jobs:
             data/processed/embeddings.json
           key: embeddings-${{ hashFiles('src/ikg/data/sources.yaml', 'src/ikg/segment.py', 'src/ikg/sources.py', 'src/ikg/normalize.py', 'src/ikg/embed.py', 'pyproject.toml') }}
           restore-keys: embeddings-
+      # No cached vectors: take the seed release, made from the current pinned texts. The build checks
+      # model, library version, every passage's text and the file's checksum before reusing them, and
+      # re-embeds otherwise, so a stale seed costs time, never correctness.
+      - if: steps.vector-cache.outputs.cache-matched-key == ''
+        run: |
+          mkdir -p data/processed
+          gh release download embeddings-bge-small-en-v1.5 --dir data/processed --pattern 'embeddings.*' --clobber \
+            || echo "No seed embeddings; the build will compute them."
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: ikg build --embed
       - if: steps.model-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: .fastembed-cache
-          key: fastembed-bge-small-en-v1.5
+          key: fastembed-bge-small-en-v1.5-${{ hashFiles('pyproject.toml') }}
       - if: steps.vector-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
