@@ -15,6 +15,11 @@ and the document is out of date. Please fix the document in the same pull reques
 | [07 Target alignment](07-target-alignment.md) | The target (an ontology-based civilizational knowledge system), a capability-by-capability gap analysis, the SOT-fidelity definition, and the ontology extensions and constraints the target adds |
 | [08 Agentic extension](08-agentic-extension.md) | Proposed (2026-11-07): hybrid retrieval with pgvector, an MCP server, the same backend as Claude, ChatGPT and Microsoft 365 Copilot plugins, a LangGraph agent with citation checks and curator approval, an LLM-judge eval, and an optional regulation corpus; eleven PRs in order |
 
+Slides: [`slides/ikg-project-goals.pptx`](slides/ikg-project-goals.pptx) is an 8-slide overview
+of the project's goals and high-level objectives, current status and roadmap, with speaker
+notes, for introducing the project to collaborators and subject experts. Its figures are a
+snapshot from October 2026; the documents above are authoritative.
+
 Reviews: [`reviews/`](reviews/) holds the independent Fable reviews of code and architecture
 (ONBOARDING §7). Their findings are tracked as limitations in 06 §2.
 
