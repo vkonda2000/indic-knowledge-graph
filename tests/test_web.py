@@ -33,6 +33,8 @@ def client(tmp_path, monkeypatch):
                       ("INDEX_FILE", "processed/bm25.pkl"), ("GRAPH_FILE", "processed/g.graphml"),
                       ("RDF_FILE", "processed/ikg.ttl"), ("MANIFEST_FILE", "processed/manifest.json"),
                       ("GAZETTEER_SNAPSHOT_FILE", "processed/gazetteer.yaml"), ("BUILD_LOCK_FILE", "processed/.build.lock"),
+                      ("EMBEDDINGS_FILE", "processed/embeddings.npy"),
+                      ("EMBEDDINGS_META_FILE", "processed/embeddings.json"),
                       ("CURATORS_FILE", "curators.yaml"), ("PROVENANCE_FILE", "provenance.jsonl")]:
         monkeypatch.setattr(config, name, tmp_path / rel)
     # Build only user-added works, so the test needs no Gutenberg downloads.

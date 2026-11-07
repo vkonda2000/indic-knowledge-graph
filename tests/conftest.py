@@ -1,8 +1,19 @@
 import pytest
 
+from ikg import config
+
 from ikg.entities import Entity, Gazetteer
 from ikg.segment import Passage
 from ikg.sources import Work
+
+
+@pytest.fixture(autouse=True)
+def _no_real_embeddings(tmp_path, monkeypatch):
+    """Whatever IKG_EMBED says in the shell or .env, tests never load an embedding model, and a build
+    in a test never touches the developer's data/processed embeddings."""
+    monkeypatch.setattr(config, "EMBED", False)
+    monkeypatch.setattr(config, "EMBEDDINGS_FILE", tmp_path / "_embeddings" / "embeddings.npy")
+    monkeypatch.setattr(config, "EMBEDDINGS_META_FILE", tmp_path / "_embeddings" / "embeddings.json")
 
 
 def make_work(work_id: str, parser: str | None = None) -> Work:

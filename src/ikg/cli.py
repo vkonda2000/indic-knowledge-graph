@@ -47,7 +47,7 @@ def cmd_fetch(args):
 
 def cmd_build(args):
     try:
-        build(_select_works(args.works), with_passages=args.with_passages)
+        build(_select_works(args.works), with_passages=args.with_passages, embed=args.embed)
     except BuildError as exc:
         sys.exit(f"Build failed: {exc}")
 
@@ -215,6 +215,9 @@ def main(argv=None):
     p = sub.add_parser("build", help="segment, extract entities, index, build graph + RDF")
     p.add_argument("--works", nargs="*")
     p.add_argument("--with-passages", action="store_true", help="include every passage in the RDF export")
+    p.add_argument("--embed", action=argparse.BooleanOptionalAction, default=None,
+                   help="write passage embeddings with IKG_EMBED_MODEL (default: IKG_EMBED, off); "
+                        'needs pip install -e ".[embed]"')
     p.set_defaults(func=cmd_build)
 
     sub.add_parser("stats", help="corpus statistics").set_defaults(func=cmd_stats)

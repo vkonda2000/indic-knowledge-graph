@@ -67,7 +67,8 @@ These matter more than any technique. Every reviewer will check them.
    distinction in everything you build.
 3. **A translator's English word is not the Sanskrit concept.** Ganguli writes "righteousness"
    for *dharma*. The gazetteer records this as a *rendering*, not as the concept itself.
-4. **The build is deterministic.** `ikg build` never calls a model. If a model proposes
+4. **The build is deterministic.** `ikg build` never calls a generative model. (The one model it
+   may run, with `--embed`, is a fixed local embedding model whose name the manifest records.) If a model proposes
    something (an entity, a relation), a person reviews it and it is stored as data.
 5. **No improvement claim without numbers.** If you change search or answering, run
    `ikg eval` before and after, and put both results in the PR.
@@ -114,8 +115,9 @@ Answer quality depends on search finding the right passages first.
 ### 4.4 Later: embeddings and vector search
 
 Needed for the next phase (hybrid search). Learn what an embedding is and how cosine
-similarity ranks results. Experiment with `ollama pull nomic-embed-text`. There is no code for
-this yet.
+similarity ranks results. Then read [src/ikg/embed.py](src/ikg/embed.py): `pip install -e ".[embed]"`,
+run `ikg build --embed`, and compare `IKG_EMBED_MODEL=ollama:nomic-embed-text` after
+`ollama pull nomic-embed-text`. Search does not use the vectors yet (docs/08 A2, A3).
 
 ### 4.5 Domain knowledge: enough to judge results
 
@@ -231,7 +233,7 @@ Each week pairs learning with a real task from the roadmap. Open a PR at the end
   unnecessary abstractions.
 - **Stuck for more than an hour?** Ask. Write down what you tried; it makes help faster.
 - **Weekly:** explain one design decision back to your mentor, e.g. why BM25 instead of
-  embeddings, or why the build never calls a model. [docs/02 §6](docs/02-architecture.md#6-key-decisions)
+  embeddings, or why the build never calls a generative model. [docs/02 §6](docs/02-architecture.md#6-key-decisions)
   lists them.
 
 ## 8. Glossary

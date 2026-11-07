@@ -21,6 +21,8 @@ RDF_FILE = PROCESSED_DIR / "ikg.ttl"
 MANIFEST_FILE = PROCESSED_DIR / "manifest.json"  # what the build was made from (D11), with checksums
 GAZETTEER_SNAPSHOT_FILE = PROCESSED_DIR / "gazetteer.yaml"  # the gazetteer the build used
 BUILD_LOCK_FILE = PROCESSED_DIR / ".build.lock"  # one build at a time, CLI and web alike
+EMBEDDINGS_FILE = PROCESSED_DIR / "embeddings.npy"        # one normalised row per passage (ikg.embed)
+EMBEDDINGS_META_FILE = PROCESSED_DIR / "embeddings.json"  # model, dimension and the passage ID of each row
 
 REPORTS_DIR = Path("reports")
 EVAL_FILE = Path("eval") / "questions.jsonl"
@@ -66,6 +68,11 @@ LOGIN_FAILURE_LIMIT = int(os.environ.get("IKG_LOGIN_FAILURE_LIMIT", "10"))  # fa
 ASK_BUDGET_USD = float(os.environ.get("IKG_ASK_BUDGET_USD", "5"))
 # Answers the web app keeps in memory for repeated questions (0 disables the cache).
 ANSWER_CACHE_SIZE = int(os.environ.get("IKG_ANSWER_CACHE_SIZE", "1000"))
+
+# Dense passage embeddings at build time (ikg.embed; docs/08 A1). Off until hybrid retrieval is shown
+# to beat BM25 on the eval (docs/08 A3). `ikg build --embed` / `--no-embed` overrides IKG_EMBED.
+EMBED = os.environ.get("IKG_EMBED", "off").lower() in ("on", "1", "true", "yes")
+EMBED_MODEL = os.environ.get("IKG_EMBED_MODEL", "BAAI/bge-small-en-v1.5")  # or "ollama:<model>"
 
 # Local model (Ollama) that screens uploads for relevance; see ikg.screen.
 SCREEN_ENABLED = os.environ.get("IKG_SCREEN", "on").lower() not in ("off", "0", "false", "no")

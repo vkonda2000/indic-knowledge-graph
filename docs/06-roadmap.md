@@ -184,6 +184,7 @@ SMEs confirm or replace them. Status codes (T1–T15) refer to [07 §1](07-targe
 - [x] **Cost control for answers**: configurable model and effort, per-answer token and cost tracking, answer cache, daily budget, POST-only Ask; Haiku 5.5 at low effort is the default after an eval comparison with Opus 5.5 (D13, NFR-5)
 - [x] **Answer-level baseline**: `ikg eval --llm` recorded for three model settings ([§1](#1-measured-baseline), `eval/baseline-llm.json`)
 - [x] **Text vs. translation in the data model (D10)** and **frozen v1 passage IDs with locators (D11)**: every passage records its work, edition and position; RDF renderings are per edition with counts, so translators' word choices can be compared with SPARQL (C2)
+- [x] **Passage embeddings at build time** (optional, `ikg build --embed`): normalised vectors with their model in the manifest, checksummed and row-checked on load; not yet used by search (docs/08 A1, D14) (T14)
 - [x] **Independent review practice**: each PR is reviewed by a Fable subagent (`.claude/agents/fable-reviewer.md`) and the findings are summarised in the PR
 
 ### 3.2 Partial
@@ -323,7 +324,7 @@ recorded for researchers.
 
 | Deliverable | Approach | Extension point |
 |---|---|---|
-| **Hybrid retrieval** | Dense embeddings in a vector store (pgvector or Qdrant; the local `nomic-embed-text` model to start), combined with BM25 by reciprocal rank fusion | `retrieve.py`, `build()` |
+| **Hybrid retrieval** | Dense embeddings in a vector store (pgvector; embeddings are written at build time since docs/08 A1, `BAAI/bge-small-en-v1.5` through fastembed or a model in Ollama), combined with BM25 by reciprocal rank fusion | `retrieve.py`, `build()` |
 | **Graph retrieval (GraphRAG)** | Expand from the question's entities and SOTs to their claims and evidence passages, plus communities of related concepts; add those passages to the candidate set | `retrieve.py`, `graph.py` |
 | Re-ranking | Cross-encoder or a small local model over the top 50 | `retrieve.search` |
 | **Speaker- and SOT-aware answering** | Pass speaker, SOT, thinker and debate role in each document's context; the prompt requires per-SOT attribution and separation | `qa._documents`, `SYSTEM_PROMPT` |

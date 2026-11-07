@@ -104,7 +104,7 @@ systems tend to blur three distinctions that this system keeps:
 | ID | Requirement | Current state |
 |---|---|---|
 | NFR-1 Traceability | Every answer claim maps to a passage ID, edition and translator | Met through native citations and `Passage.ref` |
-| NFR-2 Reproducibility | A build from the same sources and gazetteer produces the same passages, IDs and mentions | Met: segmentation and extraction are deterministic, with no model in the build |
+| NFR-2 Reproducibility | A build from the same sources and gazetteer produces the same passages, IDs and mentions | Met: segmentation and extraction are deterministic, with no generative model in the build. Optional embeddings (`--embed`) come from a fixed local model; they don't affect passages, IDs or mentions |
 | NFR-3 Build time | A full rebuild of ~3.1M words runs in seconds on a laptop | About 10 s |
 | NFR-4 Query latency | Search responds interactively | Pages and search in under 15 ms locally. Ask is bound by the Claude API |
 | NFR-5 Cost control | The public cannot run up unbounded API spend | Ask runs only on POST; repeated questions come from an answer cache; a daily budget across all visitors (`IKG_ASK_BUDGET_USD`) and a per-client hourly limit (`IKG_ASK_LIMIT`); `k` is capped at 20; the default model is the cheapest that held quality on the eval (D13) |
