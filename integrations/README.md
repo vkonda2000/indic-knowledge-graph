@@ -59,13 +59,30 @@ What this tests: the skill, the server's instructions and tools, and the answers
 the plugin's own HTTP connection (`.mcp.json` with the URL and token substituted from the plugin
 settings), because `--plugin-dir` doesn't prompt for plugin settings. That path is checked by
 `claude plugin validate` and by the server's bearer-token tests, and the same server answered over
-HTTP with the token in the Docker check (docs/08 B1); an installed-plugin run is still to do.
+HTTP with the token in the Docker check (docs/08 B1). The HTTP run below covers the transport and
+the token; an installed-plugin run is still to do.
 
 | # | Question | Expected | Result |
 |---|---|---|---|
 | upa | What does Yama teach Nachiketas about the Self? | Katha Upanishad 2.18–2.20 and nearby | Cited `upa.katha.p2.v18`, `p2.v20`, `p2.v23`, `p4.v01` and more, translator named, *ātman* for "Self" (Opus 5.5, $0.61) |
 | xw | How did the Ganga descend from heaven, and who received her on his head? | Ramayana 1.43–44 and Mahabharata 3.108–109 | Both works, each telling separately: `ram.b1.c043.p03`, `ram.b1.c044.p02`, `mbh.b03.s108.p04`, `mbh.b03.s109.p01` (Haiku 5.5, $0.045) |
 | adv | What does Hanuman say to Nachiketas in the Katha Upanishad? | Abstain: Hanuman isn't in it | Searched, said Hanuman doesn't appear, corrected the premise, offered Yama's teaching instead (Haiku 5.5, $0.04) |
+
+**Over HTTP, 2026-11-07.** The same three questions, headless (`claude -p`, Haiku 5.5), with the
+skill through `--plugin-dir` and the server as the Docker `mcp` service at
+`http://127.0.0.1:8001/mcp`, configured exactly like the plugin's `.mcp.json` (Streamable HTTP,
+`Authorization: Bearer <IKG_MCP_TOKEN>`) through `--strict-mcp-config`. Without the token the
+server answers 401; with it, 200. The three runs made 28 requests to the container.
+
+| # | Result |
+|---|---|
+| upa | `upa.katha.p2.v18`, `p2.v20`, `p2.v23`, `p3.v03`, `p4.v01`, `p6.v18`; Paramananda named, *ātman* for "Self"; noted it read verses, not commentary ($0.40) |
+| xw | All four expected sections (`ram.b1.c043.p03`, `ram.b1.c044.p02`, `mbh.b03.s108.p04`) plus `mbh.b13.s026.p09` and two Vishnu Purana passages, each work kept separate. One slip: a heading says "Part 2, section 8" over passages from sections 2 and 8; the ids are right ($0.60) |
+| adv | Abstained: Hanuman isn't in the Katha Upanishad; cited `upa.katha.p1.v01`, then where Hanuman does appear (`mbh.b03.s146.p01`, `ram.b6.c128.p01`) ($0.37) |
+
+The costs are higher than the stdio runs above because each headless run starts with an empty
+prompt cache. Still not covered: the `${user_config.*}` substitution in an installed plugin, which
+only an interactive `/plugin install` exercises.
 
 **What we learned.** The first runs of the `xw` question cited only the Mahabharata and gave
 references without passage ids: the model never opened the skill and guessed `works:
