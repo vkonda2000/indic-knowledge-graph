@@ -587,3 +587,62 @@ def test_broken_curator_registry_does_not_leak_paths(client):
     page = client.post("/admin/login", data={"token": "wrong"}).text
     assert "registry is unavailable" in page and "curators.yaml" not in page
     assert client.post("/admin/login", data={"token": "secret"}, follow_redirects=False).status_code == 303  # env admin still works
+
+
+def test_api_token_lets_api_clients_ask_with_their_own_limit(client, monkeypatch):
+    from ikg import qa
+    from ikg.web.app import create_app
+    fake_ask.calls = []
+    monkeypatch.setattr(qa, "ask", fake_ask)
+    token = "a" * 32
+    monkeypatch.setenv("IKG_API_TOKEN", token)
+    with TestClient(create_app()) as api:
+        api.app_ref = api.app
+        build_sample(api)
+        api.app.state.ask_limiter.per_hour = 0  # visitors are out of questions
+        cross_site = {"Sec-Fetch-Site": "cross-site"}
+        assert api.post("/api/ask", json={"question": "dharma?"}, headers=cross_site).status_code == 429
+        authed = {**cross_site, "Authorization": f"Bearer {token}"}
+        assert api.post("/api/ask", json={"question": "dharma?"}, headers=authed).status_code == 200
+        r = api.post("/api/ask", json={"question": "dharma?"}, headers={"Authorization": "Bearer wrong"})
+        assert r.status_code == 401 and r.headers["www-authenticate"] == "Bearer"
+        api.app.state.api_ask_limiter.per_hour = 1
+        assert api.post("/api/ask", json={"question": "karma?"}, headers=authed).status_code == 429
+    assert len(fake_ask.calls) == 1
+    monkeypatch.setenv("IKG_API_TOKEN", "short")
+    with pytest.raises(ValueError, match="16 characters"):
+        create_app()
+
+
+def test_api_token_unset_refuses_bearer(client):
+    build_sample(client)
+    r = client.post("/api/ask", json={"question": "x"}, headers={"Authorization": "Bearer anything-at-all-long"})
+    assert r.status_code == 401
+
+
+def test_api_passage_and_search_works_filter(client):
+    build_sample(client)
+    hits = client.get("/api/search", params={"q": "Bhishma king"}).json()["results"]
+    pid = hits[0]["id"]
+    p = client.get(f"/api/passage/{pid}").json()
+    assert p["id"] == pid and p["text"] and "previous_id" in p and "next_id" in p and "entities" in p
+    assert client.get("/api/passage/nope").status_code == 404
+    work = pid.split(".")[0]
+    assert client.get("/api/search", params={"q": "Bhishma", "works": "no_such_work"}).json()["results"] == []
+    assert client.get("/api/search", params={"q": "Bhishma", "works": [work]}).json()["results"]
+
+
+def test_openapi_describes_the_json_api_only(client, monkeypatch):
+    from ikg.web.app import create_app
+    monkeypatch.setenv("IKG_PUBLIC_URL", "https://ikg.example/")
+    with TestClient(create_app()) as c:
+        doc = c.get("/openapi.json").json()
+    assert doc["servers"] == [{"url": "https://ikg.example"}]
+    assert set(doc["paths"]) == {"/api/search", "/api/passage/{pid}", "/api/ask", "/api/graph",
+                                 "/api/entity/{entity_id}"}
+    ops = {op["operationId"] for path in doc["paths"].values() for op in path.values()}
+    assert ops == {"searchPassages", "getPassage", "askQuestion", "getGraph", "getEntity"}
+    ask = doc["paths"]["/api/ask"]["post"]
+    assert "question" in ask["requestBody"]["content"]["application/json"]["schema"]["required"]
+    assert ask["security"] and "HTTPBearer" in doc["components"]["securitySchemes"]
+    assert "works" in {p["name"] for p in doc["paths"]["/api/search"]["get"]["parameters"]}

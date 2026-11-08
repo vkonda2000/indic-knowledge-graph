@@ -7,7 +7,7 @@ One backend, the IKG MCP server (`ikg mcp`, docs/03 §13), packaged for each pla
 | **Claude Code** | Plugin [`claude/ikg`](claude/ikg): the MCP server over HTTP and the `ikg-scholar` skill | Done; tested below |
 | **Claude Desktop** | The MCP server over stdio (README) and the `ikg-scholar` skill, uploaded | Works locally today |
 | **claude.ai** | A custom connector (remote MCP) and the skill | Needs a public HTTPS address and OAuth (docs/08 §E) |
-| ChatGPT | A custom GPT with Actions, or an MCP connector | B3, next |
+| **ChatGPT** | A custom GPT with Actions from the app's OpenAPI document ([`chatgpt/`](chatgpt)) | Ready to build; the GPT itself is made in ChatGPT (below) |
 | Microsoft 365 Copilot | A declarative agent with an API plugin | B4 |
 
 ## Claude Code
@@ -92,3 +92,35 @@ server's instructions and tool descriptions. So the essential rules now live the
 description says to load it before calling any `ikg` tool. After that, Haiku loaded the skill,
 searched across works and cited all four expected sections. This matters for ChatGPT and Copilot,
 which won't have the skill at all.
+
+## ChatGPT: a custom GPT with Actions
+
+The GPT calls the web app's JSON API, not the MCP server: `searchPassages`, `getPassage`,
+`getEntity`, `askQuestion` (and `getGraph`). The app publishes them at `/openapi.json`, with only the
+`/api/*` routes, request and response schemas, and a `servers` entry from `IKG_PUBLIC_URL`.
+
+**The server.** In `.env`: `IKG_API_TOKEN` (16+ random characters) and `IKG_PUBLIC_URL` (the app's
+public `https://` address). Search, passages and entities are public and read-only; the token is for
+`askQuestion`: with it, Ask skips the same-origin check and counts against its own hourly limit
+(`IKG_API_ASK_LIMIT`, default 60), still within the daily budget. A wrong token gets 401. For a quick
+public address, a Cloudflare quick tunnel: `cloudflared tunnel --url http://127.0.0.1:8000` (a new
+random address on every start, so `IKG_PUBLIC_URL` and the GPT's schema must follow it; a named
+tunnel keeps one address).
+
+**The GPT** (ChatGPT, a plan that can create GPTs; menu names as of November 2026):
+
+1. *Explore GPTs → Create → Configure.* Name it, and paste [`chatgpt/instructions.md`](chatgpt/instructions.md)
+   into *Instructions*. Conversation starters: the three test questions above.
+2. *Actions → Create new action → Import from URL:* `<IKG_PUBLIC_URL>/openapi.json`.
+3. *Authentication → API Key → Bearer*, with `IKG_API_TOKEN`.
+4. A *Privacy policy* URL is required only to share the GPT publicly.
+
+The instructions tell the GPT to write answers itself from `searchPassages` and `getPassage` and
+to call `askQuestion` only when asked: the server's model is whatever `IKG_ANSWER_MODEL` says, and a
+small local model abstains or slips more often than a GPT reading the passages itself.
+
+**Checked so far** (2026-11-07, through a quick tunnel): `/openapi.json` lists the five operations
+with the public `servers` URL; search, passage and entity answer without a token; Ask answers with
+the token in about 2 s on the local model and refuses a wrong one (401); the admin pages redirect to
+the login. The three test questions in a GPT are still to do, and need a ChatGPT account.
+

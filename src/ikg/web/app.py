@@ -27,13 +27,16 @@ from collections import OrderedDict, deque
 from pathlib import Path
 
 import anthropic
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Security, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.routing import APIRoute
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from ikg import config, curators, screen, sources
+from ikg import __version__, config, curators, screen, sources
 from ikg.entities import Gazetteer
 from ikg.describe import entity_info, snippet
 from ikg.graph import neighbours
@@ -54,6 +57,75 @@ SESSION_TTL = 12 * 3600
 MAX_SEARCH_K = 50
 MAX_ASK_K = 20
 MAX_QUESTION_CHARS = 2000
+
+API_DESCRIPTION = """Cited search over the Upanishads, Mahabharata, Ramayana and Vishnu Purana in public-domain
+English translations, with a knowledge graph of people, places and concepts.
+
+Cite every claim with the passage id (e.g. mbh.b03.s108.p02), its ref and the translator. A passage's kind
+says what it is: 'verse' and 'narrative' are the translated primary text; 'commentary' and 'introduction'
+are the translator's own explanation; 'secondary' is modern scholarship. Never present commentary or
+scholarship as what the text itself says. Many stories are told in more than one work: unless the user
+names a work, search without `works`, and report each telling under its own work. If the passages don't
+support an answer, say so."""
+
+
+# Request and response shapes for the OpenAPI document that API clients (a custom GPT's Actions) import.
+# The handlers build plain dicts; these only describe them.
+
+class SearchResult(BaseModel):
+    id: str = Field(description="The passage id: cite it, and read the passage with getPassage")
+    ref: str = Field(description="Human-readable reference, including the translator")
+    kind: str = Field(description="verse | narrative (primary text), commentary | introduction (the "
+                                  "translator's), secondary (modern scholarship)")
+    score: float
+    text: str
+
+
+class SearchResponse(BaseModel):
+    query: str
+    retriever: str = Field(description="bm25, dense or hybrid")
+    entities: list[str] = Field(description="Knowledge-graph entities recognised in the query")
+    results: list[SearchResult]
+
+
+class AskRequest(BaseModel):
+    question: str = Field(description="The question", max_length=MAX_QUESTION_CHARS)
+    k: int = Field(8, ge=1, le=MAX_ASK_K, description="Passages to answer from")
+    works: list[str] | None = Field(None, description="Limit to these work ids (upanishads, mahabharata, "
+                                                      "ramayana, vishnu_purana); omit unless the user names one")
+    primary_only: bool = Field(False, description="Only the translated primary text")
+
+
+class AskCitation(BaseModel):
+    passage_id: str
+    ref: str
+    cited_text: str
+
+
+class AskResponse(BaseModel):
+    answer: str = Field(description="The answer, with numbered citations")
+    abstained: bool = Field(description="True when the passages don't support an answer")
+    refused: bool
+    truncated: bool
+    model: str
+    cached: bool
+    citations: list[AskCitation]
+    retrieved: list[str] = Field(description="Ids of the passages the answer was written from")
+
+
+class PassageResponse(BaseModel):
+    id: str
+    ref: str
+    work: str
+    work_title: str
+    edition: str
+    kind: str
+    translator: str
+    text: str
+    source_url: str
+    previous_id: str | None = Field(description="The passage before it in the same edition")
+    next_id: str | None = Field(description="The passage after it in the same edition")
+    entities: list[str] = Field(description="Knowledge-graph entities mentioned; see getEntity")
 
 
 class AnswerCache:
@@ -206,7 +278,9 @@ async def screen_upload(filename: str, content: bytes, title: str, notes: str) -
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Indic Knowledge Graph")
+    public_url = os.environ.get("IKG_PUBLIC_URL", "").rstrip("/")
+    app = FastAPI(title="Indic Knowledge Graph", version=__version__, description=API_DESCRIPTION,
+                  servers=[{"url": public_url}] if public_url else None)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     templates = Jinja2Templates(directory=HERE / "templates")
     templates.env.filters["snippet"] = snippet
@@ -216,6 +290,13 @@ def create_app() -> FastAPI:
         admin_token = secrets.token_urlsafe(18)
         print(f"\n  IKG_ADMIN_TOKEN not set; admin token for this run: {admin_token}\n")
     contributor_token = os.environ.get("IKG_CONTRIBUTOR_TOKEN", "")
+    # API clients (a custom GPT's Actions) send `Authorization: Bearer <IKG_API_TOKEN>`: Ask skips the
+    # same-origin check for them and counts against their own hourly limit, not the visitors'.
+    api_token = os.environ.get("IKG_API_TOKEN", "")
+    if api_token and len(api_token) < 16:
+        raise ValueError("IKG_API_TOKEN must be at least 16 characters")
+    api_ask_limiter = RateLimiter(int(os.environ.get("IKG_API_ASK_LIMIT", "60")))
+    bearer = HTTPBearer(auto_error=False, description="IKG_API_TOKEN, for API clients such as a custom GPT")
     sessions: dict[str, tuple[float, str]] = {}  # session id -> (expiry, curator)
     ask_limiter = RateLimiter(int(os.environ.get("IKG_ASK_LIMIT", "20")))
     upload_limiter = RateLimiter(config.UPLOAD_LIMIT)
@@ -272,13 +353,23 @@ def create_app() -> FastAPI:
                 raise HTTPException(401, "Admin login required", headers={"WWW-Authenticate": "Cookie"})
             raise HTTPException(303, headers={"Location": "/admin/login"})
 
-    def ask_refusal(request: Request) -> str:
-        """Why this Ask may not call the API now; empty if it may."""
-        if not same_origin(request):
+    def api_client(credentials: HTTPAuthorizationCredentials | None) -> bool:
+        """True for a request with the API token; 401 for one with a wrong token."""
+        if credentials is None:
+            return False
+        if not api_token or not token_ok(credentials.credentials, api_token):
+            raise HTTPException(401, "Invalid API token", headers={"WWW-Authenticate": "Bearer"})
+        return True
+
+    def ask_refusal(request: Request, api: bool = False) -> str:
+        """Why this Ask may not call the API now; empty if it may. `api`: the request has the API token."""
+        if not (api or same_origin(request)):
             return "Cited answers can only be requested from this site."
         if not budget.available():
             return "The daily budget for cited answers has been used up. Search still works."
-        if not (is_admin(request) or ask_limiter.allow(request.client.host if request.client else "")):
+        allowed = (api_ask_limiter.allow("api") if api else
+                   ask_limiter.allow(request.client.host if request.client else ""))
+        if not (is_admin(request) or allowed):
             return "Question limit reached for this hour. Search still works."
         return ""
 
@@ -594,17 +685,44 @@ def create_app() -> FastAPI:
     def build_status():
         return job.snapshot()
 
-    @app.get("/api/search")
-    def api_search(request: Request, q: str, k: int = 8, primary_only: bool = False):
+    @app.get("/api/search", operation_id="searchPassages", summary="Find passages for a question or topic",
+             description="Ranked passages. Sanskrit names and terms are understood. Use before answering "
+                         "anything about these texts.", responses={200: {"model": SearchResponse}})
+    def api_search(q: str = Query(description="A question or keywords"),
+                   k: int = Query(8, description=f"Number of passages, 1-{MAX_SEARCH_K}"),
+                   primary_only: bool = Query(False, description="Only the translated primary text"),
+                   works: list[str] | None = Query(None, description="Limit to these work ids (upanishads, "
+                                                   "mahabharata, ramayana, vishnu_purana); omit unless the user "
+                                                   "names a work")):
         rt = runtime()
-        hits, mode = find(rt, q, k=clamp_k(k, MAX_SEARCH_K), works=request.query_params.getlist("works") or None,
-                          primary_only=primary_only)
+        hits, mode = find(rt, q, k=clamp_k(k, MAX_SEARCH_K), works=works or None, primary_only=primary_only)
         return {"query": q, "retriever": mode, "entities": rt.gazetteer.entities_in(q), "results": [
             {"id": h.passage.id, "ref": h.passage.ref, "kind": h.passage.kind, "score": round(h.score, 3),
              "text": h.passage.text} for h in hits]}
 
-    @app.post("/api/ask")
-    async def api_ask(request: Request):
+    @app.get("/api/passage/{pid}", operation_id="getPassage", summary="Read one passage by id",
+             description="The passage with its ref, translator, kind and source, the ids of the passages "
+                         "before and after it, and the entities it mentions.",
+             responses={200: {"model": PassageResponse}})
+    def api_passage(pid: str):
+        rt = runtime()
+        p = rt.passages.get(pid)
+        if p is None:
+            raise HTTPException(404, "Unknown passage")
+        prev, nxt = rt.neighbour_passages(pid)
+        return {"id": p.id, "ref": p.ref, "work": p.work, "work_title": p.work_title, "edition": p.edition,
+                "kind": p.kind, "translator": p.translator, "text": p.text, "source_url": p.source_url,
+                "previous_id": prev.id if prev else None, "next_id": nxt.id if nxt else None,
+                "entities": sorted(rt.passage_entities.get(pid, set()))}
+
+    @app.post("/api/ask", operation_id="askQuestion", summary="A cited answer to a question",
+              description="Searches, then writes an answer citing passage ids, or abstains when the passages "
+                          "don't support one. Slower than searchPassages and limited per hour.",
+              responses={200: {"model": AskResponse}},
+              openapi_extra={"requestBody": {"required": True, "content": {
+                  "application/json": {"schema": AskRequest.model_json_schema()}}}})
+    async def api_ask(request: Request, credentials: HTTPAuthorizationCredentials | None = Security(bearer)):
+        api = api_client(credentials)
         try:
             body = await request.json()
         except ValueError:
@@ -621,7 +739,7 @@ def create_app() -> FastAPI:
         runtime()
         question = str(body["question"])[:MAX_QUESTION_CHARS]
         ans = cached(question, k, works or None, primary_only)
-        refusal = "" if ans is not None else ask_refusal(request)
+        refusal = "" if ans is not None else ask_refusal(request, api)
         if refusal:
             raise HTTPException(429, refusal)
         try:
@@ -637,7 +755,7 @@ def create_app() -> FastAPI:
                 "citations": [c.__dict__ for c in ans.citations],
                 "retrieved": [h.passage.id for h in ans.hits]}
 
-    @app.get("/api/graph")
+    @app.get("/api/graph", operation_id="getGraph", summary="The co-occurrence graph, for drawing")
     def api_graph(work: str = "", types: str = "", min_weight: int = 5, max_nodes: int = 80):
         rt = runtime()
         g = rt.graph
@@ -664,7 +782,10 @@ def create_app() -> FastAPI:
                           for n in nodes],
                 "edges": edges}
 
-    @app.get("/api/entity/{entity_id}")
+    @app.get("/api/entity/{entity_id}", operation_id="getEntity",
+             summary="An entity: names, renderings, works, neighbours and passages",
+             description="Entity ids appear in searchPassages (entities) and getPassage (entities), e.g. "
+                         "krishna, dharma.")
     def api_entity(entity_id: str):
         rt = runtime()
         if entity_id not in rt.gazetteer.entities:
@@ -676,14 +797,20 @@ def create_app() -> FastAPI:
         if exc.status_code == 303:
             return RedirectResponse(exc.headers["Location"], status_code=303)
         if request.url.path.startswith("/api/"):
-            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
         return templates.TemplateResponse(request, "error.html", {
             "status": exc.status_code, "detail": exc.detail, "is_admin": is_admin(request),
             "corpus_ready": state["runtime"] is not None, "corpus_error": state["error"]},
             status_code=exc.status_code)
 
+    # The OpenAPI document is for API clients: the JSON API only, not the HTML pages and admin routes.
+    for route in app.routes:
+        if isinstance(route, APIRoute) and (not route.path.startswith("/api/") or route.path == "/api/build/status"):
+            route.include_in_schema = False
+
     app.state.job = job
     app.state.reload_runtime = reload_runtime
     app.state.sessions = sessions
     app.state.ask_limiter = ask_limiter
+    app.state.api_ask_limiter = api_ask_limiter
     return app

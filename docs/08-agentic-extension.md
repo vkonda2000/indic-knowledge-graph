@@ -100,6 +100,10 @@ connector needs a public HTTPS address and OAuth (§E). One finding for B3–B4:
 not load a skill, so the essential rules (cite `passage_id`, search across works) are now also in the
 MCP server's instructions and tool descriptions, which every client reads.
 
+*B3 server side done 2026-11-07:* the app's `/openapi.json` (the JSON API only, operation ids, schemas, `servers` from
+`IKG_PUBLIC_URL`), `GET /api/passage/{id}`, an optional `IKG_API_TOKEN` for Ask from API clients, and the GPT's
+instructions in `integrations/chatgpt/`. The GPT itself is built in ChatGPT (steps in `integrations/README.md`).
+
 **Done when:** the same three questions (one `upa-`, one `xw-`, one `adv-`) asked on each platform
 give answers that cite the same passage ids, and the unanswerable one abstains on all three.
 Screenshots and the questions go in `integrations/README.md`, with what differed per platform
