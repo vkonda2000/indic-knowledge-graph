@@ -12,6 +12,7 @@ pytest.importorskip("mcp")
 from mcp import Client  # noqa: E402
 from test_embed import _build, corpus  # noqa: E402,F401  (corpus is a fixture)
 
+import ikg  # noqa: E402
 from ikg import cli, config, qa, sparql  # noqa: E402
 from ikg.limits import RateLimiter, SpendBudget  # noqa: E402
 from ikg.mcp_server import build_server, http_app  # noqa: E402
@@ -137,7 +138,12 @@ def test_http_requires_the_bearer_token(server):
         r = client.post("/mcp", json=init, headers={**headers, "Authorization": "Bearer wrong"})
         assert r.status_code == 401 and r.headers["www-authenticate"] == "Bearer"
         r = client.post("/mcp", json=init, headers={**headers, "Authorization": f"Bearer {token}"})
-        assert r.status_code == 200 and r.json()["result"]["serverInfo"]["name"] == "ikg_mcp"
+        info = r.json()["result"]["serverInfo"]
+        assert r.status_code == 200 and info["name"] == "ikg_mcp" and info["version"] == ikg.__version__
+        # No OAuth: discovery and registration are 404, so a client asks for the token instead
+        for path in ("/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-authorization-server",
+                     "/register"):
+            assert client.get(path).status_code == 404 and client.post(path, json={}).status_code == 404
     with pytest.raises(ValueError, match="16 characters"):
         http_app(server, "short")
 

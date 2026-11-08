@@ -29,7 +29,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ikg import config, sparql
+from ikg import __version__, config, sparql
 from ikg.describe import entity_info
 from ikg.limits import RateLimiter, SpendBudget
 from ikg.pipeline import Runtime
@@ -185,7 +185,7 @@ def build_server(runtime: Runtime, caller: str = "stdio", budget: SpendBudget | 
     limiter = limiter or RateLimiter(int(os.environ.get("IKG_ASK_LIMIT", "20")))
     log = CallLog(config.MCP_LOG_FILE)
     rt = runtime
-    server = MCPServer("ikg_mcp", title="Indic Knowledge Graph", instructions=INSTRUCTIONS,
+    server = MCPServer("ikg_mcp", title="Indic Knowledge Graph", version=__version__, instructions=INSTRUCTIONS,
                        description="Cited search and answers over the Upanishads, Mahabharata, Ramayana and "
                                    "Vishnu Purana in public-domain English translations")
 
@@ -364,8 +364,17 @@ def http_app(server: MCPServer, token: str, host: str = "127.0.0.1"):
     refused = JSONResponse({"error": "unauthorized", "detail": "send Authorization: Bearer <IKG_MCP_TOKEN>"},
                            status_code=401, headers={"WWW-Authenticate": "Bearer"})
 
+    # No OAuth here: answer a client's OAuth discovery and registration with 404, not the token's 401, so it
+    # asks for the bearer token instead of starting an OAuth flow that can't succeed.
+    no_oauth = JSONResponse({"error": "not_found", "detail": "this server has no OAuth; send Authorization: "
+                             "Bearer <IKG_MCP_TOKEN>"}, status_code=404)
+
     async def app(scope, receive, send):
         if scope["type"] == "http":
+            path = scope.get("path", "")
+            if path.startswith("/.well-known/oauth-") or path in ("/register", "/authorize", "/token"):
+                await no_oauth(scope, receive, send)
+                return
             scheme, _, given = dict(scope.get("headers") or []).get(b"authorization", b"").partition(b" ")
             if scheme.lower() != b"bearer" or not hmac.compare_digest(given.strip(), expected):
                 await refused(scope, receive, send)

@@ -21,11 +21,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Dependencies first, so a code change doesn't reinstall them. [embed] lets an admin Rebuild write
-# embeddings like the host build does; without it a Rebuild would drop them.
+# embeddings like the host build does; without it a Rebuild would drop them. build/ goes too: its stub
+# __init__.py is newer than the real one copied below, so setuptools would reinstall the stub.
 COPY pyproject.toml ./
 RUN mkdir -p src/ikg && touch src/ikg/__init__.py \
     && pip install ".[web,pg,embed,mcp]" \
-    && pip uninstall -y indic-knowledge-graph
+    && pip uninstall -y indic-knowledge-graph \
+    && rm -rf build src *.egg-info
 
 COPY src ./src
 COPY ontology ./ontology
