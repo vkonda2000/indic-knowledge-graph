@@ -278,7 +278,7 @@ async def screen_upload(filename: str, content: bytes, title: str, notes: str) -
 
 
 def create_app() -> FastAPI:
-    public_url = os.environ.get("IKG_PUBLIC_URL", "").rstrip("/")
+    public_url = os.environ.get("IKG_PUBLIC_URL", "").strip().rstrip("/")
     app = FastAPI(title="Indic Knowledge Graph", version=__version__, description=API_DESCRIPTION,
                   servers=[{"url": public_url}] if public_url else None)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
