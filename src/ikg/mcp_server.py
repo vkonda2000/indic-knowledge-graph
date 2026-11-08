@@ -55,9 +55,13 @@ KINDS_NOTE = ("Each passage has a kind: 'verse' and 'narrative' are the translat
 INSTRUCTIONS = f"""Indic Knowledge Graph: the Upanishads, Mahabharata, Ramayana and Vishnu Purana in public-domain
 English translations, with a knowledge graph of people, places and concepts.
 
-Cite every claim with the passage_id and ref it comes from, and name the translator. {KINDS_NOTE}
+Cite every claim with the passage_id (e.g. mbh.b03.s108.p02) and the ref it comes from, and name the
+translator: the id lets a reader open the exact passage. {KINDS_NOTE}
 A translator's English word is not the Sanskrit concept: "righteousness" is Ganguli's rendering of dharma.
-Keep different works and speakers separate. If the passages don't support an answer, say so.
+Keep different works and speakers separate. Many stories are told in more than one work (the descent of
+the Ganga, Parashurama, Rama, Savitri): unless the user names a work, don't restrict `works` to one
+guess; search without it, or once per work, and report each telling under its own work.
+If the passages don't support an answer, say so.
 Start with ikg_search_passages; read context with ikg_get_passage; ikg_ask writes a cited answer."""
 
 
@@ -195,7 +199,8 @@ def build_server(runtime: Runtime, caller: str = "stdio", budget: SpendBudget | 
         "query: a question or keywords; Sanskrit names and terms are understood "
         "(e.g. \"What does Krishna say about dharma?\").\n"
         f"k: number of passages, 1-{SEARCH_MAX_K}.\n"
-        "works: limit to these work ids: upanishads, mahabharata, ramayana, vishnu_purana.\n"
+        "works: limit to these work ids: upanishads, mahabharata, ramayana, vishnu_purana. Only when the user "
+        "names a work: many stories are told in several, so otherwise search all, or once per work.\n"
         "primary_only: only the translated primary text (verse, narrative), no commentary or scholarship.\n"
         "mode: retrieval method; 'default' is the server's (hybrid when available).\n" + KINDS_NOTE))
     def search_passages(query: str, k: int = 8, works: list[str] | None = None, primary_only: bool = False,

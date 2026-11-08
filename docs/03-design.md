@@ -491,7 +491,9 @@ the `Host` header when bound to localhost.
 The resource `ikg://ontology` serves `ontology/ikg.ttl` (or `IKG_ONTOLOGY`). The server's instructions
 and every tool description carry the traceability rules, because the calling model sees nothing else:
 cite passage ids and translators, never present commentary or scholarship as the text, keep works and
-speakers apart, and report `NOT_IN_SOURCES` rather than answer from general knowledge.
+speakers apart (search every work for a story told in several), and report `NOT_IN_SOURCES` rather than
+answer from general knowledge. A client's model may or may not load a skill (the Claude plugin's
+`ikg-scholar` adds detail and examples), so these rules can't live only there (integrations/README.md).
 
 - **SPARQL** (`sparql.py`): the query must parse as SELECT or ASK (every update form fails to parse as a
   query), must not contain SERVICE, and runs in a child process (`python -m ikg.sparql`) that is killed

@@ -89,9 +89,16 @@ response schemas). Each platform gets a thin package in `integrations/<platform>
 
 | PR | Platform | Package | Needs |
 |---|---|---|---|
-| B2 | **Claude** | A remote **connector** (the MCP URL) and a **skill** (`integrations/claude/ikg-scholar/SKILL.md`): when to use which tool, how to cite, when to abstain. Also a Claude Code plugin bundling both. | A public HTTPS endpoint (§E) |
+| B2 | **Claude** | A remote **connector** (the MCP URL) and a **skill** (`integrations/claude/ikg/skills/ikg-scholar/SKILL.md`): when to use which tool, how to cite, when to abstain. Also a Claude Code plugin bundling both. | A public HTTPS endpoint (§E) |
 | B3 | **ChatGPT / OpenAI Enterprise** | A **custom GPT** with **Actions** from the OpenAPI document (bearer auth), instructions carrying the same rules; plus the MCP server added as a connector where the workspace allows it. | A ChatGPT plan that can build GPTs |
 | B4 | **Microsoft 365 Copilot** | A **declarative agent** (manifest, instructions, conversation starters) with an **API plugin** built from the same OpenAPI document, made with the Microsoft 365 Agents Toolkit; Copilot Studio as the alternative path. | A Microsoft 365 developer tenant with a Copilot licence (the one real cost and access risk; check first) |
+
+*B2 done 2026-11-07* for Claude Code: plugin `integrations/claude/ikg` (the server over HTTP with the
+token as a sensitive plugin setting, and the `ikg-scholar` skill), a marketplace at
+`.claude-plugin/marketplace.json`, and the three questions in `integrations/README.md`. The claude.ai
+connector needs a public HTTPS address and OAuth (§E). One finding for B3–B4: a client's model may
+not load a skill, so the essential rules (cite `passage_id`, search across works) are now also in the
+MCP server's instructions and tool descriptions, which every client reads.
 
 **Done when:** the same three questions (one `upa-`, one `xw-`, one `adv-`) asked on each platform
 give answers that cite the same passage ids, and the unanswerable one abstains on all three.
@@ -197,7 +204,7 @@ start, stop, rebuild, rotate tokens, read the logs, what the budget alarm means.
 | 3 | A3 hybrid + eval table | S |
 | 4 | B1 MCP server | M |
 | 5 | E Docker, deploy, runbook | S |
-| 6 | B2 Claude connector + skill | S |
+| 6 | B2 Claude plugin + skill (done); claude.ai connector after E | S |
 | 7 | B3 ChatGPT GPT + actions | S |
 | 8 | B4 Copilot declarative agent | M (tenant setup) |
 | 9 | C1 agent graph | M–L |

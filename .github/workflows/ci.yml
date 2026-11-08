@@ -152,3 +152,5 @@ jobs:
             data/processed/embeddings.json
           key: embeddings-${{ hashFiles('src/ikg/data/sources.yaml', 'src/ikg/segment.py', 'src/ikg/sources.py', 'src/ikg/normalize.py', 'src/ikg/embed.py', 'pyproject.toml') }}
       - run: ikg eval --check eval/baseline.json
+      # Checks that need the built corpus: every passage id and quotation in the Claude plugin's skill exists.
+      - run: pip install pytest && pytest -q tests/test_claude_plugin.py
