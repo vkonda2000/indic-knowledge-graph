@@ -478,7 +478,11 @@ which the CI eval gate exercises instead.
 (`MCPServer`). Over stdio there is no authentication (the client launched the process); over
 Streamable HTTP (`--http`, at `/mcp`, stateless, JSON responses) every request must carry
 `Authorization: Bearer $IKG_MCP_TOKEN`, compared in constant time, and DNS-rebinding protection checks
-the `Host` header when bound to localhost.
+the `Host` header when bound to localhost. OAuth discovery and registration paths answer 404, so a client
+asks for the token instead of starting an OAuth flow. With `IKG_MCP_PUBLIC=on` the HTTP server needs no
+token and leaves out `ikg_ask`, the one tool that costs money: for ChatGPT's custom MCP servers and
+claude.ai's connectors, which offer OAuth or no authentication but no static token. Calls are then logged
+with the caller `public`.
 
 | Tool | Returns (JSON schema) | Notes |
 |---|---|---|

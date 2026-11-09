@@ -27,6 +27,8 @@
 |---|---|---|---|---|
 | GET | `/api/search` | public | `q`*, `k` (1–50, default 8), `works` (repeatable), `primary_only` | `{query, entities: [id], results: [{id, ref, kind, score, text}]}` |
 | POST | `/api/ask` | public; budget- and rate-limited; cache hits are free | `{"question"*: str, "k": int ≤ 20, "works": [str], "primary_only": bool}` (`primary_only` must be a JSON boolean) | `{answer, abstained, refused, truncated, model, cached, citations: [{passage_id, ref, cited_text}], retrieved: [id]}`; 429 when the daily budget or the hourly limit is reached, or for a browser request from another site |
+| GET | `/api/passage/{id}` | public | none | `{id, ref, work, work_title, edition, kind, translator, text, source_url, previous_id, next_id, entities}`; 404 for an unknown id |
+| GET | `/openapi.json` | public | none | OpenAPI document of the `/api/*` routes (operation ids `searchPassages`, `getPassage`, `askQuestion`, `getGraph`, `getEntity`) with `servers` from `IKG_PUBLIC_URL`, for GPT Actions |
 | GET | `/api/graph` | public | `work`, `types` (comma-separated), `min_weight` (default 5), `max_nodes` (≤ 300, default 80) | Cytoscape elements: `{nodes: [{data: {id, label, type, mentions}}], edges: [{data: {id, source, target, weight}}]}` |
 | GET | `/api/entity/{id}` | public | none | `{id, label, type, iast, aliases, renderings, mentions, works, surface_forms, neighbours, passages}` (10 passages) |
 | GET | `/api/build/status` | admin | none | `{state: idle\|running\|done\|error, log: [str], stats, error, started, finished}` |
@@ -103,6 +105,10 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_PDF_MAX_PARALLEL` | `2` | PDFs read at the same time |
 | `IKG_EMBED` | `off` | `on`/`1`/`true`/`yes`: builds (CLI and admin Rebuild) also write passage embeddings |
 | `IKG_MCP_TOKEN` | unset | Bearer token `ikg mcp --http` requires from every client (16+ characters) |
+| `IKG_MCP_PUBLIC` | `off` | `on`: `ikg mcp --http` needs no token and leaves out `ikg_ask` (read-only tools only), for clients that can't send a static token (a ChatGPT custom MCP server, claude.ai). Anyone with the URL can then search |
+| `IKG_API_TOKEN` | unset | Bearer token API clients (a custom GPT's Actions) send to `/api/ask` from outside the site; skips the same-origin check (16+ characters) |
+| `IKG_API_ASK_LIMIT` | `60` | Ask calls per hour for all API-token clients together |
+| `IKG_PUBLIC_URL` | unset | The app's public `https://` address, put in `/openapi.json` `servers` |
 | `IKG_MCP_PORT` | `8001` | Host port of the `mcp` service in `compose.yaml` |
 | `IKG_SPARQL_TIMEOUT` | `10` | Seconds an MCP SPARQL query may take, including loading the graph in its child process |
 | `IKG_ONTOLOGY` | `ontology/ikg.ttl` in the source tree | Ontology file served as the MCP resource `ikg://ontology` (the Docker image sets it) |

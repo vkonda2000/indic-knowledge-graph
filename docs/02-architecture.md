@@ -4,23 +4,32 @@
 
 ```mermaid
 flowchart LR
-    reader([Reader]) -->|browser / JSON| app
+    reader([Reader]) -->|browser| app
     contributor([Contributor]) -->|upload| app
     admin([Admin]) -->|token session| app
     dev([Developer]) -->|ikg CLI| cli
+    cc([Claude Code / Desktop]) -->|MCP, stdio or HTTP + bearer| mcp
+    gpt([ChatGPT custom GPT<br/>Actions]) -->|OpenAPI JSON,<br/>bearer for Ask| tunnel
+    gptmcp([ChatGPT plugin /<br/>claude.ai connector]) -->|MCP, no auth<br/>IKG_MCP_PUBLIC=on| tunnel
 
-    subgraph host[Single host]
-        app[ikg web app<br/>FastAPI + Jinja2]
+    tunnel[Cloudflare tunnel<br/>public HTTPS] --> app & mcp
+
+    subgraph host[Single host: Docker Compose]
+        app[ikg web app :8000<br/>FastAPI + Jinja2 + /api, /openapi.json]
+        mcp[ikg MCP server :8001<br/>Streamable HTTP /mcp]
         cli[ikg CLI]
         data[(data/<br/>files on disk)]
-        ollama[Ollama<br/>local model]
+        pg[(Postgres + pgvector :5433<br/>optional vector store)]
+        ollama[Ollama on the host<br/>screening, local answers,<br/>optional embeddings]
     end
 
-    app <--> data
-    cli <--> data
+    app & mcp & cli <--> data
+    app & mcp -.->|dense search| pg
     app -->|screen uploads| ollama
-    app -->|cited answers| claude[Claude API<br/>claude-haiku-5-5 by default]
-    cli -->|ask, eval --llm| claude
+    app & mcp -->|cited answers| model{IKG_ANSWER_MODEL}
+    model -->|claude-*| claude[Claude API<br/>claude-haiku-5-5 by default]
+    model -->|ollama:*| ollama
+    cli -->|ask, eval --llm, --fidelity| claude
     app -->|rebuild: fetch texts| gutenberg[Project Gutenberg]
     cli -->|fetch| gutenberg
     browser_cdn[jsDelivr CDN<br/>Cytoscape 3.30.2] -.->|graph page script| reader
@@ -31,9 +40,18 @@ flowchart LR
 | Dependency | Used for | Needed for |
 |---|---|---|
 | Project Gutenberg | Downloading bundled and admin-added texts | `fetch` and `build` only. Once files are in `data/raw/`, no network is needed |
-| Claude API (`ANTHROPIC_API_KEY`) | Cited answers | Ask mode, `ikg ask`, `ikg eval --llm`, unless `IKG_ANSWER_MODEL` is `ollama:<model>` |
-| Ollama (local) | Relevance screening of uploads; cited answers when `IKG_ANSWER_MODEL=ollama:<model>` | Uploads unless `IKG_SCREEN=off`; Ask, `ikg ask`, `ikg eval --llm` with a local model |
+| Claude API (`ANTHROPIC_API_KEY`) | Cited answers; the fidelity judge | Ask mode, `ikg_ask`, `ikg ask`, `ikg eval --llm`, unless `IKG_ANSWER_MODEL` is `ollama:<model>` |
+| Ollama (local) | Relevance screening of uploads; cited answers when `IKG_ANSWER_MODEL=ollama:<model>`; embeddings when `IKG_EMBED_MODEL=ollama:<model>` | Uploads unless `IKG_SCREEN=off`; Ask with a local model |
 | jsDelivr | Cytoscape library for the graph page | `/graph` in the browser |
+| Cloudflare quick tunnel (`cloudflared`) | A temporary public HTTPS address for the app and the MCP server | Only for clients outside the host: ChatGPT, claude.ai. A new random address on each start; a named tunnel keeps one (docs/08 §E) |
+
+**AI clients** (integrations/README.md):
+
+| Client | Talks to | Authentication |
+|---|---|---|
+| Claude Code (plugin), Claude Desktop | MCP server, HTTP or stdio | `Authorization: Bearer $IKG_MCP_TOKEN` over HTTP; none over stdio |
+| ChatGPT custom GPT | Web app JSON API, from `/openapi.json` | Search, passages, entities: none. `askQuestion`: `Bearer $IKG_API_TOKEN` |
+| ChatGPT plugin (custom MCP server), claude.ai connector | MCP server, HTTP | None, with `IKG_MCP_PUBLIC=on`: read-only tools, no `ikg_ask`. These clients offer OAuth or no auth, never a static token; OAuth is docs/08 §E |
 
 ## 2. Components
 
@@ -41,31 +59,45 @@ flowchart LR
 flowchart TB
     subgraph interfaces[Interfaces]
         cli[cli.py]
-        web[web/app.py<br/>routes, auth, rate limit, BuildJob]
+        web[web/app.py<br/>pages, JSON API + OpenAPI,<br/>auth, rate limit, BuildJob]
         tpl[web/templates + static/graph.js]
+        mcpsrv[mcp_server.py<br/>MCP tools, bearer token<br/>or public read-only]
+    end
+    subgraph shared[Shared services]
+        limits[limits.py<br/>rate limit, spend budget]
+        describe[describe.py<br/>entity and snippet views]
+        sparql[sparql.py<br/>read-only, child process]
+        curators[curators.py<br/>tokens, provenance]
     end
     subgraph core[Core library: src/ikg]
         sources[sources.py<br/>work registry, fetch, uploads]
+        pdftext[pdftext.py]
         segment[segment.py<br/>parsers -> Passage]
         normalize[normalize.py<br/>fold, tokenize]
         entities[entities.py<br/>Gazetteer -> Mention]
-        retrieve[retrieve.py<br/>BM25 + expansion + boost]
-        graph[graph.py<br/>co-occurrence, RDF]
+        retrieve[retrieve.py<br/>BM25 + dense, RRF, boost]
+        embed[embed.py<br/>fastembed or Ollama]
+        vstore[vectorstore.py<br/>file or pgvector]
+        kg[graph.py<br/>co-occurrence, RDF]
         qa[qa.py<br/>Claude with citations]
+        localqa[localqa.py<br/>Ollama answers]
         screen[screen.py<br/>Ollama relevance check]
         pipeline[pipeline.py<br/>build, Runtime]
         analysis[analysis.py]
-        evaluate[evaluate.py]
+        evaluate[evaluate.py + fidelity.py]
         config[config.py]
     end
-    cli --> pipeline & retrieve & qa & analysis & evaluate
-    web --> pipeline & retrieve & qa & screen & sources & entities
+    cli --> pipeline & retrieve & qa & analysis & evaluate & mcpsrv & sparql & curators
+    web --> pipeline & retrieve & qa & screen & sources & entities & limits & describe & curators
     web --> tpl
-    pipeline --> sources & segment & entities & retrieve & graph
+    mcpsrv --> pipeline & retrieve & qa & sparql & describe & limits
+    pipeline --> sources & segment & entities & retrieve & kg & embed & vstore
+    sources --> pdftext
     segment --> normalize
     entities --> normalize
-    retrieve --> entities
-    qa --> retrieve & graph
+    retrieve --> entities & embed & vstore
+    qa --> retrieve & kg
+    qa -->|ollama:*| localqa
     evaluate --> retrieve & qa
 ```
 
@@ -84,7 +116,12 @@ flowchart TB
 | `analysis.py` | Markdown corpus report | `entities`, `segment` |
 | `evaluate.py` | Retrieval and answer metrics over `eval/questions.jsonl` | `retrieve`, `qa` |
 | `web/app.py` | HTTP routes, admin sessions, rate limiting, background rebuild | `pipeline`, `screen`, ... |
-| `mcp_server.py` | MCP tools over stdio or Streamable HTTP with a bearer token (docs/03 §13) | `pipeline`, `retrieve`, `qa`, `sparql`, `describe`, `limits` |
+| `mcp_server.py` | MCP tools over stdio or Streamable HTTP with a bearer token, or without one and without `ikg_ask` when `IKG_MCP_PUBLIC=on` (docs/03 §13) | `pipeline`, `retrieve`, `qa`, `sparql`, `describe`, `limits` |
+| `embed.py`, `vectorstore.py` | Passage and query embeddings (fastembed or Ollama); nearest-passage search in memory or in pgvector | `config` |
+| `localqa.py` | Cited answers from a local Ollama model, citations checked by quote matching | `retrieve`, `config` |
+| `fidelity.py` | The fidelity judge for `ikg eval --fidelity` | `qa` |
+| `curators.py` | Named curator tokens and the provenance log (D12) | `config` |
+| `pdftext.py` | PDF text in a limited child process | `pypdf` |
 | `sparql.py` | Read-only SPARQL in a time-limited child process | `rdflib` |
 | `limits.py`, `describe.py` | Rate limiter and spend budget; entity and snippet views, shared by the web app and the MCP server | `pipeline`, `graph` |
 | `cli.py` | `ikg` command | `pipeline`, ... |
@@ -148,29 +185,64 @@ A build is **all-or-nothing and self-describing** (L19):
 
 ```mermaid
 sequenceDiagram
-    participant U as Reader
+    participant U as Reader or API client
     participant W as web/app.py
     participant R as retrieve.search
     participant Q as qa.ask
-    participant C as Claude API
-    U->>W: POST / (q, mode=ask)
-    W->>W: clamp k; answer cache hit? return it
-    W->>W: check daily budget and rate limit
+    participant C as Answer model<br/>(Claude API or Ollama)
+    U->>W: POST / (q, mode=ask) or POST /api/ask
+    W->>W: API client? check Bearer IKG_API_TOKEN (401 if wrong),<br/>else same-origin check
+    W->>W: clamp k, answer cache hit? return it
+    W->>W: check daily budget and rate limit<br/>(per IP, or the API-token limit)
     W->>Q: ask(question, Runtime)
-    Q->>R: search (BM25 + expansion + entity boost + filters)
+    Q->>R: search: BM25 + expansion, dense (file or pgvector),<br/>fused by RRF, entity boost, filters
     R-->>Q: top-k passages
     Q->>Q: graph_context(entities in question)
-    Q->>C: passage documents + graph summary (text) + question
-    C-->>Q: text blocks with citations
-    Q->>Q: map document_index -> passage id, number refs, detect NOT_IN_SOURCES
+    Q->>C: passage documents + graph summary + question
+    C-->>Q: text with citations (Claude: native; Ollama: quotes checked in code)
+    Q->>Q: map to passage ids, number refs, detect NOT_IN_SOURCES
     Q-->>W: Answer(text, citations, hits, tokens, cost)
     W->>W: charge budget, store in answer cache
     W-->>U: answer + passages given to the model
 ```
 
-Search mode follows the same path without the Claude call.
+Search mode, `/api/search` and `/api/passage/{id}` follow the same path without the model call.
 
-### 3.3 Contribution
+### 3.3 AI clients (MCP server and GPT Actions)
+
+```mermaid
+sequenceDiagram
+    participant A as AI client<br/>(Claude, ChatGPT)
+    participant T as Cloudflare tunnel
+    participant M as mcp_server.py :8001
+    participant W as web/app.py :8000
+    participant R as Runtime<br/>(retrieve, describe, sparql)
+    alt MCP (Claude Code plugin, ChatGPT plugin, claude.ai)
+        A->>T: POST /mcp (JSON-RPC: initialize, tools/list, tools/call)
+        T->>M: forward
+        M->>M: OAuth discovery paths? 404
+        M->>M: IKG_MCP_PUBLIC=on? no token needed, no ikg_ask<br/>else Bearer IKG_MCP_TOKEN (401 if wrong)
+        M->>R: ikg_search_passages / get_passage / get_entity / sparql_query
+        R-->>M: passages with ids, kinds, translators
+        M->>M: append to data/mcp-calls.jsonl
+        M-->>A: structured result
+    else GPT Actions (custom GPT)
+        A->>T: GET /openapi.json, then searchPassages, getPassage, getEntity
+        T->>W: forward
+        W->>R: search, passage, entity
+        R-->>W: results
+        W-->>A: JSON
+        A->>W: askQuestion with Bearer IKG_API_TOKEN (path 3.2)
+    end
+    A->>A: write the answer, citing passage ids
+```
+
+The rules that keep answers traceable (cite passage ids and translators, keep commentary apart, search
+every work for a shared story, abstain) travel in the MCP server's instructions and tool descriptions,
+and in the GPT's instructions (`integrations/chatgpt/instructions.md`), because the client's model sees
+nothing else.
+
+### 3.4 Contribution
 
 ```mermaid
 sequenceDiagram
@@ -220,7 +292,30 @@ roadmap item.
 
 ## 5. Deployment
 
-Current supported topology:
+Current topology (local host, with a quick tunnel for outside clients):
+
+```mermaid
+flowchart LR
+    browser([Browser]) -->|HTTP| p8000
+    claudecode([Claude Code]) -->|HTTP + bearer| p8001
+    outside([ChatGPT, claude.ai]) -->|HTTPS| cf[Cloudflare edge<br/>*.trycloudflare.com]
+    cf --> cfd[cloudflared<br/>one per port]
+    cfd --> p8000 & p8001
+
+    subgraph compose[Docker Compose on the host]
+        p8000[app: ikg serve<br/>127.0.0.1:8000]
+        p8001[mcp: ikg mcp --http<br/>127.0.0.1:8001, profile mcp]
+        db[(db: pgvector<br/>127.0.0.1:5433)]
+    end
+    p8000 & p8001 --> data[(./data mounted)]
+    p8000 & p8001 --> db
+    p8000 & p8001 -->|host.docker.internal:11434| ollama[Ollama on the host]
+    p8000 & p8001 -->|outbound HTTPS| claude[Claude API]
+```
+
+Both services use the image `ikg-app:local` and read `.env` (`env_file`); `docker compose up -d app` picks
+up a changed `.env`, and `--build` is needed for code changes. With a production reverse proxy instead of a
+tunnel:
 
 ```
 [browser] --HTTPS--> [reverse proxy on the same host] --HTTP--> [ikg serve, 127.0.0.1:8000]
@@ -228,6 +323,9 @@ Current supported topology:
                                                                   |-- Ollama (127.0.0.1:11434)
                                                                   `-- Claude API (outbound HTTPS)
 ```
+
+Behind a tunnel, as behind Docker's port mapping, every client arrives from one address, so per-client
+limits (Ask, uploads, failed logins) are shared by everyone.
 
 - `ikg serve` binds `127.0.0.1` by default. Put a reverse proxy (Caddy, nginx) in front for
   HTTPS. uvicorn trusts `X-Forwarded-For` from 127.0.0.1, so per-client rate limits work.
@@ -324,7 +422,7 @@ and are not part of the system until they appear in this table.
 | Answer generation | Claude API through the `anthropic` SDK, native document citations | `claude-haiku-5-5` at effort `low` by default (D13); configurable | `qa.py`, `config.py` | Needs `ANTHROPIC_API_KEY`; the only paid call. Cost estimated per answer from `config.PRICES` |
 | Upload screening | Ollama (local) over HTTP | default model `qwen3.5:9B` | `screen.py` | Runs on the host; uploads are rejected if Ollama is unreachable |
 | Claude Code plugin | A plugin (MCP server over HTTP with a sensitive token setting, and the `ikg-scholar` skill) and a marketplace manifest | Claude Code plugin format; checked with `claude plugin validate` | `integrations/claude/ikg/`, `.claude-plugin/marketplace.json` | docs/08 B2; `integrations/README.md` |
-| MCP server | MCP Python SDK v2 (`MCPServer`), stdio and Streamable HTTP (stateless, JSON), bearer token | `mcp` ≥ 2.3 < 3 (Python 3.11+) | `mcp_server.py`, `sparql.py` | `[mcp]` extra; also the compose `mcp` service (profile `mcp`, port 8001) |
+| MCP server | MCP Python SDK v2 (`MCPServer`), stdio and Streamable HTTP (stateless, JSON), bearer token or `IKG_MCP_PUBLIC` (no token, no `ikg_ask`) | `mcp` ≥ 2.3 < 3 (Python 3.11+) | `mcp_server.py`, `sparql.py` | `[mcp]` extra; also the compose `mcp` service (profile `mcp`, port 8001) |
 | Web app | FastAPI, served by uvicorn; Jinja2 templates; python-multipart for forms | FastAPI ≥ 0.110, uvicorn ≥ 0.29, Jinja2 ≥ 3.1 | `web/app.py`, `web/templates/` | `[web]` extra. Sessions, rate limits and the build job live in process memory |
 | Graph explorer | Cytoscape.js from the jsDelivr CDN | 3.30.2 | `web/templates/graph.html`, `web/static/graph.js` | Only browser dependency |
 | Storage | Files on disk: JSONL, YAML, pickle, GraphML, Turtle, JSON (build manifest) | none | `data/` (D6) | No database |
