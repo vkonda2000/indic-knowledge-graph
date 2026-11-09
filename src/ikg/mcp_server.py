@@ -1,7 +1,10 @@
 """The IKG as an MCP server (docs/08 B1): search, passages, entities, SPARQL and cited answers as tools.
 
 `ikg mcp` serves over stdio (for a local client such as Claude Desktop or Claude Code); `ikg mcp --http`
-serves Streamable HTTP at /mcp and requires `Authorization: Bearer $IKG_MCP_TOKEN`.
+serves Streamable HTTP at /mcp and requires `Authorization: Bearer $IKG_MCP_TOKEN`, unless
+IKG_MCP_PUBLIC=on: then it needs no token and leaves out `ikg_ask`, the one tool that costs money, so the
+public, read-only tools can be added to a client that can't send a static token (a ChatGPT custom MCP
+server with "No authentication"; claude.ai's custom connectors).
 
 Every tool keeps IKG's distinctions: results carry each passage's work, edition, translator and kind
 (verse / narrative are the primary text; commentary, introduction and secondary are not), and
@@ -22,6 +25,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -177,15 +181,17 @@ class CallLog:
 # ---------- server ----------
 
 def build_server(runtime: Runtime, caller: str = "stdio", budget: SpendBudget | None = None,
-                 limiter: RateLimiter | None = None, ask=None, transport: str = "") -> MCPServer:
+                 limiter: RateLimiter | None = None, ask=None, transport: str = "",
+                 with_ask: bool = True) -> MCPServer:
     """An MCP server over one loaded build. `caller` identifies who is calling (today "local" over stdio
     or "token" for the shared HTTP token; a client identity once OAuth arrives), `transport` how.
-    `ask` defaults to qa.ask (tests pass a fake)."""
+    `ask` defaults to qa.ask (tests pass a fake). `with_ask=False` leaves the ikg_ask tool out."""
     budget = budget or SpendBudget(config.ASK_BUDGET_USD)
     limiter = limiter or RateLimiter(int(os.environ.get("IKG_ASK_LIMIT", "20")))
     log = CallLog(config.MCP_LOG_FILE)
     rt = runtime
-    server = MCPServer("ikg_mcp", title="Indic Knowledge Graph", version=__version__, instructions=INSTRUCTIONS,
+    instructions = INSTRUCTIONS if with_ask else INSTRUCTIONS.replace("; ikg_ask writes a cited answer", "")
+    server = MCPServer("ikg_mcp", title="Indic Knowledge Graph", version=__version__, instructions=instructions,
                        description="Cited search and answers over the Upanishads, Mahabharata, Ramayana and "
                                    "Vishnu Purana in public-domain English translations")
 
@@ -341,17 +347,20 @@ def build_server(runtime: Runtime, caller: str = "stdio", budget: SpendBudget | 
             return "# The ontology file is not available in this installation (ontology/ikg.ttl)."
         return ONTOLOGY_FILE.read_text(encoding="utf-8")
 
+    if not with_ask:
+        server.remove_tool("ikg_ask")
     return server
 
 
 # ---------- HTTP with a bearer token ----------
 
-def http_app(server: MCPServer, token: str, host: str = "127.0.0.1"):
-    """The Streamable HTTP app at /mcp, refusing any HTTP request without `Authorization: Bearer <token>`."""
+def http_app(server: MCPServer, token: str | None, host: str = "127.0.0.1"):
+    """The Streamable HTTP app at /mcp, refusing any HTTP request without `Authorization: Bearer <token>`.
+    `token=None` serves without a token (IKG_MCP_PUBLIC: only for a server built `with_ask=False`)."""
     from mcp.server.transport_security import TransportSecuritySettings
     from starlette.responses import JSONResponse
 
-    if len(token) < 16:
+    if token is not None and len(token) < 16:
         raise ValueError("IKG_MCP_TOKEN must be at least 16 characters")
     security = None
     # Bound to localhost, the SDK checks the Host header against DNS rebinding. Bound to all interfaces (a
@@ -360,7 +369,7 @@ def http_app(server: MCPServer, token: str, host: str = "127.0.0.1"):
         security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
     inner = server.streamable_http_app(stateless_http=True, json_response=True, host=host,
                                        transport_security=security)
-    expected = token.encode()
+    expected = token.encode() if token is not None else None
     refused = JSONResponse({"error": "unauthorized", "detail": "send Authorization: Bearer <IKG_MCP_TOKEN>"},
                            status_code=401, headers={"WWW-Authenticate": "Bearer"})
 
@@ -374,6 +383,9 @@ def http_app(server: MCPServer, token: str, host: str = "127.0.0.1"):
             path = scope.get("path", "")
             if path.startswith("/.well-known/oauth-") or path in ("/register", "/authorize", "/token"):
                 await no_oauth(scope, receive, send)
+                return
+            if expected is None:  # public: no token, but still no OAuth paths
+                await inner(scope, receive, send)
                 return
             scheme, _, given = dict(scope.get("headers") or []).get(b"authorization", b"").partition(b" ")
             if scheme.lower() != b"bearer" or not hmac.compare_digest(given.strip(), expected):
@@ -390,10 +402,16 @@ def serve(http: bool = False, host: str = "127.0.0.1", port: int = 8001) -> None
     if not http:
         build_server(runtime, caller="local", transport="stdio").run("stdio")
         return
+    import uvicorn
+    if os.environ.get("IKG_MCP_PUBLIC", "").strip().lower() in ("on", "1", "true", "yes"):
+        print("IKG_MCP_PUBLIC is on: serving without a token, read-only tools only (no ikg_ask)", file=sys.stderr)
+        uvicorn.run(http_app(build_server(runtime, caller="public", transport="http", with_ask=False), None, host),
+                    host=host, port=port)
+        return
     token = os.environ.get("IKG_MCP_TOKEN", "")
     if not token:
-        raise SystemExit("ikg mcp --http needs IKG_MCP_TOKEN (a long random string clients send as a Bearer token)")
-    import uvicorn
+        raise SystemExit("ikg mcp --http needs IKG_MCP_TOKEN (a long random string clients send as a Bearer "
+                         "token), or IKG_MCP_PUBLIC=on for read-only tools without a token")
     uvicorn.run(http_app(build_server(runtime, caller="token", transport="http"), token, host),
                 host=host, port=port)
 

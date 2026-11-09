@@ -208,3 +208,31 @@ def test_bearer_scheme_is_case_insensitive_and_calls_are_logged_with_transport(s
     call(server, "ikg_get_entity", {"entity_id_or_name": "Kesava"})
     entry = json.loads(config.MCP_LOG_FILE.read_text(encoding="utf-8").splitlines()[-1])
     assert entry["tool"] == "ikg_get_entity" and entry["caller"] == "test" and "transport" in entry
+
+
+def test_public_mode_needs_no_token_and_has_no_ask(corpus, monkeypatch):  # noqa: F811
+    from starlette.testclient import TestClient
+    monkeypatch.setattr(config, "MCP_LOG_FILE", config.MANIFEST_FILE.with_name("mcp-calls.jsonl"))
+    _build(corpus)
+    public = build_server(Runtime.load(), caller="public", with_ask=False)
+    init = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}}}
+    listing = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+    headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    with TestClient(http_app(public, None), base_url="http://127.0.0.1:8001") as client:
+        r = client.post("/mcp", json=init, headers=headers)
+        assert r.status_code == 200 and "ikg_ask" not in r.json()["result"]["instructions"]
+        names = {t["name"] for t in client.post("/mcp", json=listing, headers=headers).json()["result"]["tools"]}
+        assert names == TOOLS - {"ikg_ask"}
+        assert client.get("/.well-known/oauth-protected-resource/mcp").status_code == 404
+    assert call(public, "ikg_search_passages", {"query": "Yama", "k": 2}).is_error is False
+
+
+def test_cli_public_mode_serves_without_a_token(server, monkeypatch):
+    import ikg.mcp_server as m
+    served = {}
+    monkeypatch.delenv("IKG_MCP_TOKEN", raising=False)
+    monkeypatch.setenv("IKG_MCP_PUBLIC", "on")
+    monkeypatch.setattr("uvicorn.run", lambda app, **kw: served.update(kw))
+    m.serve(http=True)
+    assert served["port"] == 8001
