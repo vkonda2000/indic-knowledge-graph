@@ -16,10 +16,10 @@ and the document is out of date. Please fix the document in the same pull reques
 | [08 Agentic extension](08-agentic-extension.md) | Proposed (2026-11-07): hybrid retrieval with pgvector, an MCP server, the same backend as Claude, ChatGPT and Microsoft 365 Copilot plugins, a LangGraph agent with citation checks and curator approval, an LLM-judge eval, and an optional regulation corpus; eleven PRs in order |
 | [09 Related projects](09-related-projects.md) | Proposed (2026-11-07): five Sanskrit-side projects (samskritam.ai, IISc speech tools, Sarvamūla, Siddhāntakośa, Dharmamitra), what each could add to IKG, the rules for using outside data, and an order of work. Two-page summary: [`briefs/ikg-brief.pdf`](briefs/ikg-brief.pdf) |
 
-Slides: [`slides/ikg-project-goals.pptx`](slides/ikg-project-goals.pptx) is an 8-slide overview
-of the project's goals and high-level objectives, current status and roadmap, with speaker
+Slides: [`slides/ikg-project-goals.pptx`](slides/ikg-project-goals.pptx) is a 9-slide overview
+of the project's goals and high-level objectives, current status, roadmap and the November scope (docs/08), with speaker
 notes, for introducing the project to collaborators and subject experts. Its figures are a
-snapshot from October 2026; the documents above are authoritative.
+snapshot from November 2026; the documents above are authoritative.
 
 Reviews: [`reviews/`](reviews/) holds the independent Fable reviews of code and architecture
 (ONBOARDING §7). Their findings are tracked as limitations in 06 §2.
