@@ -22,6 +22,24 @@ papers, lectures, schools of thought. The current code is a working prototype of
 The scope is in [docs/01 §0](docs/01-specification.md#0-target-system-and-this-prototype) and
 [docs/07](docs/07-target-alignment.md).
 
+### Catching up: what changed in November 2026
+
+If you read an earlier version of this guide, this is what's new. The plan behind it is
+[docs/08](docs/08-agentic-extension.md); the diagrams in [docs/02](docs/02-architecture.md) show all of it.
+
+| What | In short | Read |
+|---|---|---|
+| **Hybrid search is the default** | BM25 plus meaning-based (dense) search, merged by rank. hit@1 went from 0.28 to 0.41. Without embeddings in the build, search falls back to BM25 | [docs/02 D15](docs/02-architecture.md#decided-and-implemented-2026-10-23), `retrieve.py`, `embed.py` |
+| **A vector store** | Embeddings searched in memory, or in Postgres with pgvector | `vectorstore.py`, `compose.yaml` |
+| **Answers from a local model** | `IKG_ANSWER_MODEL=ollama:qwen3.5:9B` answers without an API key; citations are checked in code | `localqa.py`, [docs/03 §6.1](docs/03-design.md) |
+| **Docker** | `docker compose up -d --build`: the app on 127.0.0.1:8000, Postgres on 5433; the MCP server on 8001 with `--profile mcp` | `Dockerfile`, `compose.yaml`, [docs/02 §5](docs/02-architecture.md#5-deployment) |
+| **An MCP server** | The corpus as tools for AI assistants (search, passages, entities, read-only SPARQL, cited answers), over stdio or HTTP with a bearer token | `mcp_server.py`, [docs/03 §13](docs/03-design.md) |
+| **AI-platform integrations** | A Claude Code plugin with a skill; a ChatGPT custom GPT using the app's `/openapi.json`; ChatGPT as an MCP plugin through `IKG_MCP_PUBLIC=on` | [integrations/README.md](integrations/README.md) |
+| **Public URLs for testing** | Cloudflare quick tunnels (`cloudflared tunnel --url http://127.0.0.1:8000`); a new random address each time | [docs/02 §5](docs/02-architecture.md#5-deployment) |
+
+What's next in docs/08: finish the ChatGPT tests (B3), a stable address and a runbook (E), Microsoft
+365 Copilot (B4), then an agent that plans, searches several times and checks its own answer (C1).
+
 ## 2. Set up (day 1)
 
 You need: Python 3.10+, Git, the GitHub CLI (`gh`, logged in with `gh auth login`), access to
@@ -52,6 +70,17 @@ ikg serve                              # open http://127.0.0.1:8000
 `qwen3.5:4B` on a smaller GPU and set `IKG_SCREEN_MODEL` in `.env`). Without Ollama, set
 `IKG_SCREEN=off` in `.env`. The same model can answer questions without an API key:
 `ikg ask "..." --model ollama:qwen3.5:9B` (docs/03 §6.1).
+
+**Hybrid search (recommended).** `pip install -e ".[web,dev,embed]"`, then take the published
+embeddings instead of computing them (computing takes a long time on a laptop CPU):
+
+```powershell
+gh release download embeddings-bge-small-en-v1.5 --dir data/processed --pattern 'embeddings.*' --clobber
+ikg build --embed                      # reuses those vectors while the passage texts are unchanged
+```
+
+**MCP server (optional, Python 3.11+).** `pip install -e ".[mcp]"`, then `claude mcp add ikg -- ikg mcp`
+to use it from Claude Code over stdio, or see [integrations/README.md](integrations/README.md).
 
 **Check it works:**
 - Search: `ikg search "How did Karna die?"`
@@ -113,9 +142,9 @@ Answer quality depends on search finding the right passages first.
 | RDF triples, Turtle, OWL classes and properties | [ontology/ikg.ttl](ontology/ikg.ttl), `to_rdf()` in `graph.py` | W3C *RDF 1.1 Primer* |
 | SPARQL queries | [docs/04 §5](docs/04-data-model.md#5-example-sparql) | Run the examples with `ikg sparql` and change them |
 
-### 4.4 Later: embeddings and vector search
+### 4.4 Embeddings and vector search
 
-Needed for the next phase (hybrid search). Learn what an embedding is and how cosine
+Hybrid search is now the default, so this is no longer "later". Learn what an embedding is and how cosine
 similarity ranks results. Then read [src/ikg/embed.py](src/ikg/embed.py): `pip install -e ".[embed]"`,
 run `ikg build --embed`, and compare `IKG_EMBED_MODEL=ollama:nomic-embed-text` after
 `ollama pull nomic-embed-text`. Then [src/ikg/vectorstore.py](src/ikg/vectorstore.py): run
@@ -159,6 +188,17 @@ routes.
 ## 6. First four weeks
 
 Each week pairs learning with a real task from the roadmap. Open a PR at the end of each task.
+All four tasks below are still open (November 2026).
+
+**Joining now, after the November work?** Pick any of these as a first contribution, smallest first:
+
+| Task | Why it matters | Size |
+|---|---|---|
+| Week 1's ontology fix (L14), below | Small, self-contained, teaches the RDF side | S |
+| **Run the three test questions in ChatGPT** and record them in `integrations/README.md` (docs/08 B3) | Closes B3; you learn the MCP server and GPT Actions from the user side | S, needs a ChatGPT account |
+| **Write `RUNBOOK.md`** (docs/08 §E): start, stop, rebuild, rotate tokens, read the logs (`data/mcp-calls.jsonl`, `data/provenance.jsonl`), the budget alarm, tunnels | Learn the Docker stack by documenting it; test every command you write | S |
+| Week 2's eval growth, below | The most valuable work: the agent (docs/08 C2) is measured on these items | M |
+| Week 4's speaker attribution, below | Feeds the agent's "split by speaker" step | M |
 
 ### Week 1: Run it, trace it, fix a small gap
 
