@@ -17,6 +17,8 @@ def _no_real_embeddings(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "RETRIEVER", "bm25")  # hybrid would load the build's real embedding model
     monkeypatch.setattr(config, "EMBEDDINGS_FILE", tmp_path / "_embeddings" / "embeddings.npy")
     monkeypatch.setattr(config, "EMBEDDINGS_META_FILE", tmp_path / "_embeddings" / "embeddings.json")
+    for name in ("IKG_API_TOKEN", "IKG_MCP_TOKEN", "IKG_MCP_PUBLIC", "IKG_PUBLIC_URL"):
+        monkeypatch.delenv(name, raising=False)  # importing ikg.cli loads the developer's .env
 
 
 def make_work(work_id: str, parser: str | None = None) -> Work:

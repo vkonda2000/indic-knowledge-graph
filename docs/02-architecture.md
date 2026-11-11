@@ -87,17 +87,19 @@ flowchart TB
         evaluate[evaluate.py + fidelity.py]
         config[config.py]
     end
-    cli --> pipeline & retrieve & qa & analysis & evaluate & mcpsrv & sparql & curators
+    cli --> pipeline & retrieve & qa & analysis & evaluate & mcpsrv & curators & sources & vstore
     web --> pipeline & retrieve & qa & screen & sources & entities & limits & describe & curators
     web --> tpl
-    mcpsrv --> pipeline & retrieve & qa & sparql & describe & limits
+    mcpsrv --> pipeline & retrieve & qa & sparql & describe & limits & segment
     pipeline --> sources & segment & entities & retrieve & kg & embed & vstore
     sources --> pdftext
     segment --> normalize
     entities --> normalize
-    retrieve --> entities & embed & vstore
-    qa --> retrieve & kg
+    pipeline -->|Runtime.dense| embed
+    retrieve --> entities & normalize & segment
+    qa --> retrieve & kg & entities
     qa -->|ollama:*| localqa
+    localqa --> normalize
     evaluate --> retrieve & qa
 ```
 
@@ -108,7 +110,7 @@ flowchart TB
 | `sources.py` | Merges the bundled and user work registries, handles approval status, Gutenberg download and boilerplate stripping, upload storage | `config` |
 | `segment.py` | One parser per edition, plus a generic parser; produces `Passage` records | `sources`, `normalize` |
 | `entities.py` | Gazetteer loading and validation, regex matching, mention extraction | `segment`, `normalize` |
-| `retrieve.py` | BM25 index, query expansion from the gazetteer, entity boost, filters | `entities`, `segment` |
+| `retrieve.py` | BM25 index, query expansion from the gazetteer, entity boost, filters, RRF fusion with a dense search function the runtime provides | `entities`, `segment`, `normalize` |
 | `graph.py` | Co-occurrence graph (networkx, GraphML) and RDF export (rdflib, Turtle) | `entities`, `segment`, `sources` |
 | `qa.py` | Prompt, document blocks, Claude call, citation mapping, abstention | `retrieve`, `graph` |
 | `screen.py` | Text extraction, excerpt sampling, Ollama call with a JSON schema, verdict | `sources`, `config` |
@@ -116,9 +118,9 @@ flowchart TB
 | `analysis.py` | Markdown corpus report | `entities`, `segment` |
 | `evaluate.py` | Retrieval and answer metrics over `eval/questions.jsonl` | `retrieve`, `qa` |
 | `web/app.py` | HTTP routes, admin sessions, rate limiting, background rebuild | `pipeline`, `screen`, ... |
-| `mcp_server.py` | MCP tools over stdio or Streamable HTTP with a bearer token, or without one and without `ikg_ask` when `IKG_MCP_PUBLIC=on` (docs/03 §13) | `pipeline`, `retrieve`, `qa`, `sparql`, `describe`, `limits` |
+| `mcp_server.py` | MCP tools over stdio or Streamable HTTP with a bearer token, or without one and without `ikg_ask` when `IKG_MCP_PUBLIC=on`, with an hourly call limit (docs/03 §13) | `pipeline`, `retrieve`, `qa`, `sparql`, `describe`, `limits`, `segment` |
 | `embed.py`, `vectorstore.py` | Passage and query embeddings (fastembed or Ollama); nearest-passage search in memory or in pgvector | `config` |
-| `localqa.py` | Cited answers from a local Ollama model, citations checked by quote matching | `retrieve`, `config` |
+| `localqa.py` | Cited answers from a local Ollama model, citations checked by quote matching | `qa` (`Citation`), `normalize`, `config` |
 | `fidelity.py` | The fidelity judge for `ikg eval --fidelity` | `qa` |
 | `curators.py` | Named curator tokens and the provenance log (D12) | `config` |
 | `pdftext.py` | PDF text in a limited child process | `pypdf` |
@@ -191,15 +193,15 @@ sequenceDiagram
     participant Q as qa.ask
     participant C as Answer model<br/>(Claude API or Ollama)
     U->>W: POST / (q, mode=ask) or POST /api/ask
-    W->>W: API client? check Bearer IKG_API_TOKEN (401 if wrong),<br/>else same-origin check
+    W->>W: /api/ask: Bearer IKG_API_TOKEN? 401 if wrong,<br/>or if a non-browser client omits it once it is set
     W->>W: clamp k, answer cache hit? return it
-    W->>W: check daily budget and rate limit<br/>(per IP, or the API-token limit)
+    W->>W: same-origin check (skipped with the token), daily budget,<br/>hourly limit (admins exempt, else per IP or the API-token limit)
     W->>Q: ask(question, Runtime)
     Q->>R: search: BM25 + expansion, dense (file or pgvector),<br/>fused by RRF, entity boost, filters
     R-->>Q: top-k passages
     Q->>Q: graph_context(entities in question)
     Q->>C: passage documents + graph summary + question
-    C-->>Q: text with citations (Claude: native; Ollama: quotes checked in code)
+    C-->>Q: text with citations (Claude: native, Ollama: quotes checked in code)
     Q->>Q: map to passage ids, number refs, detect NOT_IN_SOURCES
     Q-->>W: Answer(text, citations, hits, tokens, cost)
     W->>W: charge budget, store in answer cache
@@ -221,7 +223,7 @@ sequenceDiagram
         A->>T: POST /mcp (JSON-RPC: initialize, tools/list, tools/call)
         T->>M: forward
         M->>M: OAuth discovery paths? 404
-        M->>M: IKG_MCP_PUBLIC=on? no token needed, no ikg_ask<br/>else Bearer IKG_MCP_TOKEN (401 if wrong)
+        M->>M: IKG_MCP_PUBLIC=on? no token, no ikg_ask, hourly call limit<br/>else Bearer IKG_MCP_TOKEN (401 if wrong)
         M->>R: ikg_search_passages / get_passage / get_entity / sparql_query
         R-->>M: passages with ids, kinds, translators
         M->>M: append to data/mcp-calls.jsonl
@@ -232,7 +234,8 @@ sequenceDiagram
         W->>R: search, passage, entity
         R-->>W: results
         W-->>A: JSON
-        A->>W: askQuestion with Bearer IKG_API_TOKEN (path 3.2)
+        A->>T: askQuestion with Bearer IKG_API_TOKEN
+        T->>W: forward (path 3.2)
     end
     A->>A: write the answer, citing passage ids
 ```
@@ -422,7 +425,10 @@ and are not part of the system until they appear in this table.
 | Answer generation | Claude API through the `anthropic` SDK, native document citations | `claude-haiku-5-5` at effort `low` by default (D13); configurable | `qa.py`, `config.py` | Needs `ANTHROPIC_API_KEY`; the only paid call. Cost estimated per answer from `config.PRICES` |
 | Upload screening | Ollama (local) over HTTP | default model `qwen3.5:9B` | `screen.py` | Runs on the host; uploads are rejected if Ollama is unreachable |
 | Claude Code plugin | A plugin (MCP server over HTTP with a sensitive token setting, and the `ikg-scholar` skill) and a marketplace manifest | Claude Code plugin format; checked with `claude plugin validate` | `integrations/claude/ikg/`, `.claude-plugin/marketplace.json` | docs/08 B2; `integrations/README.md` |
-| MCP server | MCP Python SDK v2 (`MCPServer`), stdio and Streamable HTTP (stateless, JSON), bearer token or `IKG_MCP_PUBLIC` (no token, no `ikg_ask`) | `mcp` ≥ 2.3 < 3 (Python 3.11+) | `mcp_server.py`, `sparql.py` | `[mcp]` extra; also the compose `mcp` service (profile `mcp`, port 8001) |
+| MCP server | MCP Python SDK v2 (`MCPServer`), stdio and Streamable HTTP (stateless, JSON), bearer token or `IKG_MCP_PUBLIC` (no token, no `ikg_ask`, `IKG_MCP_PUBLIC_LIMIT` calls an hour) | `mcp` ≥ 2.3 < 3 (Python 3.11+) | `mcp_server.py`, `sparql.py` | `[mcp]` extra; also the compose `mcp` service (profile `mcp`, port 8001) |
+| JSON API description | OpenAPI 3.1 generated by FastAPI at `/openapi.json`, with Pydantic models for the responses; `servers` from `IKG_PUBLIC_URL` | FastAPI's generator | `web/app.py` | What a custom GPT's Actions import (`integrations/chatgpt/`) |
+| ChatGPT | A custom GPT with Actions from `/openapi.json`, or the MCP server as a ChatGPT plugin (public mode) | GPT builder; Plugins → Add custom MCP server | `integrations/chatgpt/` | docs/08 B3 |
+| Tunnels | Cloudflare quick tunnels (`cloudflared tunnel --url`), one per port | cloudflared, `*.trycloudflare.com` | §5 | Temporary URLs that change on restart; a named tunnel or a host is on the roadmap |
 | Web app | FastAPI, served by uvicorn; Jinja2 templates; python-multipart for forms | FastAPI ≥ 0.110, uvicorn ≥ 0.29, Jinja2 ≥ 3.1 | `web/app.py`, `web/templates/` | `[web]` extra. Sessions, rate limits and the build job live in process memory |
 | Graph explorer | Cytoscape.js from the jsDelivr CDN | 3.30.2 | `web/templates/graph.html`, `web/static/graph.js` | Only browser dependency |
 | Storage | Files on disk: JSONL, YAML, pickle, GraphML, Turtle, JSON (build manifest) | none | `data/` (D6) | No database |

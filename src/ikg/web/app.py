@@ -197,6 +197,11 @@ def same_origin(request: Request) -> bool:
     return origin.split("://", 1)[-1] == request.headers.get("host", "")
 
 
+def is_browser(request: Request) -> bool:
+    """True if the request carries a header only browsers send (Sec-Fetch-Site or Origin)."""
+    return "sec-fetch-site" in request.headers or "origin" in request.headers
+
+
 def token_ok(given: str, expected: str) -> bool:
     # compare_digest on str rejects non-ASCII input with TypeError; bytes accept anything.
     return secrets.compare_digest(given.encode(), expected.encode())
@@ -291,8 +296,9 @@ def create_app() -> FastAPI:
         print(f"\n  IKG_ADMIN_TOKEN not set; admin token for this run: {admin_token}\n")
     contributor_token = os.environ.get("IKG_CONTRIBUTOR_TOKEN", "")
     # API clients (a custom GPT's Actions) send `Authorization: Bearer <IKG_API_TOKEN>`: Ask skips the
-    # same-origin check for them and counts against their own hourly limit, not the visitors'.
-    api_token = os.environ.get("IKG_API_TOKEN", "")
+    # same-origin check for them and counts against their own hourly limit, not the visitors'. Once the
+    # token is set, a non-browser client (no Origin or Sec-Fetch-Site) must send it to use Ask.
+    api_token = os.environ.get("IKG_API_TOKEN", "").strip()
     if api_token and len(api_token) < 16:
         raise ValueError("IKG_API_TOKEN must be at least 16 characters")
     api_ask_limiter = RateLimiter(int(os.environ.get("IKG_API_ASK_LIMIT", "60")))
@@ -367,11 +373,11 @@ def create_app() -> FastAPI:
             return "Cited answers can only be requested from this site."
         if not budget.available():
             return "The daily budget for cited answers has been used up. Search still works."
+        if is_admin(request):  # admins are not limited, and don't use up the visitors' limit
+            return ""
         allowed = (api_ask_limiter.allow("api") if api else
                    ask_limiter.allow(request.client.host if request.client else ""))
-        if not (is_admin(request) or allowed):
-            return "Question limit reached for this hour. Search still works."
-        return ""
+        return "" if allowed else "Question limit reached for this hour. Search still works."
 
     def cached(q: str, k: int, works, primary_only: bool):
         return answer_cache.get(AnswerCache.key(q, k, works, primary_only, state["generation"]))
@@ -718,11 +724,18 @@ def create_app() -> FastAPI:
     @app.post("/api/ask", operation_id="askQuestion", summary="A cited answer to a question",
               description="Searches, then writes an answer citing passage ids, or abstains when the passages "
                           "don't support one. Slower than searchPassages and limited per hour.",
-              responses={200: {"model": AskResponse}},
+              responses={200: {"model": AskResponse},
+                         400: {"description": "Malformed request body"},
+                         401: {"description": "Missing or wrong API token"},
+                         429: {"description": "Hourly limit or daily budget reached"},
+                         503: {"description": "Corpus not built, or the answering model failed"}},
               openapi_extra={"requestBody": {"required": True, "content": {
                   "application/json": {"schema": AskRequest.model_json_schema()}}}})
     async def api_ask(request: Request, credentials: HTTPAuthorizationCredentials | None = Security(bearer)):
         api = api_client(credentials)
+        if api_token and not api and not is_browser(request):
+            raise HTTPException(401, "API clients must send the API token",
+                                headers={"WWW-Authenticate": "Bearer"})
         try:
             body = await request.json()
         except ValueError:

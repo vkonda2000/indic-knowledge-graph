@@ -33,7 +33,7 @@ If you read an earlier version of this guide, this is what's new. The plan behin
 | **A vector store** | Embeddings searched in memory, or in Postgres with pgvector | `vectorstore.py`, `compose.yaml` |
 | **Answers from a local model** | `IKG_ANSWER_MODEL=ollama:qwen3.5:9B` answers without an API key; citations are checked in code | `localqa.py`, [docs/03 §6.1](docs/03-design.md) |
 | **Docker** | `docker compose up -d --build`: the app on 127.0.0.1:8000, Postgres on 5433; the MCP server on 8001 with `--profile mcp` | `Dockerfile`, `compose.yaml`, [docs/02 §5](docs/02-architecture.md#5-deployment) |
-| **An MCP server** | The corpus as tools for AI assistants (search, passages, entities, read-only SPARQL, cited answers), over stdio or HTTP with a bearer token | `mcp_server.py`, [docs/03 §13](docs/03-design.md) |
+| **An MCP server** | The corpus as tools for AI assistants (search, passages, entities, read-only SPARQL, cited answers), over stdio, or HTTP with a bearer token or read-only without one (`IKG_MCP_PUBLIC`) | `mcp_server.py`, [docs/03 §13](docs/03-design.md) |
 | **AI-platform integrations** | A Claude Code plugin with a skill; a ChatGPT custom GPT using the app's `/openapi.json`; ChatGPT as an MCP plugin through `IKG_MCP_PUBLIC=on` | [integrations/README.md](integrations/README.md) |
 | **Public URLs for testing** | Cloudflare quick tunnels (`cloudflared tunnel --url http://127.0.0.1:8000`); a new random address each time | [docs/02 §5](docs/02-architecture.md#5-deployment) |
 
@@ -78,6 +78,9 @@ embeddings instead of computing them (computing takes a long time on a laptop CP
 gh release download embeddings-bge-small-en-v1.5 --dir data/processed --pattern 'embeddings.*' --clobber
 ikg build --embed                      # reuses those vectors while the passage texts are unchanged
 ```
+
+The vectors are reused only if your passages match theirs and fastembed is the pinned version (0.9.1,
+from the `[embed]` extra); otherwise the build computes them again, which is correct, just slow.
 
 **MCP server (optional, Python 3.11+).** `pip install -e ".[mcp]"`, then `claude mcp add ikg -- ikg mcp`
 to use it from Claude Code over stdio, or see [integrations/README.md](integrations/README.md).

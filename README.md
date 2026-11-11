@@ -212,8 +212,11 @@ IKG_MCP_TOKEN=<16+ random characters> ikg mcp --http --port 8001
 docker compose --profile mcp up -d mcp     # http://127.0.0.1:8001/mcp
 ```
 
-The claude.ai connector, a ChatGPT custom GPT and a Microsoft 365 Copilot agent, which need a public
-HTTPS address, are next ([docs/08 B2–B4](docs/08-agentic-extension.md)).
+With `IKG_MCP_PUBLIC=on` the server needs no token and serves only the read-only tools (no `ikg_ask`),
+within an hourly call limit, for clients that can't send a token: a ChatGPT custom MCP server or a
+claude.ai connector ([integrations/README.md](integrations/README.md)). A ChatGPT custom GPT uses the
+web app's `/openapi.json` instead. A Microsoft 365 Copilot agent is next
+([docs/08 B2–B4](docs/08-agentic-extension.md)).
 
 ## Roadmap: the agentic extension
 

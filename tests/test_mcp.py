@@ -224,8 +224,28 @@ def test_public_mode_needs_no_token_and_has_no_ask(corpus, monkeypatch):  # noqa
         assert r.status_code == 200 and "ikg_ask" not in r.json()["result"]["instructions"]
         names = {t["name"] for t in client.post("/mcp", json=listing, headers=headers).json()["result"]["tools"]}
         assert names == TOOLS - {"ikg_ask"}
-        assert client.get("/.well-known/oauth-protected-resource/mcp").status_code == 404
+        for path in ("/.well-known/oauth-protected-resource/mcp", "/authorize", "/token", "/register"):
+            r = client.get(path)
+            assert r.status_code == 404 and "IKG_MCP_TOKEN" not in r.json()["detail"]
+        ask = {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+               "params": {"name": "ikg_ask", "arguments": {"question": "Who is Yama?"}}}
+        r = client.post("/mcp", json=ask, headers=headers).json()
+        assert "error" in r or r["result"]["isError"] is True  # the tool is gone, not just hidden
     assert call(public, "ikg_search_passages", {"query": "Yama", "k": 2}).is_error is False
+
+
+def test_public_call_limit_and_sparql_concurrency(corpus, monkeypatch):  # noqa: F811
+    import ikg.mcp_server as m
+    monkeypatch.setattr(config, "MCP_LOG_FILE", config.MANIFEST_FILE.with_name("mcp-calls.jsonl"))
+    _build(corpus)
+    public = build_server(Runtime.load(), caller="public", with_ask=False, call_limiter=RateLimiter(2))
+    assert call(public, "ikg_search_passages", {"query": "Yama", "k": 2}).is_error is False
+    assert call(public, "ikg_sparql_query", {"query": "ASK { ?s ?p ?o }"}).is_error is False
+    limited = call(public, "ikg_search_passages", {"query": "Yama", "k": 2})
+    assert limited.is_error and "hourly call limit" in limited.content[0].text
+    monkeypatch.setattr(m, "SPARQL_CONCURRENCY", 0)  # every slot taken
+    busy = call(build_server(Runtime.load()), "ikg_sparql_query", {"query": "ASK { ?s ?p ?o }"})
+    assert busy.is_error and "too many SPARQL" in busy.content[0].text
 
 
 def test_cli_public_mode_serves_without_a_token(server, monkeypatch):
@@ -236,3 +256,29 @@ def test_cli_public_mode_serves_without_a_token(server, monkeypatch):
     monkeypatch.setattr("uvicorn.run", lambda app, **kw: served.update(kw))
     m.serve(http=True)
     assert served["port"] == 8001
+
+
+@pytest.mark.parametrize("value", ["off", "", "maybe", "0"])
+def test_cli_public_mode_off_needs_a_token(server, monkeypatch, value):
+    import ikg.mcp_server as m
+    monkeypatch.delenv("IKG_MCP_TOKEN", raising=False)
+    monkeypatch.setenv("IKG_MCP_PUBLIC", value)
+    monkeypatch.setattr("uvicorn.run", lambda app, **kw: pytest.fail("served without a token"))
+    with pytest.raises(SystemExit, match="IKG_MCP_TOKEN"):
+        m.serve(http=True)
+
+
+def test_cli_public_mode_ignores_a_token_loudly(server, monkeypatch, capsys):
+    import ikg.mcp_server as m
+    from starlette.testclient import TestClient
+    served = {}
+    monkeypatch.setenv("IKG_MCP_TOKEN", "t" * 32)
+    monkeypatch.setenv("IKG_MCP_PUBLIC", " Yes ")
+    monkeypatch.setattr("uvicorn.run", lambda app, **kw: served.update(app=app, **kw))
+    m.serve(http=True)
+    assert "IGNORED" in capsys.readouterr().err
+    listing = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+    headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    with TestClient(served["app"], base_url="http://127.0.0.1:8001") as client:
+        r = client.post("/mcp", json=listing, headers=headers)  # no token sent
+        assert r.status_code == 200 and "ikg_ask" not in {t["name"] for t in r.json()["result"]["tools"]}

@@ -7,7 +7,7 @@
 #
 #   docker compose up -d --build        # db + app, site at http://127.0.0.1:8000
 #   docker compose exec app ikg vectors compare
-#   docker compose --profile mcp up -d mcp  # MCP over HTTP at http://127.0.0.1:8001/mcp (needs IKG_MCP_TOKEN)
+#   docker compose --profile mcp up -d mcp  # MCP over HTTP at http://127.0.0.1:8001/mcp (needs IKG_MCP_TOKEN, or IKG_MCP_PUBLIC=on)
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

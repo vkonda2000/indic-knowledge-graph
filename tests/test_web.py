@@ -179,6 +179,18 @@ def test_ask_is_rate_limited_and_validated(client, monkeypatch):
     assert client.post("/api/ask", json={"question": "karma?"}).status_code == 200
 
 
+def test_admin_questions_do_not_use_up_the_visitors_limit(client, monkeypatch):
+    from ikg import qa
+    monkeypatch.setattr(qa, "ask", fake_ask)
+    build_sample(client)
+    client.app_ref.state.ask_limiter.per_hour = 1
+    login(client)
+    for q in ("dharma?", "karma?", "yoga?"):
+        assert client.post("/api/ask", json={"question": q}).status_code == 200
+    client.post("/admin/logout")
+    assert client.post("/api/ask", json={"question": "moksha?"}).status_code == 200  # the visitor's one
+
+
 def test_ask_never_runs_on_get(client, monkeypatch):
     from ikg import qa
     fake_ask.calls = []
@@ -601,14 +613,32 @@ def test_api_token_lets_api_clients_ask_with_their_own_limit(client, monkeypatch
         build_sample(api)
         api.app.state.ask_limiter.per_hour = 0  # visitors are out of questions
         cross_site = {"Sec-Fetch-Site": "cross-site"}
-        assert api.post("/api/ask", json={"question": "dharma?"}, headers=cross_site).status_code == 429
+        r = api.post("/api/ask", json={"question": "dharma?"}, headers=cross_site)
+        assert r.status_code == 429 and "only be requested from this site" in r.json()["detail"]
+        same_site = {"Sec-Fetch-Site": "same-origin"}
+        r = api.post("/api/ask", json={"question": "dharma?"}, headers=same_site)
+        assert r.status_code == 429 and "Question limit" in r.json()["detail"]
+        for bad in ({}, {"Authorization": "Bearer "}, {"Authorization": "Basic " + token}):
+            r = api.post("/api/ask", json={"question": "dharma?"}, headers=bad)  # a script without the token
+            assert r.status_code == 401, bad
         authed = {**cross_site, "Authorization": f"Bearer {token}"}
         assert api.post("/api/ask", json={"question": "dharma?"}, headers=authed).status_code == 200
+        assert api.app.state.ask_limiter.per_hour == 0  # the visitors' bucket was not touched
         r = api.post("/api/ask", json={"question": "dharma?"}, headers={"Authorization": "Bearer wrong"})
         assert r.status_code == 401 and r.headers["www-authenticate"] == "Bearer"
         api.app.state.api_ask_limiter.per_hour = 1
         assert api.post("/api/ask", json={"question": "karma?"}, headers=authed).status_code == 429
+        api.app.state.api_ask_limiter.per_hour = 100
+        api.app.state.budget.limit = 0.0
+        r = api.post("/api/ask", json={"question": "yoga?"}, headers=authed)
+        assert r.status_code == 429 and "daily budget" in r.json()["detail"]  # the token doesn't skip it
     assert len(fake_ask.calls) == 1
+    monkeypatch.setenv("IKG_API_TOKEN", f"  {token}\n")  # stray whitespace in .env
+    with TestClient(create_app()) as api:
+        api.app_ref = api.app
+        build_sample(api)
+        assert api.post("/api/ask", json={"question": "dharma?"},
+                        headers={"Authorization": f"Bearer {token}"}).status_code == 200
     monkeypatch.setenv("IKG_API_TOKEN", "short")
     with pytest.raises(ValueError, match="16 characters"):
         create_app()
@@ -646,3 +676,19 @@ def test_openapi_describes_the_json_api_only(client, monkeypatch):
     assert "question" in ask["requestBody"]["content"]["application/json"]["schema"]["required"]
     assert ask["security"] and "HTTPBearer" in doc["components"]["securitySchemes"]
     assert "works" in {p["name"] for p in doc["paths"]["/api/search"]["get"]["parameters"]}
+    assert {"200", "401", "429", "503"} <= set(ask["responses"])
+    monkeypatch.setenv("IKG_PUBLIC_URL", "")
+    with TestClient(create_app()) as c:
+        assert "servers" not in c.get("/openapi.json").json()
+
+
+def test_api_responses_match_the_openapi_models(client, monkeypatch):
+    """The handlers build plain dicts; check they still have every field the models promise."""
+    from ikg import qa
+    from ikg.web import app as web
+    monkeypatch.setattr(qa, "ask", fake_ask)
+    build_sample(client)
+    search = client.get("/api/search", params={"q": "Bhishma king"}).json()
+    web.SearchResponse.model_validate(search)
+    web.PassageResponse.model_validate(client.get(f"/api/passage/{search['results'][0]['id']}").json())
+    web.AskResponse.model_validate(client.post("/api/ask", json={"question": "dharma?"}).json())

@@ -52,6 +52,7 @@ services:
 
   # The corpus as MCP tools over Streamable HTTP (docs/08 B1), for Claude, ChatGPT or another MCP client.
   # Opt in: set IKG_MCP_TOKEN (16+ random characters) in .env, then `docker compose --profile mcp up -d mcp`.
+  # IKG_MCP_PUBLIC=on instead serves the read-only tools without a token (integrations/README.md).
   mcp:
     profiles: ["mcp"]
     image: ikg-app:local

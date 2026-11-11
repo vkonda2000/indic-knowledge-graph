@@ -25,10 +25,10 @@
 
 | Method | Path | Access | Request | Response |
 |---|---|---|---|---|
-| GET | `/api/search` | public | `q`*, `k` (1–50, default 8), `works` (repeatable), `primary_only` | `{query, entities: [id], results: [{id, ref, kind, score, text}]}` |
-| POST | `/api/ask` | public; budget- and rate-limited; cache hits are free | `{"question"*: str, "k": int ≤ 20, "works": [str], "primary_only": bool}` (`primary_only` must be a JSON boolean) | `{answer, abstained, refused, truncated, model, cached, citations: [{passage_id, ref, cited_text}], retrieved: [id]}`; 429 when the daily budget or the hourly limit is reached, or for a browser request from another site |
+| GET | `/api/search` | public | `q`*, `k` (1–50, default 8), `works` (repeatable), `primary_only` | `{query, retriever, entities: [id], results: [{id, ref, kind, score, text}]}` (`retriever`: bm25, dense or hybrid) |
+| POST | `/api/ask` | public from a browser on this site; once `IKG_API_TOKEN` is set, other clients must send it as a Bearer token (401 without it or with a wrong one); budget- and rate-limited, admins exempt from the hourly limit; cache hits are free | `{"question"*: str, "k": int ≤ 20, "works": [str], "primary_only": bool}` (`primary_only` must be a JSON boolean) | `{answer, abstained, refused, truncated, model, cached, citations: [{passage_id, ref, cited_text}], retrieved: [id]}`; 429 when the daily budget or the hourly limit (`IKG_ASK_LIMIT` per IP, or `IKG_API_ASK_LIMIT` for the token) is reached, or for a browser request from another site without the token; 503 when the model fails |
 | GET | `/api/passage/{id}` | public | none | `{id, ref, work, work_title, edition, kind, translator, text, source_url, previous_id, next_id, entities}`; 404 for an unknown id |
-| GET | `/openapi.json` | public | none | OpenAPI document of the `/api/*` routes (operation ids `searchPassages`, `getPassage`, `askQuestion`, `getGraph`, `getEntity`) with `servers` from `IKG_PUBLIC_URL`, for GPT Actions |
+| GET | `/openapi.json` | public | none | OpenAPI document of the `/api/*` routes (operation ids `searchPassages`, `getPassage`, `askQuestion`, `getGraph`, `getEntity`) with `servers` from `IKG_PUBLIC_URL` (left out when unset: GPT Actions then needs it added by hand), for GPT Actions |
 | GET | `/api/graph` | public | `work`, `types` (comma-separated), `min_weight` (default 5), `max_nodes` (≤ 300, default 80) | Cytoscape elements: `{nodes: [{data: {id, label, type, mentions}}], edges: [{data: {id, source, target, weight}}]}` |
 | GET | `/api/entity/{id}` | public | none | `{id, label, type, iast, aliases, renderings, mentions, works, surface_forms, neighbours, passages}` (10 passages) |
 | GET | `/api/build/status` | admin | none | `{state: idle\|running\|done\|error, log: [str], stats, error, started, finished}` |
@@ -38,7 +38,7 @@
 | Status | When |
 |---|---|
 | 400 | Malformed `/api/ask` body or a non-integer `k` |
-| 401 | An admin `/api/` route without a valid admin session (HTML admin pages redirect to the login page instead) |
+| 401 | An admin `/api/` route without a valid admin session (HTML admin pages redirect to the login page instead); `/api/ask` with a wrong API token, or without one from a non-browser client once `IKG_API_TOKEN` is set |
 | 404 | Unknown entity or passage |
 | 422 | FastAPI parameter validation failed |
 | 413 | Upload larger than 20 MB (refused before the body is read) |
@@ -67,7 +67,7 @@ curl -s -X POST http://127.0.0.1:8000/api/ask -H 'content-type: application/json
 | `ikg eval --fidelity` | SOT-fidelity benchmark: pass/fail per item and check, rates per property | `--baseline` (plain model, no retrieval), `--include-drafts`, `--judge-model`, `--model`, `--effort`, `-k`; not combinable with `--check`, `--llm`, `--no-expand` | API key; built corpus unless `--baseline`; at least one approved item |
 | `ikg vectors compare` | Recall@k of a vector store against exact search, and both latencies, over sampled passage vectors, unfiltered, primary only, and one work | `--store` (a `postgresql://` URL or `file`; default `IKG_VECTOR_STORE`), `-n` (200), `-k` (8) | a build with embeddings; for Postgres, the `[pg]` extra and `docker compose up -d db` |
 | `ikg sparql "QUERY"` | Query `processed/ikg.ttl` | none | built corpus |
-| `ikg mcp` | Serve the corpus as MCP tools (docs/03 §13): over stdio, or Streamable HTTP at `/mcp` | `--http`, `--host` (127.0.0.1), `--port` (8001) | built corpus; the `[mcp]` extra (Python 3.11+); `--http` needs `IKG_MCP_TOKEN` |
+| `ikg mcp` | Serve the corpus as MCP tools (docs/03 §13): over stdio, or Streamable HTTP at `/mcp` | `--http`, `--host` (127.0.0.1), `--port` (8001) | built corpus; the `[mcp]` extra (Python 3.11+); `--http` needs `IKG_MCP_TOKEN`, unless `IKG_MCP_PUBLIC` is on |
 | `ikg curator add\|remove\|list [NAME]` | Manage named curators; `add` prints the new login token once | none | none |
 | `ikg provenance` | Print the provenance log, oldest first | `-n` (50) | none |
 | `ikg serve` | Run the web app | `--host` (127.0.0.1), `--port` (8000) | `[web]` extras |
@@ -104,9 +104,10 @@ shell take precedence. `.env` is git-ignored.
 | `IKG_PDF_MAX_MEMORY_MB` | `2048` | Memory cap for the PDF reader process (POSIX only) |
 | `IKG_PDF_MAX_PARALLEL` | `2` | PDFs read at the same time |
 | `IKG_EMBED` | `off` | `on`/`1`/`true`/`yes`: builds (CLI and admin Rebuild) also write passage embeddings |
-| `IKG_MCP_TOKEN` | unset | Bearer token `ikg mcp --http` requires from every client (16+ characters) |
-| `IKG_MCP_PUBLIC` | `off` | `on`: `ikg mcp --http` needs no token and leaves out `ikg_ask` (read-only tools only), for clients that can't send a static token (a ChatGPT custom MCP server, claude.ai). Anyone with the URL can then search |
-| `IKG_API_TOKEN` | unset | Bearer token API clients (a custom GPT's Actions) send to `/api/ask` from outside the site; skips the same-origin check (16+ characters) |
+| `IKG_MCP_TOKEN` | unset | Bearer token `ikg mcp --http` requires from every client (16+ characters; surrounding whitespace ignored). Ignored, with a warning, while `IKG_MCP_PUBLIC` is on |
+| `IKG_MCP_PUBLIC` | `off` | `on` (or `1`, `true`, `yes`; anything else is off): `ikg mcp --http` needs no token and leaves out `ikg_ask` (read-only tools only), for clients that can't send a static token (a ChatGPT custom MCP server, claude.ai). Anyone with the URL can then search, within `IKG_MCP_PUBLIC_LIMIT` |
+| `IKG_MCP_PUBLIC_LIMIT` | `600` | Tool calls an hour in public mode, shared by every client. At most 2 SPARQL queries run at once in any mode |
+| `IKG_API_TOKEN` | unset | Bearer token API clients (a custom GPT's Actions) send to `/api/ask` from outside the site; skips the same-origin check and counts against `IKG_API_ASK_LIMIT`. Once set, `/api/ask` requires it from any client that isn't a browser (no `Origin` or `Sec-Fetch-Site` header). 16+ characters; surrounding whitespace ignored |
 | `IKG_API_ASK_LIMIT` | `60` | Ask calls per hour for all API-token clients together |
 | `IKG_PUBLIC_URL` | unset | The app's public `https://` address, put in `/openapi.json` `servers` |
 | `IKG_MCP_PORT` | `8001` | Host port of the `mcp` service in `compose.yaml` |

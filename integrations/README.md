@@ -6,8 +6,8 @@ One backend, the IKG MCP server (`ikg mcp`, docs/03 §13), packaged for each pla
 |---|---|---|
 | **Claude Code** | Plugin [`claude/ikg`](claude/ikg): the MCP server over HTTP and the `ikg-scholar` skill | Done; tested below |
 | **Claude Desktop** | The MCP server over stdio (README) and the `ikg-scholar` skill, uploaded | Works locally today |
-| **claude.ai** | A custom connector (remote MCP) and the skill | Needs a public HTTPS address and OAuth (docs/08 §E) |
-| **ChatGPT** | A custom GPT with Actions from the app's OpenAPI document ([`chatgpt/`](chatgpt)) | Ready to build; the GPT itself is made in ChatGPT (below) |
+| **claude.ai** | A custom connector (remote MCP) and the skill | Read-only tools without a token through `IKG_MCP_PUBLIC` (below); with `ikg_ask`, needs OAuth (docs/08 §E) |
+| **ChatGPT** | A custom GPT with Actions from the app's OpenAPI document ([`chatgpt/`](chatgpt)), or the MCP server as a plugin in public mode | GPT ready to build (below); the plugin connected in public mode, 2026-11-10 |
 | Microsoft 365 Copilot | A declarative agent with an API plugin | B4 |
 
 ## Claude Code
@@ -46,8 +46,24 @@ Claude help pages before relying on them.
   settings, where custom skills are added (under Capabilities at the time of writing).
 - **The server, Desktop:** stdio, as in the README's MCP section.
 - **The server, claude.ai:** a custom connector takes a public HTTPS URL and authenticates with
-  OAuth (or not at all); there is no field for a static token. So it waits for a hosted server with
-  OAuth (docs/08 §E and the OAuth step in B1's notes). Until then, use Desktop or Claude Code.
+  OAuth or not at all; there is no field for a static token. Without OAuth, only public mode works
+  (next section): the read-only tools, no `ikg_ask`. The full server waits for OAuth (docs/08 §E).
+
+## Public mode: the MCP server without a token
+
+Clients that can't send a static token (ChatGPT's *Plugins → Add custom MCP server* with *No
+authentication*, claude.ai's custom connectors) can use the read-only tools when the server runs with
+`IKG_MCP_PUBLIC=on` in `.env` (`docker compose --profile mcp up -d mcp`). Then:
+
+- no token is needed, and `IKG_MCP_TOKEN` is ignored (the server says so at start);
+- `ikg_ask`, the one tool that can cost money, is not served at all;
+- every tool call counts against `IKG_MCP_PUBLIC_LIMIT` (default 600 an hour, shared by everyone),
+  and at most two SPARQL queries run at once;
+- OAuth discovery answers 404, so a client connects without starting an OAuth flow.
+
+Anyone with the URL can search the corpus, so turn it off (`IKG_MCP_PUBLIC=off`, restart) when the
+test is over. Checked 2026-11-10: ChatGPT connected through a quick tunnel with *No authentication*,
+and the read-only tools worked in a quick test.
 
 ## The three test questions
 
@@ -77,7 +93,7 @@ server answers 401; with it, 200. The three runs made 28 requests to the contain
 | # | Result |
 |---|---|
 | upa | `upa.katha.p2.v18`, `p2.v20`, `p2.v23`, `p3.v03`, `p4.v01`, `p6.v18`; Paramananda named, *ātman* for "Self"; noted it read verses, not commentary ($0.40) |
-| xw | All four expected sections (`ram.b1.c043.p03`, `ram.b1.c044.p02`, `mbh.b03.s108.p04`) plus `mbh.b13.s026.p09` and two Vishnu Purana passages, each work kept separate. One slip: a heading says "Part 2, section 8" over passages from sections 2 and 8; the ids are right ($0.60) |
+| xw | Ramayana 1.43–44 and Mahabharata 3.108 (`ram.b1.c043.p03`, `ram.b1.c044.p02`, `mbh.b03.s108.p04`; 3.109 not recorded) plus `mbh.b13.s026.p09` and two Vishnu Purana passages, each work kept separate. One slip: a heading says "Part 2, section 8" over passages from sections 2 and 8; the ids are right ($0.60) |
 | adv | Abstained: Hanuman isn't in the Katha Upanishad; cited `upa.katha.p1.v01`, then where Hanuman does appear (`mbh.b03.s146.p01`, `ram.b6.c128.p01`) ($0.37) |
 
 The costs are higher than the stdio runs above because each headless run starts with an empty
@@ -102,7 +118,9 @@ The GPT calls the web app's JSON API, not the MCP server: `searchPassages`, `get
 **The server.** In `.env`: `IKG_API_TOKEN` (16+ random characters) and `IKG_PUBLIC_URL` (the app's
 public `https://` address). Search, passages and entities are public and read-only; the token is for
 `askQuestion`: with it, Ask skips the same-origin check and counts against its own hourly limit
-(`IKG_API_ASK_LIMIT`, default 60), still within the daily budget. A wrong token gets 401. For a quick
+(`IKG_API_ASK_LIMIT`, default 60), still within the daily budget. A wrong token gets 401, and so does
+a non-browser client without one once the token is set. Without `IKG_PUBLIC_URL`, `/openapi.json` has
+no `servers` entry and the GPT builder asks for one. For a quick
 public address, a Cloudflare quick tunnel: `cloudflared tunnel --url http://127.0.0.1:8000` (a new
 random address on every start, so `IKG_PUBLIC_URL` and the GPT's schema must follow it; a named
 tunnel keeps one address).

@@ -482,7 +482,9 @@ the `Host` header when bound to localhost. OAuth discovery and registration path
 asks for the token instead of starting an OAuth flow. With `IKG_MCP_PUBLIC=on` the HTTP server needs no
 token and leaves out `ikg_ask`, the one tool that costs money: for ChatGPT's custom MCP servers and
 claude.ai's connectors, which offer OAuth or no authentication but no static token. Calls are then logged
-with the caller `public`.
+with the caller `public` and limited to `IKG_MCP_PUBLIC_LIMIT` an hour (default 600, one bucket for every
+client); a token set alongside is ignored, with a warning at start. In any mode at most two SPARQL queries
+run at once, since each is a child process.
 
 | Tool | Returns (JSON schema) | Notes |
 |---|---|---|

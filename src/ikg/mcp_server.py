@@ -14,7 +14,8 @@ Limits: `ikg_ask` is the only tool that can cost money. It has a daily budget (I
 IKG_ASK_LIMIT questions an hour, both per server process: with one static token every HTTP client shares
 them, and IKG_ASK_LIMIT=0 turns ikg_ask off. Per-client limits come with OAuth (docs/08 B2-B4).
 `ikg_sparql_query` accepts SELECT and ASK only, without SERVICE, runs in a child process with a time
-limit, and returns at most SPARQL_MAX_ROWS rows. Every call is appended to the MCP call log
+limit, and returns at most SPARQL_MAX_ROWS rows; at most SPARQL_CONCURRENCY run at once. In public mode
+every tool call counts against IKG_MCP_PUBLIC_LIMIT calls an hour, shared by all clients. Every call is appended to the MCP call log
 (IKG_DATA/mcp-calls.jsonl) with the caller, the tool, a short summary and the cost.
 
 Needs the `[mcp]` extra (the MCP Python SDK, Python 3.11+).
@@ -48,6 +49,7 @@ except ImportError as exc:  # the [mcp] extra is optional
     raise ImportError('the MCP server needs the MCP SDK: pip install -e ".[mcp]" (Python 3.11+)') from exc
 
 SEARCH_MAX_K = 20
+SPARQL_CONCURRENCY = 2  # SPARQL queries running at once, each in its own child process
 # The ontology is in the repository, not the package; the Docker image copies it and sets IKG_ONTOLOGY.
 ONTOLOGY_FILE = Path(os.environ.get("IKG_ONTOLOGY", Path(__file__).resolve().parents[2] / "ontology" / "ikg.ttl"))
 
@@ -182,22 +184,28 @@ class CallLog:
 
 def build_server(runtime: Runtime, caller: str = "stdio", budget: SpendBudget | None = None,
                  limiter: RateLimiter | None = None, ask=None, transport: str = "",
-                 with_ask: bool = True) -> MCPServer:
-    """An MCP server over one loaded build. `caller` identifies who is calling (today "local" over stdio
-    or "token" for the shared HTTP token; a client identity once OAuth arrives), `transport` how.
-    `ask` defaults to qa.ask (tests pass a fake). `with_ask=False` leaves the ikg_ask tool out."""
+                 with_ask: bool = True, call_limiter: RateLimiter | None = None) -> MCPServer:
+    """An MCP server over one loaded build. `caller` identifies who is calling ("local" over stdio, "token"
+    for the shared HTTP token, "public" without one; a client identity once OAuth arrives), `transport` how.
+    `ask` defaults to qa.ask (tests pass a fake). `with_ask=False` leaves the ikg_ask tool out.
+    `call_limiter`, if given, limits every tool call per hour (public mode)."""
     budget = budget or SpendBudget(config.ASK_BUDGET_USD)
     limiter = limiter or RateLimiter(int(os.environ.get("IKG_ASK_LIMIT", "20")))
     log = CallLog(config.MCP_LOG_FILE)
     rt = runtime
+    sparql_slots = threading.BoundedSemaphore(SPARQL_CONCURRENCY)  # each query is a child process
     instructions = INSTRUCTIONS if with_ask else INSTRUCTIONS.replace("; ikg_ask writes a cited answer", "")
+    what = "Cited search and answers" if with_ask else "Cited search"
     server = MCPServer("ikg_mcp", title="Indic Knowledge Graph", version=__version__, instructions=instructions,
-                       description="Cited search and answers over the Upanishads, Mahabharata, Ramayana and "
+                       description=f"{what} over the Upanishads, Mahabharata, Ramayana and "
                                    "Vishnu Purana in public-domain English translations")
 
     def logged(tool: str, summary: str):
         def done(cost: float | None = None, ok: bool = True):
             log.write(caller, tool, summary, cost, ok, transport or caller)
+        if call_limiter is not None and not call_limiter.allow(caller):
+            done(ok=False)
+            raise ToolError("this server's hourly call limit is reached; try again later")
         return done
 
     @server.tool(name="ikg_search_passages", title="Search passages", annotations=READ_ONLY, description=(
@@ -288,11 +296,16 @@ def build_server(runtime: Runtime, caller: str = "stdio", budget: SpendBudget | 
         "are stopped. Example: SELECT ?label WHERE { ?e a ikg:Concept ; rdfs:label ?label }"))
     def sparql_query(query: str) -> SparqlResult:
         done = logged("ikg_sparql_query", " ".join(query.split()))
+        if not sparql_slots.acquire(blocking=False):
+            done(ok=False)
+            raise ToolError("too many SPARQL queries are running; try again in a moment")
         try:
             result = sparql.run(query, config.RDF_FILE)
         except sparql.SparqlError as exc:
             done(ok=False)
             raise ToolError(str(exc)) from None
+        finally:
+            sparql_slots.release()
         done()
         return SparqlResult(**result)
 
@@ -374,9 +387,11 @@ def http_app(server: MCPServer, token: str | None, host: str = "127.0.0.1"):
                            status_code=401, headers={"WWW-Authenticate": "Bearer"})
 
     # No OAuth here: answer a client's OAuth discovery and registration with 404, not the token's 401, so it
-    # asks for the bearer token instead of starting an OAuth flow that can't succeed.
-    no_oauth = JSONResponse({"error": "not_found", "detail": "this server has no OAuth; send Authorization: "
-                             "Bearer <IKG_MCP_TOKEN>"}, status_code=404)
+    # asks for the bearer token (or, in public mode, connects without one) instead of starting an OAuth flow
+    # that can't succeed.
+    detail = ("this server has no OAuth; send Authorization: Bearer <IKG_MCP_TOKEN>" if token is not None
+              else "this server has no OAuth and needs no token")
+    no_oauth = JSONResponse({"error": "not_found", "detail": detail}, status_code=404)
 
     async def app(scope, receive, send):
         if scope["type"] == "http":
@@ -403,12 +418,17 @@ def serve(http: bool = False, host: str = "127.0.0.1", port: int = 8001) -> None
         build_server(runtime, caller="local", transport="stdio").run("stdio")
         return
     import uvicorn
+    token = os.environ.get("IKG_MCP_TOKEN", "").strip()
     if os.environ.get("IKG_MCP_PUBLIC", "").strip().lower() in ("on", "1", "true", "yes"):
-        print("IKG_MCP_PUBLIC is on: serving without a token, read-only tools only (no ikg_ask)", file=sys.stderr)
-        uvicorn.run(http_app(build_server(runtime, caller="public", transport="http", with_ask=False), None, host),
-                    host=host, port=port)
+        limit = int(os.environ.get("IKG_MCP_PUBLIC_LIMIT", "600"))
+        print(f"IKG_MCP_PUBLIC is on: serving WITHOUT a token, read-only tools only (no ikg_ask), "
+              f"{limit} calls an hour", file=sys.stderr)
+        if token:
+            print("IKG_MCP_TOKEN is set but IGNORED while IKG_MCP_PUBLIC is on", file=sys.stderr)
+        server = build_server(runtime, caller="public", transport="http", with_ask=False,
+                              call_limiter=RateLimiter(limit))
+        uvicorn.run(http_app(server, None, host), host=host, port=port)
         return
-    token = os.environ.get("IKG_MCP_TOKEN", "")
     if not token:
         raise SystemExit("ikg mcp --http needs IKG_MCP_TOKEN (a long random string clients send as a Bearer "
                          "token), or IKG_MCP_PUBLIC=on for read-only tools without a token")
