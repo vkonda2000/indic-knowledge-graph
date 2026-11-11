@@ -216,7 +216,10 @@ def build_server(runtime: Runtime, caller: str = "stdio", budget: SpendBudget | 
         "works: limit to these work ids: upanishads, mahabharata, ramayana, vishnu_purana. Only when the user "
         "names a work: many stories are told in several, so otherwise search all, or once per work.\n"
         "primary_only: only the translated primary text (verse, narrative), no commentary or scholarship.\n"
-        "mode: retrieval method; 'default' is the server's (hybrid when available).\n" + KINDS_NOTE))
+        "mode: retrieval method; 'default' is the server's (hybrid when available).\n" + KINDS_NOTE + "\n"
+        "When answering from the results: cite each claim with its passage_id (e.g. upa.katha.p2.v18) and the "
+        "translator named in its ref, using the corpus's numbering, not another edition's; report a story told "
+        "in several works under each work separately; read a passage with ikg_get_passage before quoting it."))
     def search_passages(query: str, k: int = 8, works: list[str] | None = None, primary_only: bool = False,
                         mode: Literal["default", "bm25", "dense", "hybrid"] = "default") -> SearchResult:
         done = logged("ikg_search_passages", query)

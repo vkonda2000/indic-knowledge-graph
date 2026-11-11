@@ -65,6 +65,20 @@ Anyone with the URL can search the corpus, so turn it off (`IKG_MCP_PUBLIC=off`,
 test is over. Checked 2026-11-10: ChatGPT connected through a quick tunnel with *No authentication*,
 and the read-only tools worked in a quick test.
 
+**ChatGPT plugin, the three test questions, 2026-11-11** (public mode through a quick tunnel; the
+model was ChatGPT's own). The call log shows one `ikg_search_passages` per question and one follow-up
+search for `upa`, and no `ikg_get_passage`.
+
+| # | Result |
+|---|---|
+| upa | Right content (the Self unborn, undying, beyond argument). Cited "Katha Upanishad 1.2.9, 2.2.18, 2.2.19, 2.3.12": no passage ids, no translator, and a verse numbering that is not Paramananda's (the corpus has `upa.katha.p2.v18`). The search it ran returned mostly Paramananda's *commentary*. It also added outside web sources |
+| xw | Bhagiratha, and Shiva receiving Ganga in his locks. Cited Ramayana 1.44 (Griffith), Mahabharata 3.108 and 13.26 (Ganguli): the right works, sections and translators, but no passage ids, and one merged story rather than each telling separately |
+| adv | Abstained correctly: Hanuman isn't in the Katha Upanishad; the dialogue is Yama's with Nachiketas |
+
+**What differed from Claude.** The abstention held, but ChatGPT didn't cite `passage_id`s or keep the
+two Ganga tellings apart. Both rules are in the server's instructions, which ChatGPT seems not to pass
+to its model. The tool descriptions, which it does read, don't repeat the citation rule.
+
 ## The three test questions
 
 docs/08 asks for the same three questions on every platform, citing the same passages, with the
