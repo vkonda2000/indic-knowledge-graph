@@ -77,7 +77,21 @@ search for `upa`, and no `ikg_get_passage`.
 
 **What differed from Claude.** The abstention held, but ChatGPT didn't cite `passage_id`s or keep the
 two Ganga tellings apart. Both rules are in the server's instructions, which ChatGPT seems not to pass
-to its model. The tool descriptions, which it does read, don't repeat the citation rule.
+to its model. The tool descriptions, which it does read, didn't repeat the citation rule.
+
+**Second run, same day,** after the citation rules were added to `ikg_search_passages`'s description
+and the tools refreshed. ChatGPT now opened passages before citing them: 12 calls, including
+`ikg_get_passage` for `upa.katha.p2.v18`, `p2.v20`, `p2.v23`, `p6.v18`, `ram.b1.c043.p03`,
+`ram.b1.c044.p02`, and `ikg_get_entity` for Hanuman.
+
+| # | Result |
+|---|---|
+| upa | Paramananda named; Part 2, Verses 18, 20, 23 and Part 6, Verse 18: the same verses Claude cited, in the corpus's numbering (as refs, not ids) |
+| xw | Passage ids `ram.b1.c043.p03`, `ram.b1.c044.p02`, `ram.b1.c044.p06`, Griffith named; each claim checked against them holds. But only the Ramayana: the Mahabharata telling (`mbh.b03.s108.p04`, which its search returned) was left out, and it added web images and links |
+| adv | Abstained; checked Hanuman's works with `ikg_get_entity` (Ramayana and Mahabharata, not the Upanishads) |
+
+Better on citation and on reading before quoting; still weaker than Claude on reporting every work's
+telling of a shared story.
 
 ## The three test questions
 
